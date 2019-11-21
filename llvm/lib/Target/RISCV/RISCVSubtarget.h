@@ -34,6 +34,8 @@ class StringRef;
 
 class RISCVSubtarget : public RISCVGenSubtargetInfo {
   virtual void anchor();
+  bool IsPULP = false;
+  bool HasPULPExtV2 = false;
   bool HasStdExtM = false;
   bool HasStdExtA = false;
   bool HasStdExtF = false;
@@ -97,6 +99,7 @@ class RISCVSubtarget : public RISCVGenSubtargetInfo {
   RISCVTargetLowering TLInfo;
   SelectionDAGTargetInfo TSInfo;
 
+
   /// Initializes using the passed in CPU and feature strings so that we can
   /// use initializer lists for subtarget initialization.
   RISCVSubtarget &initializeSubtargetDependencies(const Triple &TT,
@@ -151,6 +154,8 @@ public:
   bool hasExtXdma() const { return HasExtXdma; }
   bool hasExtXssr() const { return HasExtXssr; }
   bool hasExtXmempool() const { return HasExtXmempool; }
+  bool isPULP() const { return IsPULP; }
+  bool hasPULPExtV2() const { return HasPULPExtV2; }
   bool hasExtXsmallfloat() const {
     return HasExtXfalthalf || HasExtXfquarter || HasExtXfaltquarter ||
            HasExtXfvecsingle || HasExtXfvechalf || HasExtXfvecalthalf ||

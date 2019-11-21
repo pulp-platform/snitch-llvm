@@ -75,6 +75,8 @@ int test_omp_for_schedule_dynamic()
   /* for (int i=0;i<count+1;++i) printf("%d\t:=\t%d\n",i+1,tmp[i]); */
   return (result==0);
 }
+
+#ifndef NO_MAIN
 int main()
 {
   int i;
@@ -87,3 +89,4 @@ int main()
   }
   return num_failed;
 }
+#endif

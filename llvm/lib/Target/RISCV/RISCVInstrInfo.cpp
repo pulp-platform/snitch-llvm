@@ -884,4 +884,23 @@ MachineBasicBlock::iterator RISCVInstrInfo::insertOutlinedCall(
                       .addGlobalAddress(M.getNamedValue(MF.getName()), 0,
                                         RISCVII::MO_CALL));
   return It;
+
+bool RISCVInstrInfo::isSchedulingBoundary(const MachineInstr &MI,
+                                          const MachineBasicBlock *MBB,
+                                          const MachineFunction &MF) const {
+
+  if (TargetInstrInfo::isSchedulingBoundary(MI, MBB, MF)) {
+    return true;
+  }
+
+  switch (MI.getOpcode()) {
+    case RISCV::LOOP0setup:
+    case RISCV::LOOP1setup:
+    case RISCV::LOOP0setupi:
+    case RISCV::LOOP1setupi:
+      return true;
+    default:;
+  }
+
+  return false;
 }

@@ -69,7 +69,14 @@ isExperimentalExtension(StringRef Ext) {
   return None;
 }
 
-static bool isSupportedExtension(StringRef Ext) {
+static bool isSupportedExtension(StringRef Ext, const llvm::Triple &Triple) {
+  // HERO supports xpulpv2
+  if(Triple.getVendor() == llvm::Triple::HERO) {
+    if(Ext == "xpulpv2") {
+      return true;
+    }
+  }
+
   // LLVM supports "z" extensions which are marked as experimental.
   if (isExperimentalExtension(Ext))
     return true;
@@ -184,6 +191,7 @@ static bool getExtensionVersion(const Driver &D, const ArgList &Args,
 // and are separated by a single underscore '_'.
 // Set the hardware features for the extensions that are supported.
 static void getExtensionFeatures(const Driver &D,
+                                 const llvm::Triple& Triple,
                                  const ArgList &Args,
                                  std::vector<StringRef> &Features,
                                  StringRef &MArch, StringRef &Exts) {
@@ -265,7 +273,7 @@ static void getExtensionFeatures(const Driver &D,
   // TODO: Hardware features to be handled in Support/TargetParser.cpp.
   // TODO: Use version number when setting target features.
   for (auto Ext : AllExts) {
-    if (!isSupportedExtension(Ext)) {
+    if (!isSupportedExtension(Ext, Triple)) {
       StringRef Desc = getExtensionTypeDesc(getExtensionType(Ext));
       std::string Error = "unsupported ";
       Error += Desc;

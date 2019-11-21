@@ -764,12 +764,13 @@ private:
   void emitKmpRoutineEntryT(QualType KmpInt32Ty);
 
   /// Returns pointer to kmpc_micro type.
-  llvm::Type *getKmpc_MicroPointerTy();
+  llvm::Type *getKmpc_MicroPointerTy(unsigned);
 
   /// Returns __kmpc_for_static_init_* runtime function for the specified
   /// size \a IVSize and sign \a IVSigned.
   llvm::FunctionCallee createForStaticInitFunction(unsigned IVSize,
-                                                   bool IVSigned);
+                                                   bool IVSigned,
+                                                   unsigned IVargAS = 0);
 
   /// Returns __kmpc_dispatch_init_* runtime function for the specified
   /// size \a IVSize and sign \a IVSigned.

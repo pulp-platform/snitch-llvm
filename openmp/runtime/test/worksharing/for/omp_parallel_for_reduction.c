@@ -42,7 +42,7 @@ int test_omp_parallel_for_reduction()
 
   /* Tests for integers */
   known_sum = (LOOPCOUNT*(LOOPCOUNT+1))/2;
-  #pragma omp parallel for schedule(dynamic,1) private(i) reduction(+:sum)
+  #pragma omp parallel for schedule(static,1) private(i) reduction(+:sum)
   for (i=1;i<=LOOPCOUNT;i++) {
     sum=sum+i;
   }
@@ -53,7 +53,7 @@ int test_omp_parallel_for_reduction()
   }
 
   diff = (LOOPCOUNT*(LOOPCOUNT+1))/2;
-  #pragma omp parallel for schedule(dynamic,1) private(i) reduction(-:diff)
+  #pragma omp parallel for schedule(static,1) private(i) reduction(-:diff)
   for (i=1;i<=LOOPCOUNT;++i) {
     diff=diff-i;
   }
@@ -64,13 +64,14 @@ int test_omp_parallel_for_reduction()
   }
 
   /* Tests for doubles */
+  #ifndef NO_DOUBLE
   dsum=0;
   dpt=1;
   for (i=0;i<DOUBLE_DIGITS;++i) {
     dpt*=dt;
   }
   dknown_sum = (1-dpt)/(1-dt);
-  #pragma omp parallel for schedule(dynamic,1) private(i) reduction(+:dsum)
+  #pragma omp parallel for schedule(static,1) private(i) reduction(+:dsum)
   for (i=0;i<DOUBLE_DIGITS;++i) {
     dsum += pow(dt,i);
   }
@@ -88,7 +89,7 @@ int test_omp_parallel_for_reduction()
   }
   fprintf(stderr,"\n");
   ddiff = (1-dpt)/(1-dt);
-  #pragma omp parallel for schedule(dynamic,1) private(i) reduction(-:ddiff)
+  #pragma omp parallel for schedule(static,1) private(i) reduction(-:ddiff)
   for (i=0;i<DOUBLE_DIGITS;++i) {
     ddiff -= pow(dt,i);
   }
@@ -97,9 +98,10 @@ int test_omp_parallel_for_reduction()
     fprintf(stderr,"Error in Difference with doubles: Result was %E"
       " instead of 0.0\n",ddiff);
   }
+  #endif
 
   /* Tests for integers */
-  #pragma omp parallel for schedule(dynamic,1) private(i) reduction(*:product)
+  #pragma omp parallel for schedule(static,1) private(i) reduction(*:product)
   for(i=1;i<=MAX_FACTOR;i++) {
     product *= i;
   }
@@ -115,7 +117,7 @@ int test_omp_parallel_for_reduction()
     logics[i]=1;
   }
 
-  #pragma omp parallel for schedule(dynamic,1) private(i) \
+  #pragma omp parallel for schedule(static,1) private(i) \
     reduction(&&:logic_and)
   for(i=0;i<LOOPCOUNT;++i) {
     logic_and = (logic_and && logics[i]);
@@ -128,7 +130,7 @@ int test_omp_parallel_for_reduction()
   logic_and = 1;
   logics[LOOPCOUNT/2]=0;
 
-  #pragma omp parallel for schedule(dynamic,1) private(i) \
+  #pragma omp parallel for schedule(static,1) private(i) \
     reduction(&&:logic_and)
   for(i=0;i<LOOPCOUNT;++i) {
     logic_and = logic_and && logics[i];
@@ -143,7 +145,7 @@ int test_omp_parallel_for_reduction()
     logics[i]=0;
   }
 
-  #pragma omp parallel for schedule(dynamic,1) private(i) \
+  #pragma omp parallel for schedule(static,1) private(i) \
     reduction(||:logic_or)
   for(i=0;i<LOOPCOUNT;++i) {
     logic_or = logic_or || logics[i];
@@ -155,7 +157,7 @@ int test_omp_parallel_for_reduction()
   logic_or = 0;
   logics[LOOPCOUNT/2]=1;
 
-  #pragma omp parallel for schedule(dynamic,1) private(i) \
+  #pragma omp parallel for schedule(static,1) private(i) \
     reduction(||:logic_or)
   for(i=0;i<LOOPCOUNT;++i) {
     logic_or = logic_or || logics[i];
@@ -170,7 +172,7 @@ int test_omp_parallel_for_reduction()
     logics[i]=1;
   }
 
-  #pragma omp parallel for schedule(dynamic,1) private(i) \
+  #pragma omp parallel for schedule(static,1) private(i) \
     reduction(&:bit_and)
   for(i=0;i<LOOPCOUNT;++i) {
     bit_and = (bit_and & logics[i]);
@@ -183,7 +185,7 @@ int test_omp_parallel_for_reduction()
   bit_and = 1;
   logics[LOOPCOUNT/2]=0;
 
-  #pragma omp parallel for schedule(dynamic,1) private(i) \
+  #pragma omp parallel for schedule(static,1) private(i) \
     reduction(&:bit_and)
   for(i=0;i<LOOPCOUNT;++i) {
     bit_and = bit_and & logics[i];
@@ -198,7 +200,7 @@ int test_omp_parallel_for_reduction()
     logics[i]=0;
   }
 
-  #pragma omp parallel for schedule(dynamic,1) private(i) \
+  #pragma omp parallel for schedule(static,1) private(i) \
     reduction(|:bit_or)
   for(i=0;i<LOOPCOUNT;++i) {
     bit_or = bit_or | logics[i];
@@ -210,7 +212,7 @@ int test_omp_parallel_for_reduction()
   bit_or = 0;
   logics[LOOPCOUNT/2]=1;
 
-  #pragma omp parallel for schedule(dynamic,1) private(i) \
+  #pragma omp parallel for schedule(static,1) private(i) \
     reduction(|:bit_or)
   for(i=0;i<LOOPCOUNT;++i) {
     bit_or = bit_or | logics[i];
@@ -225,7 +227,7 @@ int test_omp_parallel_for_reduction()
     logics[i]=0;
   }
 
-  #pragma omp parallel for schedule(dynamic,1) private(i) \
+  #pragma omp parallel for schedule(static,1) private(i) \
     reduction(^:exclusiv_bit_or)
   for(i=0;i<LOOPCOUNT;++i) {
     exclusiv_bit_or = exclusiv_bit_or ^ logics[i];
@@ -238,7 +240,7 @@ int test_omp_parallel_for_reduction()
   exclusiv_bit_or = 0;
   logics[LOOPCOUNT/2]=1;
 
-  #pragma omp parallel for schedule(dynamic,1) private(i) \
+  #pragma omp parallel for schedule(static,1) private(i) \
     reduction(^:exclusiv_bit_or)
   for(i=0;i<LOOPCOUNT;++i) {
     exclusiv_bit_or = exclusiv_bit_or ^ logics[i];
@@ -252,6 +254,7 @@ int test_omp_parallel_for_reduction()
   return (result==0);
 }
 
+#ifndef NO_MAIN
 int main()
 {
   int i;
@@ -264,3 +267,4 @@ int main()
   }
   return num_failed;
 }
+#endif

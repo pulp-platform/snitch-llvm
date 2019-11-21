@@ -829,6 +829,7 @@ Function *CodeExtractor::constructFunction(const ValueSet &inputs,
   default: RetTy = Type::getInt16Ty(header->getContext()); break;
   }
 
+  const DataLayout &DL = M->getDataLayout();
   std::vector<Type *> paramTy;
 
   // Add the types of the input values to the function's argument list
@@ -843,7 +844,8 @@ Function *CodeExtractor::constructFunction(const ValueSet &inputs,
     if (AggregateArgs)
       paramTy.push_back(output->getType());
     else
-      paramTy.push_back(PointerType::getUnqual(output->getType()));
+      paramTy.push_back(PointerType::get(output->getType(),
+                                         DL.getAllocaAddrSpace()));
   }
 
   LLVM_DEBUG({

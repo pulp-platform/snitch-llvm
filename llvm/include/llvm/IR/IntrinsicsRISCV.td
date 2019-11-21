@@ -1089,6 +1089,26 @@ let TargetPrefix = "riscv" in {
     defm vsuxseg # nf : RISCVISegStore<nf>;
   }
 
+// PULP intrinsics
+
+// FIXME: should probably need a llvm_anyptr_ty here, but that does not work
+def int_riscv_pulp_event_unit_read
+    : GCCBuiltin<"__builtin_pulp_event_unit_read">,
+      Intrinsic<[llvm_i32_ty],
+                [llvm_ptr_ty, llvm_i32_ty],
+                []>;
+def int_riscv_pulp_fl1
+    : GCCBuiltin<"__builtin_pulp_fl1">,
+      Intrinsic<[llvm_i32_ty],
+                [llvm_i32_ty],
+                [IntrNoMem]>;
+
+def int_riscv_pulp_bitinsert
+    : GCCBuiltin<"__builtin_bitinsert">, // NOTE: GCC has no pulp here
+      Intrinsic<[llvm_i32_ty],
+                [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                [IntrNoMem, ImmArg<2>, ImmArg<3>]>;
+
 } // TargetPrefix = "riscv"
 
 

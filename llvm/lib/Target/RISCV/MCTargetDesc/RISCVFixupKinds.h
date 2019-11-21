@@ -81,6 +81,10 @@ enum Fixups {
   // which indicates the linker should fixup the alignment after linker
   // relaxation.
   fixup_riscv_align,
+  // fixup_pulpv2_loop_setup(i) - Used to get the PC relative end of the
+  // hardware loop setup instructions.
+  fixup_pulpv2_loop_setup,
+  fixup_pulpv2_loop_setupi,
 
   // fixup_riscv_invalid - used as a sentinel and a marker, must be last fixup
   fixup_riscv_invalid,

@@ -30,6 +30,7 @@ int test_omp_single()
   return ((result == 0) && (nr_iterations == LOOPCOUNT));
 } /* end of check_single*/
 
+#ifndef NO_MAIN
 int main()
 {
   int i;
@@ -42,3 +43,4 @@ int main()
   }
   return num_failed;
 }
+#endif

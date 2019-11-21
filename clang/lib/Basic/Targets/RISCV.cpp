@@ -96,6 +96,11 @@ bool RISCVTargetInfo::validateAsmConstraint(
   }
 }
 
+ArrayRef<Builtin::Info> RISCVTargetInfo::getTargetBuiltins() const {
+  return llvm::makeArrayRef(BuiltinInfo, clang::RISCV::LastTSBuiltin -
+                                         Builtin::FirstTSBuiltin);
+}
+
 void RISCVTargetInfo::getTargetDefines(const LangOptions &Opts,
                                        MacroBuilder &Builder) const {
   Builder.defineMacro("__ELF__");
@@ -208,6 +213,12 @@ void RISCVTargetInfo::getTargetDefines(const LangOptions &Opts,
 
   if (HasZvlsseg)
     Builder.defineMacro("__riscv_zvlsseg", "10000");
+
+  // Add HERO specific defines
+  // FIXME: define separation between host and accelerator better
+  if(getTriple().getVendor() == llvm::Triple::HERO && !getTriple().isArch64Bit()) {
+    Builder.defineMacro("__PULP__");
+  }
 }
 
 /// Return true if has this feature, need to sync with handleTargetFeatures.

@@ -29,6 +29,7 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/Support/AtomicOrdering.h"
+#include "clang/Basic/HEROHeterogeneous.h"
 using namespace clang;
 using namespace CodeGen;
 using namespace llvm::omp;
@@ -462,6 +463,18 @@ static llvm::Function *emitOutlinedFunctionPrologue(
     }
     if (ArgType->isVariablyModifiedType())
       ArgType = getCanonicalParamType(Ctx, ArgType);
+
+    if (hero::isHERODevice(Ctx)) {
+      if (isa<ReferenceType>(*ArgType)) {
+        Qualifiers ASQuals;
+        ASQuals.setAddressSpace(hero::getHERODeviceAS(Ctx));
+        QualType newType =
+          Ctx.getPointerType(
+              Ctx.getQualifiedType(ArgType.getNonReferenceType(), ASQuals));
+        ArgType = newType;
+      }
+    }
+
     VarDecl *Arg;
     if (DebugFunctionDecl && (CapVar || I->capturesThis())) {
       Arg = ParmVarDecl::Create(
@@ -613,6 +626,7 @@ CodeGenFunction::GenerateOpenMPCapturedStmtFunction(const CapturedStmt &S,
   for (const auto &VLASizePair : VLASizes)
     VLASizeMap[VLASizePair.second.first] = VLASizePair.second.second;
   PGO.assignRegionCounters(GlobalDecl(CD), F);
+
   CapturedStmtInfo->EmitBody(*this, CD->getBody());
   (void)LocalScope.ForceCleanup();
   FinishFunction(CD->getBodyRBrace());

@@ -86,6 +86,10 @@ unsigned RISCVELFObjectWriter::getRelocType(MCContext &Ctx,
       return ELF::R_RISCV_CALL;
     case RISCV::fixup_riscv_call_plt:
       return ELF::R_RISCV_CALL_PLT;
+    case RISCV::fixup_pulpv2_loop_setup:
+      return ELF::R_PULPV2_LOOP_SETUP;
+    case RISCV::fixup_pulpv2_loop_setupi:
+      return ELF::R_PULPV2_LOOP_SETUPI;
     }
   }
 

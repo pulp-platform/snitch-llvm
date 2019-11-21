@@ -52,8 +52,19 @@ SDMA_BUILTIN(start_twod, "UiULLiULLiUiUiUiUiUi", "n", "xdma")
 SDMA_BUILTIN(stat, "UiUi", "n", "xdma")
 SDMA_BUILTIN(wait_for_idle, "v", "n", "xdma")
 
+// PULP builtins
+
+#if defined(TARGET_BUILTIN) && !defined(PULP_BUILTIN)
+#   define PULP_BUILTIN(ID, TYPE, ATTRS, FEATURE) TARGET_BUILTIN(__builtin_pulp_##ID, TYPE, ATTRS, FEATURE)
+#endif
+
+PULP_BUILTIN(event_unit_read, "Uii*Ui", "n", "xpulpv2")
+PULP_BUILTIN(fl1, "Uii", "nc", "xpulpv2")
+
+TARGET_BUILTIN(__builtin_bitinsert, "iiiIUiIUi", "nc", "xpulpv2") // NOTE: normal builtin in GCC
+
 #undef BUILTIN
 #undef TARGET_BUILTIN
+#undef PULP_BUILTIN
 #undef SSR_BUILTIN
 #undef SDMA_BUILTIN
-

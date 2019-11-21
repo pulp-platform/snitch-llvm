@@ -40,6 +40,8 @@
 #include "ToolChains/OpenBSD.h"
 #include "ToolChains/PPCLinux.h"
 #include "ToolChains/PS4CPU.h"
+#include "ToolChains/HeroPULP.h"
+#include "ToolChains/HeroHost.h"
 #include "ToolChains/RISCVToolchain.h"
 #include "ToolChains/Solaris.h"
 #include "ToolChains/TCE.h"
@@ -4961,6 +4963,7 @@ void Driver::generatePrefixedToolNames(
     StringRef Tool, const ToolChain &TC,
     SmallVectorImpl<std::string> &Names) const {
   // FIXME: Needs a better variable than TargetTriple
+  Names.emplace_back(TC.getTripleString() + "-" + Tool.str());
   Names.emplace_back((TargetTriple + "-" + Tool).str());
   Names.emplace_back(Tool);
 
@@ -5119,6 +5122,9 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
       else if (Target.getArch() == llvm::Triple::ve)
         TC = std::make_unique<toolchains::VEToolChain>(*this, Target, Args);
 
+      else if (Target.getVendor() == llvm::Triple::HERO)
+        TC = std::make_unique<toolchains::HeroHostToolChain>(*this, Target,
+                                                              Args);
       else
         TC = std::make_unique<toolchains::Linux>(*this, Target, Args);
       break;
@@ -5211,6 +5217,10 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
             std::make_unique<toolchains::MSP430ToolChain>(*this, Target, Args);
         break;
       case llvm::Triple::riscv32:
+        if (Target.getVendor() == llvm::Triple::HERO) {
+          TC = std::make_unique<toolchains::HeroPULPToolChain>(*this, Target, Args);
+          break;
+        }
       case llvm::Triple::riscv64:
         if (toolchains::RISCVToolChain::hasGCCToolchain(*this, Args))
           TC =

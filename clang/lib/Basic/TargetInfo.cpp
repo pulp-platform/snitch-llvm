@@ -113,6 +113,7 @@ TargetInfo::TargetInfo(const llvm::Triple &T) : TargetOpts(), Triple(T) {
   SSERegParmMax = 0;
   HasAlignMac68kSupport = false;
   HasBuiltinMSVaList = false;
+  HasBuiltinHeroDevVaList = false;
   IsRenderScriptTarget = false;
   HasAArch64SVETypes = false;
   AllowAMDGPUUnsafeFPAtomics = false;

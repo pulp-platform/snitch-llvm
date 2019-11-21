@@ -7402,6 +7402,9 @@ static Decl *getPredefinedDecl(ASTContext &Context, PredefinedDeclIDs ID) {
   case PREDEF_DECL_BUILTIN_MS_GUID_ID:
     return Context.getMSGuidTagDecl();
 
+  case PREDEF_DECL_BUILTIN_HERO_DEV_VA_LIST_ID:
+    return Context.getBuiltinHeroDevVaListDecl();
+
   case PREDEF_DECL_EXTERN_C_CONTEXT_ID:
     return Context.getExternCContextDecl();
 

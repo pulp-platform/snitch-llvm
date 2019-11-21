@@ -51,10 +51,15 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
 }
 
 static StringRef computeDataLayout(const Triple &TT) {
-  if (TT.isArch64Bit())
+  if (TT.isArch64Bit()) {
     return "e-m:e-p:64:64-i64:64-i128:128-n64-S128";
-  assert(TT.isArch32Bit() && "only RV32 and RV64 are currently supported");
-  return "e-m:e-p:32:32-i64:64-n32-S128";
+  } else {
+    assert(TT.isArch32Bit() && "only RV32 and RV64 are currently supported");
+    if (TT.getVendor() == Triple::HERO) {
+      return "e-m:e-p:32:32-p1:64:32-i64:64-n32-S128-P0-A0";
+    }
+    return "e-m:e-p:32:32-i64:64-n32-S128";
+  }
 }
 
 static Reloc::Model getEffectiveRelocModel(const Triple &TT,
@@ -198,6 +203,7 @@ void RISCVPassConfig::addPreEmitPass() {
 
 void RISCVPassConfig::addPreEmitPass2() {
   addPass(createRISCVExpandPseudoPass());
+  addPass(createPULPFixupHwLoops());
   // Schedule the expansion of AMOs at the last possible moment, avoiding the
   // possibility for other passes to break the requirements for forward
   // progress in the LR/SC block.
@@ -218,6 +224,7 @@ void RISCVPassConfig::addPreRegAlloc() {
   if (TM->getOptLevel() != CodeGenOpt::None)
     addPass(createRISCVMergeBaseOffsetOptPass());
   addPass(createRISCVInsertVSETVLIPass());
+  addPass(createPULPHardwareLoops());
 }
 
 yaml::MachineFunctionInfo *

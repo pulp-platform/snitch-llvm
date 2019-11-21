@@ -1207,13 +1207,16 @@ enum PredefinedDeclIDs {
 
   /// The internal '__type_pack_element' template.
   PREDEF_DECL_TYPE_PACK_ELEMENT_ID = 17,
+
+  /// The internal '__builtin_hero_dev_va_list' typedef.
+  PREDEF_DECL_BUILTIN_HERO_DEV_VA_LIST_ID = 18,
 };
 
 /// The number of declaration IDs that are predefined.
 ///
 /// For more information about predefined declarations, see the
 /// \c PredefinedDeclIDs type and the PREDEF_DECL_*_ID constants.
-const unsigned int NUM_PREDEF_DECL_IDS = 18;
+const unsigned int NUM_PREDEF_DECL_IDS = 19;
 
 /// Record of updates for a declaration that was modified after
 /// being deserialized. This can occur within DECLTYPES_BLOCK_ID.

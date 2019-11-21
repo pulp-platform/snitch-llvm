@@ -439,6 +439,12 @@ void Sema::Initialize() {
       PushOnScopeChains(Context.getBuiltinMSVaListDecl(), TUScope);
   }
 
+  if (Context.getTargetInfo().hasBuiltinHeroDevVaList()) {
+    DeclarationName HeroDevVaList = &Context.Idents.get("__builtin_hero_dev_va_list");
+    if (IdResolver.begin(HeroDevVaList) == IdResolver.end())
+      PushOnScopeChains(Context.getBuiltinHeroDevVaListDecl(), TUScope);
+  }
+
   DeclarationName BuiltinVaList = &Context.Idents.get("__builtin_va_list");
   if (IdResolver.begin(BuiltinVaList) == IdResolver.end())
     PushOnScopeChains(Context.getBuiltinVaListDecl(), TUScope);

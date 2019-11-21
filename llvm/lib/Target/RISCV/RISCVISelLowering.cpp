@@ -492,8 +492,26 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   if (Subtarget.hasStdExtA()) {
     setMaxAtomicSizeInBitsSupported(Subtarget.getXLen());
     setMinCmpXchgSizeInBits(32);
+    // FIXME: PULP does not support ll/sc generically yet
+    if(Subtarget.isPULP()) {
+      setOperationAction(ISD::ATOMIC_CMP_SWAP, MVT::i8, Expand);
+      setOperationAction(ISD::ATOMIC_CMP_SWAP, MVT::i16, Expand);
+      setOperationAction(ISD::ATOMIC_CMP_SWAP, MVT::i32, Expand);
+      setOperationAction(ISD::ATOMIC_CMP_SWAP, MVT::i64, Expand);
+    }
   } else {
     setMaxAtomicSizeInBitsSupported(0);
+  }
+
+  // If this is PULP with PULPv2 extensions, then we support post-incrementing
+  // load/stores for 8-bit, 16-bit, and 32-bit values.
+  if (Subtarget.hasPULPExtV2()) {
+    setIndexedLoadAction(ISD::POST_INC, MVT::i8, Legal);
+    setIndexedLoadAction(ISD::POST_INC, MVT::i16, Legal);
+    setIndexedLoadAction(ISD::POST_INC, MVT::i32, Legal);
+    setIndexedStoreAction(ISD::POST_INC, MVT::i8, Legal);
+    setIndexedStoreAction(ISD::POST_INC, MVT::i16, Legal);
+    setIndexedStoreAction(ISD::POST_INC, MVT::i32, Legal);
   }
 
   setBooleanContents(ZeroOrOneBooleanContent);
@@ -1094,8 +1112,27 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   setLibcallName(RTLIB::FPROUND_F32_F16, "__truncsfhf2");
 }
 
-EVT RISCVTargetLowering::getSetCCResultType(const DataLayout &DL,
-                                            LLVMContext &Context,
+MVT RISCVTargetLowering::getPointerTy(const DataLayout &DL, uint32_t AS) const {
+  if(AS == UINT32_MAX) {
+    AS = 0;
+  }
+  return MVT::getIntegerVT(DL.getPointerSizeInBits(AS));
+}
+
+MVT RISCVTargetLowering::getPointerMemTy(const DataLayout &DL, uint32_t AS) const {
+  if(AS == UINT32_MAX) {
+    AS = 0;
+  }
+  return MVT::getIntegerVT(DL.getPointerSizeInBits(AS));
+}
+
+MVT RISCVTargetLowering::getScalarShiftAmountTy(const DataLayout &DL,
+                                                EVT) const {
+  return Subtarget.getXLenVT();
+}
+
+
+EVT RISCVTargetLowering::getSetCCResultType(const DataLayout &DL, LLVMContext &Context,
                                             EVT VT) const {
   if (!VT.isVector())
     return getPointerTy(DL);
@@ -9280,7 +9317,7 @@ static SDValue convertValVTToLocVT(SelectionDAG &DAG, SDValue Val,
 // The caller is responsible for loading the full value if the argument is
 // passed with CCValAssign::Indirect.
 static SDValue unpackFromMemLoc(SelectionDAG &DAG, SDValue Chain,
-                                const CCValAssign &VA, const SDLoc &DL) {
+                                const CCValAssign &VA, const SDLoc &DL, EVT PtrVT) {
   MachineFunction &MF = DAG.getMachineFunction();
   MachineFrameInfo &MFI = MF.getFrameInfo();
   EVT LocVT = VA.getLocVT();
@@ -9561,7 +9598,7 @@ SDValue RISCVTargetLowering::LowerFormalArguments(
     else if (VA.isRegLoc())
       ArgValue = unpackFromRegLoc(DAG, Chain, VA, DL, *this);
     else
-      ArgValue = unpackFromMemLoc(DAG, Chain, VA, DL);
+      ArgValue = unpackFromMemLoc(DAG, Chain, VA, DL, PtrVT);
 
     if (VA.getLocInfo() == CCValAssign::Indirect) {
       // If the original argument was split and passed by reference (e.g. i128
@@ -11095,6 +11132,51 @@ RISCVTargetLowering::BuildSDIVPow2(SDNode *N, const APInt &Divisor,
 
   Created.push_back(SRA.getNode());
   return DAG.getNode(ISD::SUB, DL, VT, DAG.getConstant(0, DL, VT), SRA);
+}
+
+bool RISCVTargetLowering::getPostIndexedAddressParts(SDNode *N, SDNode *Op,
+                                                     SDValue &Base,
+                                                     SDValue &Offset,
+                                                     ISD::MemIndexedMode &AM,
+                                                     SelectionDAG &DAG) const {
+  SDValue BaseFromLDST;
+  EVT VT;
+  if (LoadSDNode *LD = dyn_cast<LoadSDNode>(N)) {
+    BaseFromLDST = LD->getBasePtr();
+    VT = LD->getMemoryVT();
+  } else if (StoreSDNode *ST = dyn_cast<StoreSDNode>(N)) {
+    BaseFromLDST = ST->getBasePtr();
+    VT = ST->getMemoryVT();
+  } else {
+    return false;
+  }
+
+  if (Op->getOpcode() == ISD::ADD) {
+    // If this is an add, just take the numbers. Reverse operands to add if
+    // necessary.
+    AM = ISD::POST_INC;
+    Base = Op->getOperand(0);
+    Offset = Op->getOperand(1);
+    if (BaseFromLDST != Base && BaseFromLDST == Offset) {
+      std::swap(Base, Offset);
+    }
+
+    // PULPv2 supports i8, i16, and i32 post-increments only.
+    if (!(VT == MVT::i8 || VT == MVT::i16 || VT == MVT::i32)) {
+      return false;
+    }
+
+    // If this is an immediate (constant), it must fit within 12 bits signed.
+    if (ConstantSDNode *ConstOffset = dyn_cast<ConstantSDNode>(Offset)) {
+      uint64_t imm = ConstOffset->getZExtValue();
+      if (!isInt<12>(imm)) {
+        return false;
+      }
+    }
+
+    return BaseFromLDST == Base;
+  }
+  return false;
 }
 
 #define GET_REGISTER_MATCHER

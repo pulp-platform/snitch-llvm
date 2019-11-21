@@ -190,6 +190,12 @@ void RISCVTargetInfo::getTargetDefines(const LangOptions &Opts,
 
   if (ISAInfo->hasExtension("zve32x") || ISAInfo->hasExtension("v"))
     Builder.defineMacro("__riscv_vector");
+  
+  // HERO: specific defines
+  // FIXME: define separation between host and accelerator better
+  if(getTriple().getVendor() == llvm::Triple::HERO && !getTriple().isArch64Bit()) {
+    Builder.defineMacro("__PULP__");
+  }
 }
 
 const Builtin::Info RISCVTargetInfo::BuiltinInfo[] = {

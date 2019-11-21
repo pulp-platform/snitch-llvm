@@ -24,6 +24,7 @@
 #include "clang/AST/Attr.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/OSLog.h"
+#include "clang/Basic/HEROHeterogeneous.h"
 #include "clang/Basic/TargetBuiltins.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/CodeGen/CGFunctionInfo.h"
@@ -724,9 +725,24 @@ EncompassingIntegerType(ArrayRef<struct WidthAndSignedness> Types) {
 
 Value *CodeGenFunction::EmitVAStartEnd(Value *ArgValue, bool IsStart) {
   llvm::Type *DestType = Int8PtrTy;
-  if (ArgValue->getType() != DestType)
-    ArgValue =
-        Builder.CreateBitCast(ArgValue, DestType, ArgValue->getName().data());
+  if (ArgValue->getType() != DestType) {
+    if (ArgValue->getType()->isPtrOrPtrVectorTy()
+        && ArgValue->getType()->getPointerAddressSpace() != 0) {
+      if (hero::getHERODbgLevel() >= hero::NOTICE) {
+        llvm::errs().changeColor(llvm::raw_fd_ostream::Colors::CYAN, true);
+        llvm::errs() << "POINTER CAST: ";
+        llvm::errs().resetColor();
+        llvm::errs() << "CodeGenFunction::EmitVAStartEnd: ";
+        llvm::errs() << *ArgValue << "\n";
+      }
+      ArgValue =
+          Builder.CreatePointerCast(ArgValue, DestType,
+                                    ArgValue->getName().data());
+    } else {
+      ArgValue =
+          Builder.CreateBitCast(ArgValue, DestType, ArgValue->getName().data());
+    }
+  }
 
   Intrinsic::ID inst = IsStart ? Intrinsic::vastart : Intrinsic::vaend;
   return Builder.CreateCall(CGM.getIntrinsic(inst), ArgValue);
@@ -5457,6 +5473,9 @@ static Value *EmitTargetArchBuiltinExpr(CodeGenFunction *CGF,
   case llvm::Triple::r600:
   case llvm::Triple::amdgcn:
     return CGF->EmitAMDGPUBuiltinExpr(BuiltinID, E);
+  case llvm::Triple::riscv32:
+  case llvm::Triple::riscv64:
+    return CGF->EmitRISCVBuiltinExpr(BuiltinID, E);
   case llvm::Triple::systemz:
     return CGF->EmitSystemZBuiltinExpr(BuiltinID, E);
   case llvm::Triple::nvptx:
@@ -16697,6 +16716,15 @@ Value *CodeGenFunction::EmitAMDGPUBuiltinExpr(unsigned BuiltinID,
     }
     LLVM_FALLTHROUGH;
   }
+  default:
+    return nullptr;
+  }
+}
+
+Value *CodeGenFunction::EmitRISCVBuiltinExpr(unsigned BuiltinID,
+                                                   const CallExpr *E) {
+  // FIXME: Stub implementation, current builtins are solely intrinsics
+  switch (BuiltinID) {
   default:
     return nullptr;
   }

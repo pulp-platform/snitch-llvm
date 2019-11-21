@@ -26,6 +26,7 @@
 #include "clang/AST/NonTrivialTypeVisitor.h"
 #include "clang/AST/StmtCXX.h"
 #include "clang/Basic/Builtins.h"
+#include "clang/Basic/HEROHeterogeneous.h"
 #include "clang/Basic/PartialDiagnostic.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
@@ -7014,6 +7015,39 @@ NamedDecl *Sema::ActOnVariableDeclarator(
 
   IdentifierInfo *II = Name.getAsIdentifierInfo();
 
+  if (hero::isHERODevice(Context)) {
+    LangAS DefaultAS;
+    if (isInOpenMPDeclareTargetContext() ||
+        isInOpenMPTargetExecutionDirective() ||
+        hero::isHERODeviceOnly(Context)) {
+      DefaultAS = hero::getHERODeviceAS(Context);
+    } else {
+      DefaultAS = hero::getHEROHostAS(Context);
+    }
+
+    bool adjustAS = true;
+    // Keep everything that is not a pointer as-is.
+    if (!R->isPointerType()) {
+      adjustAS = false;
+    } else if (R->isFunctionPointerType()) {
+      // Keep function pointers as-are
+      adjustAS = false;
+    } else {
+      // Keep all pointers that already have an address space as-is.
+      QualType PointeeType = R->getPointeeType();
+      if (PointeeType.getQualifiers().hasAddressSpace()) {
+        adjustAS = false;
+      }
+    }
+
+    if (adjustAS) {
+      // If we reach this far we need to assign the parameter to the AS.
+      QualType NewParamType =
+          recursivelyAddAddressSpace(R, DefaultAS, (*this).Context);
+      R = NewParamType;
+    }
+  }
+
   if (D.isDecompositionDeclarator()) {
     // Take the name of the first declarator as our name for diagnostic
     // purposes.
@@ -9107,6 +9141,86 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
                               bool &AddToScope) {
   QualType R = TInfo->getType();
 
+  // Check that we are compiling an OpenMP device function for HERO.
+  if (hero::isHERODevice(Context)) {
+    LangAS DefaultAS;
+    if (isInOpenMPDeclareTargetContext() ||
+        isInOpenMPTargetExecutionDirective() ||
+        hero::isHERODeviceOnly(Context)) {
+      DefaultAS = hero::getHERODeviceAS(Context);
+    } else {
+      DefaultAS = hero::getHEROHostAS(Context);
+    }
+
+    // This should really be a FunctionProtoType
+    bool asChanged = false;
+    if (const FunctionProtoType *FT = dyn_cast<FunctionProtoType>(R)) {
+      QualType NewR;
+      FunctionProtoType::ExtProtoInfo EPI = FT->getExtProtoInfo();
+
+      // Look at parameter types
+      SmallVector<QualType, 8> OverloadParams;
+      for (QualType ParamType : FT->param_types()) {
+
+        // Keep everything that is not a pointer as-is.
+        if (!ParamType->isPointerType()) {
+          OverloadParams.push_back(ParamType);
+          continue;
+        }
+
+        // Keep function pointers as-are.
+        if (ParamType->isFunctionPointerType()) {
+          OverloadParams.push_back(ParamType);
+          continue;
+        }
+
+        // Keep all pointers that already have an address space as-is.
+        QualType PointeeType = ParamType->getPointeeType();
+        if (PointeeType.getQualifiers().hasAddressSpace()) {
+          OverloadParams.push_back(ParamType);
+          continue;
+        }
+
+        // If we reach this far we need to assign the parameter to the AS.
+        QualType NewParamType =
+            recursivelyAddAddressSpace(ParamType, DefaultAS, (*this).Context);
+        OverloadParams.push_back(NewParamType);
+        asChanged = true;
+      }
+
+      // Look at return type. Keep everything that is not a pointer as-is.
+      QualType ReturnType = FT->getReturnType();
+      if (!ReturnType->isPointerType()) {
+        // OK: Is not a pointer
+        NewR = (*this).Context.getFunctionType(ReturnType,
+                                               OverloadParams,
+                                               EPI);
+      } else {
+        QualType PointeeType = ReturnType->getPointeeType();
+        if (PointeeType.getQualifiers().hasAddressSpace()) {
+          // OK: Already has address space
+          NewR = (*this).Context.getFunctionType(ReturnType,
+                                                 OverloadParams,
+                                                 EPI);
+        } else {
+          // Not OK: Doesn't have address space.
+          QualType NewReturnType =
+              recursivelyAddAddressSpace(ReturnType, DefaultAS,
+                                         (*this).Context);
+          NewR = (*this).Context.getFunctionType(NewReturnType,
+                                                 OverloadParams,
+                                                 EPI);
+          asChanged = true;
+        }
+      }
+
+      // Let's use the new prototype.
+      if (asChanged) {
+        R = NewR;
+      }
+    }
+  }
+
   assert(R->isFunctionType());
   if (R.getCanonicalType()->castAs<FunctionType>()->getCmseNSCallAttr())
     Diag(D.getIdentifierLoc(), diag::err_function_decl_cmse_ns_call);
@@ -9539,11 +9653,68 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
       for (unsigned i = 0, e = FTI.NumParams; i != e; ++i) {
         ParmVarDecl *Param = cast<ParmVarDecl>(FTI.Params[i].Param);
         assert(Param->getDeclContext() != NewFD && "Was set before ?");
-        Param->setDeclContext(NewFD);
-        Params.push_back(Param);
 
-        if (Param->isInvalidDecl())
-          NewFD->setInvalidDecl();
+        if (hero::isHERODevice(Context)) {
+          LangAS DefaultAS;
+          if (isInOpenMPDeclareTargetContext() ||
+              isInOpenMPTargetExecutionDirective() ||
+              hero::isHERODeviceOnly(Context)) {
+            DefaultAS = hero::getHERODeviceAS(Context);
+          } else {
+            DefaultAS = hero::getHEROHostAS(Context);
+          }
+          QualType ParamType = Param->getType();
+
+          // Keep everything that is not a pointer as-is.
+          if (!ParamType->isPointerType()) {
+            Param->setDeclContext(NewFD);
+            Params.push_back(Param);
+            if (Param->isInvalidDecl())
+              NewFD->setInvalidDecl();
+            continue;
+          }
+
+          // Keep function pointers as-are.
+          if (ParamType->isFunctionPointerType()) {
+            Param->setDeclContext(NewFD);
+            Params.push_back(Param);
+            if (Param->isInvalidDecl())
+              NewFD->setInvalidDecl();
+            continue;
+          }
+
+          // Keep all pointers that already have an address space as-is.
+          QualType PointeeType = ParamType->getPointeeType();
+          if (PointeeType.getQualifiers().hasAddressSpace()) {
+            Param->setDeclContext(NewFD);
+            Params.push_back(Param);
+            if (Param->isInvalidDecl())
+              NewFD->setInvalidDecl();
+            continue;
+          }
+
+          // If we reach this far we need to assign the parameter to the AS.
+          QualType NewParamType =
+            recursivelyAddAddressSpace(ParamType, DefaultAS, (*this).Context);
+          ParmVarDecl *NewParam = ParmVarDecl::Create(Param->getASTContext(),
+                                                      Param->getDeclContext(),
+                                                      Param->getInnerLocStart(),
+                                                      Param->getLocation(),
+                                                      Param->getIdentifier(),
+                                                      NewParamType,
+                                                      Param->getTypeSourceInfo(),
+                                                      Param->getStorageClass(),
+                                                      Param->getDefaultArg());
+          NewParam->setDeclContext(NewFD);
+          Params.push_back(NewParam);
+          if (NewParam->isInvalidDecl())
+            NewFD->setInvalidDecl();
+        } else {
+          Param->setDeclContext(NewFD);
+          Params.push_back(Param);
+          if (Param->isInvalidDecl())
+            NewFD->setInvalidDecl();
+        }
       }
     }
 
@@ -11410,8 +11581,9 @@ void Sema::CheckMain(FunctionDecl* FD, const DeclSpec& DS) {
       const PointerType* PT;
       if ((PT = qs.strip(AT)->getAs<PointerType>()) &&
           (PT = qs.strip(PT->getPointeeType())->getAs<PointerType>()) &&
-          Context.hasSameType(QualType(qs.strip(PT->getPointeeType()), 0),
-                              Context.CharTy)) {
+          Context.hasSameType(QualType(qs.strip(
+                Context.removeAddrSpaceQualType(
+                  PT->getPointeeType())), 0), Context.CharTy)) {
         qs.removeConst();
         mismatch = !qs.empty();
       }

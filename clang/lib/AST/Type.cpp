@@ -4447,3 +4447,23 @@ void AutoType::Profile(llvm::FoldingSetNodeID &ID, const ASTContext &Context,
   for (const TemplateArgument &Arg : Arguments)
     Arg.Profile(ID, Context);
 }
+
+QualType clang::recursivelyAddAddressSpace(QualType QT, LangAS AS,
+                                           ASTContext &Ctx) {
+  // Check if this is a pointer
+  assert(QT->isPointerType());
+
+  // Check if the pointee is also a pointer.
+  QualType PointeeType = QT->getPointeeType();
+  if (PointeeType->isPointerType()) {
+    // Pointer to pointer, recurse and return result
+    return Ctx.getPointerType(recursivelyAddAddressSpace(PointeeType, AS, Ctx));
+  } else {
+    // Else assign address space and return the new type.
+    Qualifiers ASQuals = PointeeType.getQualifiers();
+    ASQuals.setAddressSpace(AS);
+    QualType NewPointeeType =
+        Ctx.getQualifiedType(PointeeType.getUnqualifiedType(), ASQuals);
+    return Ctx.getPointerType(NewPointeeType);
+  }
+}

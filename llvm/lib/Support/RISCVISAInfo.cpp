@@ -129,6 +129,8 @@ static const RISCVSupportedExtension SupportedExperimentalExtensions[] = {
     {"fexpauxvecalthalf", RISCVExtensionVersion{0, 1}},
     {"fexpauxvecquarter", RISCVExtensionVersion{0, 1}},
     {"fexpauxvecaltquarter", RISCVExtensionVersion{0, 1}},
+    // PULP extensions
+    {"pulp", RISCVExtensionVersion{2, 0}},
 };
 
 static bool stripExperimentalPrefix(StringRef &Ext) {

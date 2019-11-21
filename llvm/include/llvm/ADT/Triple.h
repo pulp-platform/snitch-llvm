@@ -164,6 +164,7 @@ public:
     AMD,
     Mesa,
     SUSE,
+    HERO,
     OpenEmbedded,
     LastVendorType = OpenEmbedded
   };

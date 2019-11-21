@@ -23,6 +23,7 @@ int test_omp_parallel_for_lastprivate()
   return ((known_sum == sum) && (i0 == LOOPCOUNT));
 } /* end of check_parallel_for_lastprivate */
 
+#ifndef NO_MAIN
 int main()
 {
   int i;
@@ -35,3 +36,4 @@ int main()
   }
   return num_failed;
 }
+#endif

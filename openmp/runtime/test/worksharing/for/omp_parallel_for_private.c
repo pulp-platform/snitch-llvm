@@ -36,6 +36,7 @@ int test_omp_parallel_for_private()
   return (known_sum == sum);
 } /* end of check_parallel_for_private */
 
+#ifndef NO_MAIN
 int main()
 {
   int i;
@@ -48,3 +49,4 @@ int main()
   }
   return num_failed;
 }
+#endif

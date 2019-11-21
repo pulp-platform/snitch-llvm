@@ -40,6 +40,7 @@ int test_omp_parallel_sections_firstprivate()
   return (known_sum==sum);
 } /* end of check_section_firstprivate*/
 
+#ifndef NO_MAIN
 int main()
 {
   int i;
@@ -52,3 +53,4 @@ int main()
   }
   return num_failed;
 }
+#endif

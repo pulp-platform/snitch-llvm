@@ -30,6 +30,7 @@ int test_omp_master_3()
   return ((nthreads == 1) && (executing_thread == 0) && (tid_result == 0));
 }
 
+#ifndef NO_MAIN
 int main()
 {
   int i;
@@ -42,3 +43,4 @@ int main()
   }
   return num_failed;
 }
+#endif

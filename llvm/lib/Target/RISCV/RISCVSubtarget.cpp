@@ -86,6 +86,11 @@ RISCVSubtarget::initializeSubtargetDependencies(const Triple &TT, StringRef CPU,
 
   TargetABI = RISCVABI::computeTargetABI(TT, getFeatureBits(), ABIName);
   RISCVFeatures::validate(TT, getFeatureBits());
+
+  if(TT.getVendor() == Triple::HERO) {
+    IsPULP = true;
+  }
+
   return *this;
 }
 

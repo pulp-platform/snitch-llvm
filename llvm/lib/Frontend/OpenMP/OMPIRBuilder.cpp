@@ -332,6 +332,9 @@ Constant *OpenMPIRBuilder::getOrCreateSrcLocStr(StringRef LocStr,
           GV.getInitializer() == Initializer)
         return SrcLocStr = ConstantExpr::getPointerCast(&GV, Int8Ptr);
 
+    // TODO Here we used to update the emitUpdateLocation address space to
+    //      device AS.
+
     SrcLocStr = Builder.CreateGlobalStringPtr(LocStr, /* Name */ "",
                                               /* AddressSpace */ 0, &M);
   }
@@ -3491,6 +3494,11 @@ OpenMPIRBuilder::createOffloadMapnames(SmallVectorImpl<llvm::Constant *> &Names,
 void OpenMPIRBuilder::initializeTypes(Module &M) {
   LLVMContext &Ctx = M.getContext();
   StructType *T;
+
+  // TODO: Here we used to initialize SrcPtrTy with constant address space.
+  //       It is also relevant for getIdentTyPointerTy, which returns
+  //       OMPBuilder.IdentPtr, which should be in device AS.
+
 #define OMP_TYPE(VarName, InitValue) VarName = InitValue;
 #define OMP_ARRAY_TYPE(VarName, ElemTy, ArraySize)                             \
   VarName##Ty = ArrayType::get(ElemTy, ArraySize);                             \

@@ -177,6 +177,11 @@ public:
   Optional<std::pair<unsigned, unsigned>>
   isRVVSpillForZvlsseg(unsigned Opcode) const;
 
+  
+  // Check if the instruction is a scheduling boundary.
+  bool isSchedulingBoundary(const MachineInstr &MI,
+                                              const MachineBasicBlock *MBB,
+                                              const MachineFunction &MF) const;
 protected:
   const RISCVSubtarget &STI;
 };

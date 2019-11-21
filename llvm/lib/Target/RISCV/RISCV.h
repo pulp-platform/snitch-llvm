@@ -44,6 +44,8 @@ FunctionPass *createRISCVSExtWRemovalPass();
 void initializeRISCVSExtWRemovalPass(PassRegistry &);
 
 FunctionPass *createRISCVMergeBaseOffsetOptPass();
+FunctionPass *createPULPHardwareLoops();
+FunctionPass *createPULPFixupHwLoops();
 void initializeRISCVMergeBaseOffsetOptPass(PassRegistry &);
 
 FunctionPass *createRISCVExpandPseudoPass();

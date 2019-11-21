@@ -221,6 +221,10 @@ def SDTLoad : SDTypeProfile<1, 1, [         // load
   SDTCisPtrTy<1>
 ]>;
 
+def SDTILoad : SDTypeProfile<1, 2, [        // indexed load
+  SDTCisPtrTy<1>
+]>;
+
 def SDTStore : SDTypeProfile<0, 2, [        // store
   SDTCisPtrTy<1>
 ]>;
@@ -652,6 +656,8 @@ def masked_ld    : SDNode<"ISD::MLOAD",  SDTMaskedLoad,
 // and truncst (see below).
 def ld         : SDNode<"ISD::LOAD"       , SDTLoad,
                         [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+def ild        : SDNode<"ISD::LOAD"       , SDTILoad,
+                        [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
 def st         : SDNode<"ISD::STORE"      , SDTStore,
                         [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
 def ist        : SDNode<"ISD::STORE"      , SDTIStore,
@@ -952,6 +958,53 @@ def load : PatFrag<(ops node:$ptr), (unindexedload node:$ptr)> {
   let IsLoad = true;
   let IsNonExtLoad = true;
 }
+
+// indexed load fragments.
+def iload : PatFrag<(ops node:$base, node:$offset),
+                    (ild node:$base, node:$offset)> {
+}
+def post_loadi32 : PatFrag<(ops node:$ptr, node:$offset),
+                           (iload node:$ptr, node:$offset), [{
+  ISD::MemIndexedMode AM = cast<LoadSDNode>(N)->getAddressingMode();
+  EVT VT = cast<LoadSDNode>(N)->getMemoryVT();
+  bool ZE = cast<LoadSDNode>(N)->getExtensionType() == ISD::ZEXTLOAD;
+  return !ZE && VT == MVT::i32 && (AM == ISD::POST_INC || AM == ISD::POST_DEC);
+}]>;
+def post_loadi16 : PatFrag<(ops node:$ptr, node:$offset),
+                           (iload node:$ptr, node:$offset), [{
+  ISD::MemIndexedMode AM = cast<LoadSDNode>(N)->getAddressingMode();
+  EVT VT = cast<LoadSDNode>(N)->getMemoryVT();
+  bool ZE = cast<LoadSDNode>(N)->getExtensionType() == ISD::ZEXTLOAD;
+  return !ZE && VT == MVT::i16 && (AM == ISD::POST_INC || AM == ISD::POST_DEC);
+}]>;
+def post_loadi8 : PatFrag<(ops node:$ptr, node:$offset),
+                          (iload node:$ptr, node:$offset), [{
+  ISD::MemIndexedMode AM = cast<LoadSDNode>(N)->getAddressingMode();
+  EVT VT = cast<LoadSDNode>(N)->getMemoryVT();
+  bool ZE = cast<LoadSDNode>(N)->getExtensionType() == ISD::ZEXTLOAD;
+  return !ZE && VT == MVT::i8 && (AM == ISD::POST_INC || AM == ISD::POST_DEC);
+}]>;
+def post_loadi32u : PatFrag<(ops node:$ptr, node:$offset),
+                           (iload node:$ptr, node:$offset), [{
+  ISD::MemIndexedMode AM = cast<LoadSDNode>(N)->getAddressingMode();
+  EVT VT = cast<LoadSDNode>(N)->getMemoryVT();
+  bool ZE = cast<LoadSDNode>(N)->getExtensionType() == ISD::ZEXTLOAD;
+  return ZE && VT == MVT::i32 && (AM == ISD::POST_INC || AM == ISD::POST_DEC);
+}]>;
+def post_loadi16u : PatFrag<(ops node:$ptr, node:$offset),
+                           (iload node:$ptr, node:$offset), [{
+  ISD::MemIndexedMode AM = cast<LoadSDNode>(N)->getAddressingMode();
+  EVT VT = cast<LoadSDNode>(N)->getMemoryVT();
+  bool ZE = cast<LoadSDNode>(N)->getExtensionType() == ISD::ZEXTLOAD;
+  return ZE && VT == MVT::i16 && (AM == ISD::POST_INC || AM == ISD::POST_DEC);
+}]>;
+def post_loadi8u : PatFrag<(ops node:$ptr, node:$offset),
+                          (iload node:$ptr, node:$offset), [{
+  ISD::MemIndexedMode AM = cast<LoadSDNode>(N)->getAddressingMode();
+  EVT VT = cast<LoadSDNode>(N)->getMemoryVT();
+  bool ZE = cast<LoadSDNode>(N)->getExtensionType() == ISD::ZEXTLOAD;
+  return ZE && VT == MVT::i8 && (AM == ISD::POST_INC || AM == ISD::POST_DEC);
+}]>;
 
 // extending load fragments.
 def extload   : PatFrag<(ops node:$ptr), (unindexedload node:$ptr)> {

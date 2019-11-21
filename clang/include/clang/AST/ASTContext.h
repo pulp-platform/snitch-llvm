@@ -364,6 +364,9 @@ class ASTContext : public RefCountedBase<ASTContext> {
   /// The typedef for the predefined \c __builtin_ms_va_list type.
   mutable TypedefDecl *BuiltinMSVaListDecl = nullptr;
 
+  /// The typedef for the predefined \c __builtin_hero_dev_va_list type.
+  mutable TypedefDecl *BuiltinHeroDevVaListDecl = nullptr;
+
   /// The typedef for the predefined \c id type.
   mutable TypedefDecl *ObjCIdDecl = nullptr;
 
@@ -2093,6 +2096,14 @@ public:
   QualType getMSGuidType() const {
     assert(MSGuidTagDecl && "asked for GUID type but MS extensions disabled");
     return getTagDeclType(MSGuidTagDecl);
+
+  /// Retrieve the C type declaration corresponding to the predefined
+  /// \c __builtin_hero_dev_va_list type.
+  TypedefDecl *getBuiltinHeroDevVaListDecl() const;
+
+  /// Retrieve the type of the \c __builtin_hero_dev_va_list type.
+  QualType getBuiltinHeroDevVaListType() const {
+    return getTypeDeclType(getBuiltinHeroDevVaListDecl());
   }
 
   /// Return whether a declaration to a builtin is allowed to be

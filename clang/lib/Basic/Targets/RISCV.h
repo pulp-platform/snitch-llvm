@@ -41,6 +41,7 @@ public:
     HasRISCVVTypes = true;
     MCountName = "_mcount";
     HasFloat16 = true;
+    HasBuiltinHeroDevVaList = true;
   }
 
   bool setCPU(const std::string &Name) override {
@@ -101,10 +102,38 @@ class LLVM_LIBRARY_VISIBILITY RISCV32TargetInfo : public RISCVTargetInfo {
 public:
   RISCV32TargetInfo(const llvm::Triple &Triple, const TargetOptions &Opts)
       : RISCVTargetInfo(Triple, Opts) {
+    SizeType = UnsignedInt;
     IntPtrType = SignedInt;
     PtrDiffType = SignedInt;
-    SizeType = UnsignedInt;
     resetDataLayout("e-m:e-p:32:32-i64:64-n32-S128");
+  }
+
+  bool handleTargetFeatures(std::vector<std::string> &Features,
+                            DiagnosticsEngine &Diags) override {
+    bool Ret = RISCVTargetInfo::handleTargetFeatures(Features, Diags);
+    if(!Ret) {
+      return false;
+    }
+
+    if(getTriple().getVendor() == llvm::Triple::HERO) {
+      PointerWidth = 32;
+      SizeType = UnsignedInt;
+      resetDataLayout("e-m:e-p:32:32-p1:64:32-i64:64-n32-S128-P0-A0");
+    }
+    return true;
+  }
+
+  virtual llvm::Optional<LangAS> getConstantAddressSpace() const override {
+    if(getTriple().getVendor() != llvm::Triple::HERO || getTriple().isArch64Bit())
+      return RISCVTargetInfo::getConstantAddressSpace();
+    return getLangASFromTargetAS(0);
+  }
+
+  uint64_t getPointerWidthV(unsigned AddrSpace) const override {
+    if(getTriple().getVendor() == llvm::Triple::HERO) {
+      return AddrSpace == 0 ? 32 : 64;
+    }
+    return PointerWidth;
   }
 
   bool setABI(const std::string &Name) override {

@@ -23,6 +23,7 @@ int test_omp_critical()
   return (known_sum == sum);
 }
 
+#ifndef NO_MAIN
 int main()
 {
   int i;
@@ -35,3 +36,4 @@ int main()
   }
   return num_failed;
 }
+#endif

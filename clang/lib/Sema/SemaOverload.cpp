@@ -20,6 +20,7 @@
 #include "clang/AST/TypeOrdering.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/DiagnosticOptions.h"
+#include "clang/Basic/HEROHeterogeneous.h"
 #include "clang/Basic/PartialDiagnostic.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
@@ -4559,6 +4560,21 @@ Sema::CompareReferenceRelationship(SourceLocation Loc,
     Conv |= ReferenceConversions::Function;
     // No need to check qualifiers; function types don't have them.
     return Ref_Compatible;
+  else {
+    // FIXME: We should set up a new stdarg.h for HERO, where va_start and
+    // va_end are annotated with address spaces. However, due to the format used
+    // by LLVM for these headers, it does not seem possible to provide address
+    // space information at this point. In the meantime, we allow the cast to
+    // happen for these macros, if the types are otherwise correct.
+    if (hero::isHERODevice(Context)) {
+      if ((T1 == Context.getBuiltinVaListDecl()->getUnderlyingType() &&
+          T2 == Context.getBuiltinHeroDevVaListDecl()->getUnderlyingType()) ||
+          (T1 == Context.getBuiltinHeroDevVaListDecl()->getUnderlyingType() &&
+          T2 == Context.getBuiltinVaListDecl()->getUnderlyingType())) {
+        return Ref_Compatible;
+      }
+    }
+    return Ref_Incompatible;
   }
   bool ConvertedReferent = Conv != 0;
 

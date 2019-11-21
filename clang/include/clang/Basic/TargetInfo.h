@@ -222,6 +222,7 @@ protected:
   unsigned ComplexLongDoubleUsesFP2Ret : 1;
 
   unsigned HasBuiltinMSVaList : 1;
+  unsigned HasBuiltinHeroDevVaList : 1;
 
   unsigned IsRenderScriptTarget : 1;
 
@@ -929,6 +930,10 @@ public:
   /// Returns whether or not type \c __builtin_ms_va_list type is
   /// available on this target.
   bool hasBuiltinMSVaList() const { return HasBuiltinMSVaList; }
+
+  /// Returns whether or not type \c __builtin_hero_dev_va_list type is
+  /// available on this target.
+  bool hasBuiltinHeroDevVaList() const { return HasBuiltinHeroDevVaList; }
 
   /// Returns true for RenderScript.
   bool isRenderScriptTarget() const { return IsRenderScriptTarget; }

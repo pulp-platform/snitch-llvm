@@ -30,6 +30,7 @@
 #include "clang/AST/TypeLoc.h"
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/DiagnosticSema.h"
+#include "clang/Basic/HEROHeterogeneous.h"
 #include "clang/Basic/PartialDiagnostic.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
@@ -8998,8 +8999,26 @@ checkPointerTypesForAssignment(Sema &S, QualType LHSType, QualType RHSType) {
   }
 
   if (!lhq.compatiblyIncludes(rhq)) {
+    // Handle HERO address spaces specially.
+    bool addressSupersetOnHERO = true;
+    if (hero::isHERODevice(S.Context)
+        && (lhq.getAddressSpace() == LangAS::Default ||
+            lhq.getAddressSpace() >= LangAS::FirstTargetAddressSpace)
+        && (rhq.getAddressSpace() == LangAS::Default ||
+            rhq.getAddressSpace() >= LangAS::FirstTargetAddressSpace)) {
+
+      LangAS LHASsup = lhq.getAddressSpace();
+      LangAS RHAS = rhq.getAddressSpace();
+
+      // LH is a superset unless it is the device AS, and RH is not.
+      if (LHASsup == hero::getHERODeviceAS(S.Context) &&
+          RHAS != hero::getHERODeviceAS(S.Context)) {
+        addressSupersetOnHERO = false;
+      }
+    }
+
     // Treat address-space mismatches as fatal.
-    if (!lhq.isAddressSpaceSupersetOf(rhq))
+    if (!(lhq.isAddressSpaceSupersetOf(rhq) || addressSupersetOnHERO))
       return Sema::IncompatiblePointerDiscardsQualifiers;
 
     // It's okay to add or remove GC or lifetime qualifiers when converting to
@@ -13828,7 +13847,29 @@ QualType Sema::CheckAddressOfOperand(ExprResult &OrigOp, SourceLocation OpLoc) {
 
   CheckAddressOfPackedMember(op);
 
-  return Context.getPointerType(op->getType());
+  // This is the type we want to return...
+  QualType R = Context.getPointerType(op->getType());
+
+  // ...but if we are on HERO we might need to add an address space to the
+  // pointer as well. In particular, we add an AS if op doesn't already have
+  // one. The added address space is that of the device that is executing when
+  // the value is dereferenced.
+  if (!op->getType().getQualifiers().hasAddressSpace() &&
+      hero::isHERODevice(Context)) {
+    LangAS DefaultAS;
+    if (isInOpenMPDeclareTargetContext() ||
+        isInOpenMPTargetExecutionDirective() ||
+        hero::isHERODeviceOnly(Context)) {
+      DefaultAS = hero::getHERODeviceAS(Context);
+    } else {
+      DefaultAS = hero::getHEROHostAS(Context);
+    }
+
+    // Create the new pointer with address space.
+    QualType NewR = recursivelyAddAddressSpace(R, DefaultAS, Context);
+    R = NewR;
+  }
+  return R;
 }
 
 static void RecordModifiableNonNullParam(Sema &S, const Expr *Exp) {
@@ -15825,6 +15866,7 @@ ExprResult Sema::BuildVAArgExpr(SourceLocation BuiltinLoc,
                                 SourceLocation RPLoc) {
   Expr *OrigExpr = E;
   bool IsMS = false;
+  bool IsHeroDev = false;
 
   // CUDA device code does not support varargs.
   if (getLangOpts().CUDA && getLangOpts().CUDAIsDevice) {
@@ -15850,6 +15892,17 @@ ExprResult Sema::BuildVAArgExpr(SourceLocation BuiltinLoc,
       if (CheckForModifiableLvalue(E, BuiltinLoc, *this))
         return ExprError();
       IsMS = true;
+    }
+  }
+
+  // It might be a __builtin_hero_dev_va_list.
+  if (!E->isTypeDependent() &&
+      Context.getTargetInfo().hasBuiltinHeroDevVaList()) {
+    QualType HeroDevVaListType = Context.getBuiltinHeroDevVaListType();
+    if (Context.hasSameType(HeroDevVaListType, E->getType())) {
+      if (CheckForModifiableLvalue(E, BuiltinLoc, *this))
+        return ExprError();
+      IsHeroDev = true;
     }
   }
 
@@ -15884,7 +15937,7 @@ ExprResult Sema::BuildVAArgExpr(SourceLocation BuiltinLoc,
     }
   }
 
-  if (!IsMS && !E->isTypeDependent() &&
+  if (!IsHeroDev && !IsMS && !E->isTypeDependent() &&
       !Context.hasSameType(VaListType, E->getType()))
     return ExprError(
         Diag(E->getBeginLoc(),

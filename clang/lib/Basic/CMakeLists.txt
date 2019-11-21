@@ -51,6 +51,8 @@ add_clang_library(clangBasic
   FileEntry.cpp
   FileManager.cpp
   FileSystemStatCache.cpp
+  FixedPoint.cpp
+  HEROHeterogeneous.cpp
   IdentifierTable.cpp
   LangOptions.cpp
   LangStandards.cpp

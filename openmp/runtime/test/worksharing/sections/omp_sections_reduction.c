@@ -3,6 +3,8 @@
 #include <math.h>
 #include "omp_testsuite.h"
 
+int logics[1000];
+
 int test_omp_sections_reduction()
 {
   int sum;
@@ -20,7 +22,6 @@ int test_omp_sections_reduction()
   int logic_or;
   int bit_or;
   int exclusiv_bit_or;
-  int logics[1000];
   int i;
   int result;
   /* int my_islarger; */
@@ -99,6 +100,7 @@ int test_omp_sections_reduction()
       " instead of 0.\n",diff);
   }
 
+#ifndef NO_DOUBLE
   for (i=0;i<20;++i) {
     dpt*=dt;
   }
@@ -170,6 +172,7 @@ int test_omp_sections_reduction()
     fprintf(stderr,"Error in Difference with doubles: Result was %E"
       " instead of 0.0\n",ddiff);
   }
+#endif
 
   known_product = 3628800;
   #pragma omp parallel
@@ -529,6 +532,8 @@ int test_omp_sections_reduction()
   /*printf("\nResult:%d\n",result);*/
   return (result==0);
 }
+
+#ifndef NO_MAIN
 int main()
 {
   int i;
@@ -541,3 +546,4 @@ int main()
   }
   return num_failed;
 }
+#endif

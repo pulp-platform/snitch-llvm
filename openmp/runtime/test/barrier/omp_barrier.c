@@ -31,6 +31,7 @@ int test_omp_barrier()
   return (result1 == 3);
 }
 
+#ifndef NO_MAIN
 int main()
 {
   int i;
@@ -47,3 +48,4 @@ int main()
 #endif
   return num_failed;
 }
+#endif

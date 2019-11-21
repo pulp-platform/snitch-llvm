@@ -342,7 +342,10 @@ public:
   /// Return the pointer type for the given address space, defaults to
   /// the pointer type from the data layout.
   /// FIXME: The default needs to be removed once all the code is updated.
-  virtual MVT getPointerTy(const DataLayout &DL, uint32_t AS = 0) const {
+  virtual MVT getPointerTy(const DataLayout &DL, uint32_t AS = UINT32_MAX) const {
+    if(AS == UINT32_MAX) {
+      AS = 0;
+    }
     return MVT::getIntegerVT(DL.getPointerSizeInBits(AS));
   }
 

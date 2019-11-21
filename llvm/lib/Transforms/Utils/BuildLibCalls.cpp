@@ -1558,10 +1558,17 @@ Value *llvm::emitPutS(Value *Str, IRBuilderBase &B,
   if (!TLI->has(LibFunc_puts))
     return nullptr;
 
+  Type *argType;
+  if (PointerType *ptr = dyn_cast<PointerType>(Str->getType())) {
+    argType = B.getInt8PtrTy(ptr->getAddressSpace());
+  } else {
+    argType = B.getInt8PtrTy();
+  }
+
   Module *M = B.GetInsertBlock()->getModule();
   StringRef PutsName = TLI->getName(LibFunc_puts);
   FunctionCallee PutS =
-      M->getOrInsertFunction(PutsName, B.getInt32Ty(), B.getInt8PtrTy());
+      M->getOrInsertFunction(PutsName, B.getInt32Ty(), argType);
   inferLibFuncAttributes(M, PutsName, *TLI);
   CallInst *CI = B.CreateCall(PutS, castToCStr(Str, B), PutsName);
   if (const Function *F =

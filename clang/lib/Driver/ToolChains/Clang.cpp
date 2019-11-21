@@ -4483,6 +4483,46 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back(Args.MakeArgString(NormalizedTriple));
   }
 
+
+  // Get the location of the HERCULES passes from the HERCULES_INSTALL
+  // environment variable.
+  const char * herculesInstallPathEnv = std::getenv("HERCULES_INSTALL");
+  if(herculesInstallPathEnv != nullptr) {
+    std::string herculesPassRoot =
+      std::string(std::string(herculesInstallPathEnv)
+          + std::string("/lib/hercules/"));
+
+    CmdArgs.push_back("-load");
+    CmdArgs.push_back(Args.MakeArgString(herculesPassRoot +
+          "libAnnotatePTXGlobals.so"));
+    CmdArgs.push_back("-load");
+    CmdArgs.push_back(Args.MakeArgString(herculesPassRoot +
+          "libFootprintAnalysis.so"));
+    CmdArgs.push_back("-load");
+    CmdArgs.push_back(Args.MakeArgString(herculesPassRoot +
+          "libLoopChunk.so"));
+    CmdArgs.push_back("-load");
+    CmdArgs.push_back(Args.MakeArgString(herculesPassRoot +
+          "libLoopExtract.so"));
+    CmdArgs.push_back("-load");
+    CmdArgs.push_back(Args.MakeArgString(herculesPassRoot +
+          "libWarpSeparate.so"));
+    CmdArgs.push_back("-load");
+    CmdArgs.push_back(Args.MakeArgString(herculesPassRoot +
+          "libWarpSpecialize.so"));
+    CmdArgs.push_back("-load");
+    CmdArgs.push_back(Args.MakeArgString(herculesPassRoot +
+          "libChannelArgInsertion.so"));
+
+  } else {
+    llvm::errs() << llvm::sys::path::filename(Input.getBaseInput())
+      << " (" << getToolChain().getArchName() << "): ";
+    llvm::errs().changeColor(llvm::raw_fd_ostream::Colors::BLUE, true);
+    llvm::errs() << "HERCULES PREM Passes not applied. ";
+    llvm::errs().resetColor();
+    llvm::errs() << "Set the HERCULES_INSTALL env if you want to enable PREM.\n";
+  }
+
   if (Triple.isOSWindows() && (Triple.getArch() == llvm::Triple::arm ||
                                Triple.getArch() == llvm::Triple::thumb)) {
     unsigned Offset = Triple.getArch() == llvm::Triple::arm ? 4 : 6;
@@ -4794,8 +4834,10 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("-disable-llvm-verifier");
 
   // Discard value names in assert builds unless otherwise specified.
+  const bool noHercules = std::getenv("HERCULES_INSTALL") == nullptr;
   if (Args.hasFlag(options::OPT_fdiscard_value_names,
-                   options::OPT_fno_discard_value_names, !IsAssertBuild)) {
+                   options::OPT_fno_discard_value_names,
+                   !IsAssertBuild && noHercules)) {
     if (Args.hasArg(options::OPT_fdiscard_value_names) &&
         llvm::any_of(Inputs, [](const clang::driver::InputInfo &II) {
           return types::isLLVMIR(II.getType());

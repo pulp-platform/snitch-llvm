@@ -25,6 +25,7 @@
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/Basic/CodeGenOptions.h"
+#include "clang/Basic/HEROHeterogeneous.h"
 #include "clang/Basic/TargetBuiltins.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/CodeGen/CGFunctionInfo.h"
@@ -4432,8 +4433,41 @@ CodeGenFunction::getBundlesForFunclet(llvm::Value *Callee) {
 llvm::CallInst *CodeGenFunction::EmitRuntimeCall(llvm::FunctionCallee callee,
                                                  ArrayRef<llvm::Value *> args,
                                                  const llvm::Twine &name) {
+  // FIXME: Insert address space casts if necessary
+  SmallVector<llvm::Value*, 16> FArgs;
+  auto Func = cast<llvm::Function>(callee.getCallee());
+  for(unsigned i=0; i<Func->arg_size(); ++i) {
+    llvm::Type* DstTy = (Func->arg_begin()+i)->getType();
+    if (DstTy != args[i]->getType()) {
+      if (DstTy->isPointerTy() && args[i]->getType()->isPointerTy()) {
+        if (hero::getHERODbgLevel() >= hero::NOTICE) {
+          llvm::errs().changeColor(llvm::raw_fd_ostream::Colors::CYAN, true);
+          llvm::errs() << "POINTER CAST: ";
+          llvm::errs().resetColor();
+          llvm::errs() << "CodeGenFunction::EmitRuntimeCall: ";
+          if (isa<llvm::Function>(args[i])) {
+            llvm::errs() << args[i]->getName() << "\n";
+          } else {
+            llvm::errs() << *args[i] << "\n";
+          }
+        }
+        FArgs.push_back(Builder.CreatePointerCast(args[i], DstTy));
+      } else {
+        // TODO This is because the HERO 64-bit API loads floats as i32. This
+        //      should probably be solved at an earlier point.
+        FArgs.push_back(Builder.CreateTruncOrBitCast(args[i], DstTy));
+      }
+    } else {
+      FArgs.push_back(args[i]);
+    }
+  }
+  for(unsigned i=Func->arg_size(); i<args.size(); ++i) {
+    FArgs.push_back(args[i]);
+  }
+
   llvm::CallInst *call = Builder.CreateCall(
-      callee, args, getBundlesForFunclet(callee.getCallee()), name);
+      callee, FArgs, getBundlesForFunclet(callee.getCallee()), name);
+
   call->setCallingConv(getRuntimeCC());
   return call;
 }
@@ -4930,6 +4964,20 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
         if (ArgInfo.getCoerceToType() != V->getType() &&
             V->getType()->isIntegerTy())
           V = Builder.CreateZExt(V, ArgInfo.getCoerceToType());
+
+        // If the address space does not match, insert a conversion
+        if (FirstIRArg < IRFuncTy->getNumParams() && V->getType()->isPointerTy() &&
+            V->getType()->getPointerAddressSpace() !=
+            IRFuncTy->getParamType(FirstIRArg)->getPointerAddressSpace()) {
+          if (hero::getHERODbgLevel() >= hero::NOTICE) {
+            llvm::errs().changeColor(llvm::raw_fd_ostream::Colors::CYAN, true);
+            llvm::errs() << "POINTER CAST: ";
+            llvm::errs().resetColor();
+            llvm::errs() << "CodeGenFunction::EmitCall: ";
+            llvm::errs() << *V << "\n";
+          }
+          V = Builder.CreatePointerCast(V, IRFuncTy->getParamType(FirstIRArg));
+        }
 
         // If the argument doesn't match, perform a bitcast to coerce it.  This
         // can happen due to trivial type mismatches.

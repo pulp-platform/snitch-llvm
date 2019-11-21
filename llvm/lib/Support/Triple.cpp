@@ -506,8 +506,10 @@ static Triple::VendorType parseVendor(StringRef VendorName) {
     .Case("amd", Triple::AMD)
     .Case("mesa", Triple::Mesa)
     .Case("suse", Triple::SUSE)
+    .Case("hero", Triple::HERO)
     .Case("oe", Triple::OpenEmbedded)
     .Default(Triple::UnknownVendor);
+
 }
 
 static Triple::OSType parseOS(StringRef OSName) {

@@ -1552,6 +1552,27 @@ def int_riscv_sm4ed      : ScalarCryptoByteSelectAny;
 // Zksh
 def int_riscv_sm3p0      : ScalarCryptoGprIntrinsicAny;
 def int_riscv_sm3p1      : ScalarCryptoGprIntrinsicAny;
+
+// PULP intrinsics
+
+// FIXME: should probably need a llvm_anyptr_ty here, but that does not work
+def int_riscv_pulp_event_unit_read
+    : GCCBuiltin<"__builtin_pulp_event_unit_read">,
+      Intrinsic<[llvm_i32_ty],
+                [llvm_ptr_ty, llvm_i32_ty],
+                []>;
+def int_riscv_pulp_fl1
+    : GCCBuiltin<"__builtin_pulp_fl1">,
+      Intrinsic<[llvm_i32_ty],
+                [llvm_i32_ty],
+                [IntrNoMem]>;
+
+def int_riscv_pulp_bitinsert
+    : GCCBuiltin<"__builtin_bitinsert">, // NOTE: GCC has no pulp here
+      Intrinsic<[llvm_i32_ty],
+                [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                [IntrNoMem, ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+
 } // TargetPrefix = "riscv"
 
 

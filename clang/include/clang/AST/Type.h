@@ -477,6 +477,8 @@ public:
   /// CL2.0 adds:
   ///   __generic is a superset of any address space except for __constant.
   static bool isAddressSpaceSupersetOf(LangAS A, LangAS B) {
+    // TODO: integrate special logic for HERO address spaces properly
+    //return true;
     // Address spaces must match exactly.
     return A == B ||
            // Otherwise in OpenCLC v2.0 s6.5.5: every address space except
@@ -7286,6 +7288,9 @@ QualType DecayedType::getPointeeType() const {
 // APFixedPoint instead of APSInt and scale.
 void FixedPointValueToString(SmallVectorImpl<char> &Str, llvm::APSInt Val,
                              unsigned Scale);
+
+// Recursively add an address space qualifier to the specified QualType.
+QualType recursivelyAddAddressSpace(QualType, LangAS, ASTContext &);
 
 } // namespace clang
 

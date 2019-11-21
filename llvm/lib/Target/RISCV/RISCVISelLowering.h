@@ -363,6 +363,11 @@ public:
   shouldExpandBuildVectorWithShuffles(EVT VT,
                                       unsigned DefinedValues) const override;
 
+  // Override default pointer type
+  MVT getPointerTy(const DataLayout &DL, uint32_t AS = UINT32_MAX) const override;
+  MVT getPointerMemTy(const DataLayout &DL, uint32_t AS = UINT32_MAX) const override;
+  MVT getScalarShiftAmountTy(const DataLayout &DL, EVT) const override;
+
   // Provide custom lowering hooks for some operations.
   SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
   void ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue> &Results,
@@ -460,6 +465,10 @@ public:
   /// with the clang -ffixed-xX flag for access to be allowed.
   Register getRegisterByName(const char *RegName, LLT VT,
                              const MachineFunction &MF) const override;
+
+  bool getPostIndexedAddressParts(SDNode *N, SDNode *Op, SDValue &Base,
+                                  SDValue &Offset, ISD::MemIndexedMode &AM,
+                                  SelectionDAG &DAG) const;
 
   // Lower incoming arguments, copy physregs into vregs
   SDValue LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,

@@ -29,6 +29,7 @@
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/CodeGenOptions.h"
 #include "clang/Basic/SourceManager.h"
+#include "clang/Basic/HEROHeterogeneous.h"
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/IR/DataLayout.h"
@@ -1837,6 +1838,19 @@ void CodeGenFunction::EmitStoreOfScalar(llvm::Value *Value, Address Addr,
   }
 
   Value = EmitToMemory(Value, Ty);
+
+  // Add pointer cast to correct address space if necessary
+  llvm::Type *ElementTy = Addr.getElementType();
+  if(ElementTy->isPointerTy() && ElementTy->getPointerAddressSpace() != Value->getType()->getPointerAddressSpace()) {
+    if (hero::getHERODbgLevel() >= hero::NOTICE) {
+      llvm::errs().changeColor(llvm::raw_fd_ostream::Colors::CYAN, true);
+      llvm::errs() << "POINTER CAST: ";
+      llvm::errs().resetColor();
+      llvm::errs() << "CodeGenFunction::EmitStoreOfScalar: ";
+      llvm::errs() << *Value << "\n";
+    }
+    Value = Builder.CreatePointerCast(Value, Value->getType()->getPointerElementType()->getPointerTo(ElementTy->getPointerAddressSpace()));
+  }
 
   LValue AtomicLValue =
       LValue::MakeAddr(Addr, Ty, getContext(), BaseInfo, TBAAInfo);
@@ -5325,11 +5339,12 @@ RValue CodeGenFunction::EmitCall(QualType CalleeType, const CGCallee &OrigCallee
   // Chain calls use this same code path to add the invisible chain parameter
   // to the function type.
   if (isa<FunctionNoProtoType>(FnType) || Chain) {
+    llvm::Value *CalleePtr = Callee.getFunctionPointer();
+
     llvm::Type *CalleeTy = getTypes().GetFunctionType(FnInfo);
     int AS = Callee.getFunctionPointer()->getType()->getPointerAddressSpace();
     CalleeTy = CalleeTy->getPointerTo(AS);
 
-    llvm::Value *CalleePtr = Callee.getFunctionPointer();
     CalleePtr = Builder.CreateBitCast(CalleePtr, CalleeTy, "callee.knr.cast");
     Callee.setFunctionPointer(CalleePtr);
   }

@@ -24,6 +24,7 @@
 #include "clang/AST/StmtVisitor.h"
 #include "clang/AST/TypeOrdering.h"
 #include "clang/Basic/DiagnosticSema.h"
+#include "clang/Basic/HEROHeterogeneous.h"
 #include "clang/Basic/OpenMPKinds.h"
 #include "clang/Basic/PartialDiagnostic.h"
 #include "clang/Basic/TargetInfo.h"
@@ -2142,10 +2143,21 @@ bool Sema::isOpenMPCapturedByRef(const ValueDecl *D, unsigned Level,
   // and alignment, because the runtime library only deals with uintptr types.
   // If it does not fit the uintptr size, we need to pass the data by reference
   // instead.
+  CharUnits PtrSize = Ctx.getTypeSizeInChars(Ctx.getUIntPtrType());
+  CharUnits PtrAlign = Ctx.getTypeAlignInChars(Ctx.getUIntPtrType());
+  if (Ty->isPointerType()) {
+    QualType PointeeType = Ty->getPointeeType();
+    Qualifiers ASQuals = PointeeType.getQualifiers();
+    if (ASQuals.hasAddressSpace()) {
+      PtrSize = CharUnits::fromQuantity(Ctx.getTargetInfo().getPointerWidth(
+          Ctx.getTargetAddressSpace(ASQuals.getAddressSpace())));
+      PtrAlign = CharUnits::fromQuantity(Ctx.getTargetInfo().getPointerAlign(
+          Ctx.getTargetAddressSpace(ASQuals.getAddressSpace())));
+    }
+  }
   if (!IsByRef &&
-      (Ctx.getTypeSizeInChars(Ty) >
-           Ctx.getTypeSizeInChars(Ctx.getUIntPtrType()) ||
-       Ctx.getDeclAlign(D) > Ctx.getTypeAlignInChars(Ctx.getUIntPtrType()))) {
+      (Ctx.getTypeSizeInChars(Ty) > PtrSize ||
+       Ctx.getDeclAlign(D) > PtrAlign)) {
     IsByRef = true;
   }
 
@@ -3914,6 +3926,24 @@ static void handleDeclareVariantConstructTrait(DSAStackTy *Stack,
 }
 
 void Sema::ActOnOpenMPRegionStart(OpenMPDirectiveKind DKind, Scope *CurScope) {
+  QualType VoidPtrTy = Context.VoidPtrTy.withConst().withRestrict();
+  QualType KmpInt32Ty;
+  const TargetInfo &TI = Context.getTargetInfo();
+  if (hero::isHERODevice(Context) && TI.hasFeature("hero-def-as-host")) {
+    // We are in device code, and default AS is host, so use AS 1 for internal
+    // ptrs.
+    LangAS DefaultAS =
+        (LangAS) ((unsigned) LangAS::FirstTargetAddressSpace + 1);
+    KmpInt32Ty = Context.getIntTypeForBitwidth(32, 1).withConst();
+    Qualifiers ASQuals = KmpInt32Ty.getQualifiers();
+    ASQuals.setAddressSpace(DefaultAS);
+    KmpInt32Ty =
+        Context.getQualifiedType(KmpInt32Ty.getUnqualifiedType(), ASQuals);
+  } else {
+    KmpInt32Ty = Context.getIntTypeForBitwidth(32, 1).withConst();
+  }
+  QualType KmpInt32PtrTy =
+      Context.getPointerType(KmpInt32Ty).withConst().withRestrict();
   switch (DKind) {
   case OMPD_parallel:
   case OMPD_parallel_for:
@@ -3923,9 +3953,6 @@ void Sema::ActOnOpenMPRegionStart(OpenMPDirectiveKind DKind, Scope *CurScope) {
   case OMPD_teams:
   case OMPD_teams_distribute:
   case OMPD_teams_distribute_simd: {
-    QualType KmpInt32Ty = Context.getIntTypeForBitwidth(32, 1).withConst();
-    QualType KmpInt32PtrTy =
-        Context.getPointerType(KmpInt32Ty).withConst().withRestrict();
     Sema::CapturedParamNameType Params[] = {
         std::make_pair(".global_tid.", KmpInt32PtrTy),
         std::make_pair(".bound_tid.", KmpInt32PtrTy),
@@ -3941,10 +3968,6 @@ void Sema::ActOnOpenMPRegionStart(OpenMPDirectiveKind DKind, Scope *CurScope) {
   case OMPD_target_parallel_for_simd:
   case OMPD_target_teams_distribute:
   case OMPD_target_teams_distribute_simd: {
-    QualType KmpInt32Ty = Context.getIntTypeForBitwidth(32, 1).withConst();
-    QualType VoidPtrTy = Context.VoidPtrTy.withConst().withRestrict();
-    QualType KmpInt32PtrTy =
-        Context.getPointerType(KmpInt32Ty).withConst().withRestrict();
     QualType Args[] = {VoidPtrTy};
     FunctionProtoType::ExtProtoInfo EPI;
     EPI.Variadic = true;
@@ -3986,10 +4009,6 @@ void Sema::ActOnOpenMPRegionStart(OpenMPDirectiveKind DKind, Scope *CurScope) {
   }
   case OMPD_target:
   case OMPD_target_simd: {
-    QualType KmpInt32Ty = Context.getIntTypeForBitwidth(32, 1).withConst();
-    QualType VoidPtrTy = Context.VoidPtrTy.withConst().withRestrict();
-    QualType KmpInt32PtrTy =
-        Context.getPointerType(KmpInt32Ty).withConst().withRestrict();
     QualType Args[] = {VoidPtrTy};
     FunctionProtoType::ExtProtoInfo EPI;
     EPI.Variadic = true;
@@ -4047,10 +4066,6 @@ void Sema::ActOnOpenMPRegionStart(OpenMPDirectiveKind DKind, Scope *CurScope) {
     break;
   }
   case OMPD_task: {
-    QualType KmpInt32Ty = Context.getIntTypeForBitwidth(32, 1).withConst();
-    QualType VoidPtrTy = Context.VoidPtrTy.withConst().withRestrict();
-    QualType KmpInt32PtrTy =
-        Context.getPointerType(KmpInt32Ty).withConst().withRestrict();
     QualType Args[] = {VoidPtrTy};
     FunctionProtoType::ExtProtoInfo EPI;
     EPI.Variadic = true;
@@ -4088,9 +4103,6 @@ void Sema::ActOnOpenMPRegionStart(OpenMPDirectiveKind DKind, Scope *CurScope) {
     QualType KmpInt64Ty =
         Context.getIntTypeForBitwidth(/*DestWidth=*/64, /*Signed=*/1)
             .withConst();
-    QualType VoidPtrTy = Context.VoidPtrTy.withConst().withRestrict();
-    QualType KmpInt32PtrTy =
-        Context.getPointerType(KmpInt32Ty).withConst().withRestrict();
     QualType Args[] = {VoidPtrTy};
     FunctionProtoType::ExtProtoInfo EPI;
     EPI.Variadic = true;
@@ -4173,9 +4185,6 @@ void Sema::ActOnOpenMPRegionStart(OpenMPDirectiveKind DKind, Scope *CurScope) {
   }
   case OMPD_distribute_parallel_for_simd:
   case OMPD_distribute_parallel_for: {
-    QualType KmpInt32Ty = Context.getIntTypeForBitwidth(32, 1).withConst();
-    QualType KmpInt32PtrTy =
-        Context.getPointerType(KmpInt32Ty).withConst().withRestrict();
     Sema::CapturedParamNameType Params[] = {
         std::make_pair(".global_tid.", KmpInt32PtrTy),
         std::make_pair(".bound_tid.", KmpInt32PtrTy),
@@ -4189,11 +4198,6 @@ void Sema::ActOnOpenMPRegionStart(OpenMPDirectiveKind DKind, Scope *CurScope) {
   }
   case OMPD_target_teams_distribute_parallel_for:
   case OMPD_target_teams_distribute_parallel_for_simd: {
-    QualType KmpInt32Ty = Context.getIntTypeForBitwidth(32, 1).withConst();
-    QualType KmpInt32PtrTy =
-        Context.getPointerType(KmpInt32Ty).withConst().withRestrict();
-    QualType VoidPtrTy = Context.VoidPtrTy.withConst().withRestrict();
-
     QualType Args[] = {VoidPtrTy};
     FunctionProtoType::ExtProtoInfo EPI;
     EPI.Variadic = true;
@@ -4248,10 +4252,6 @@ void Sema::ActOnOpenMPRegionStart(OpenMPDirectiveKind DKind, Scope *CurScope) {
 
   case OMPD_teams_distribute_parallel_for:
   case OMPD_teams_distribute_parallel_for_simd: {
-    QualType KmpInt32Ty = Context.getIntTypeForBitwidth(32, 1).withConst();
-    QualType KmpInt32PtrTy =
-        Context.getPointerType(KmpInt32Ty).withConst().withRestrict();
-
     Sema::CapturedParamNameType ParamsTeams[] = {
         std::make_pair(".global_tid.", KmpInt32PtrTy),
         std::make_pair(".bound_tid.", KmpInt32PtrTy),
@@ -4277,10 +4277,6 @@ void Sema::ActOnOpenMPRegionStart(OpenMPDirectiveKind DKind, Scope *CurScope) {
   case OMPD_target_update:
   case OMPD_target_enter_data:
   case OMPD_target_exit_data: {
-    QualType KmpInt32Ty = Context.getIntTypeForBitwidth(32, 1).withConst();
-    QualType VoidPtrTy = Context.VoidPtrTy.withConst().withRestrict();
-    QualType KmpInt32PtrTy =
-        Context.getPointerType(KmpInt32Ty).withConst().withRestrict();
     QualType Args[] = {VoidPtrTy};
     FunctionProtoType::ExtProtoInfo EPI;
     EPI.Variadic = true;

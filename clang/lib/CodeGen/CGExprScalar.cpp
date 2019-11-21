@@ -26,6 +26,7 @@
 #include "clang/AST/RecordLayout.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/Basic/CodeGenOptions.h"
+#include "clang/Basic/HEROHeterogeneous.h"
 #include "clang/Basic/TargetInfo.h"
 #include "llvm/ADT/APFixedPoint.h"
 #include "llvm/ADT/Optional.h"
@@ -1355,8 +1356,31 @@ Value *ScalarExprEmitter::EmitScalarConversion(Value *Src, QualType SrcType,
   // some native types (like Obj-C id) may map to a pointer type.
   if (auto DstPT = dyn_cast<llvm::PointerType>(DstTy)) {
     // The source value may be an integer, or a pointer.
-    if (isa<llvm::PointerType>(SrcTy))
-      return Builder.CreateBitCast(Src, DstTy, "conv");
+    if (isa<llvm::PointerType>(SrcTy)) {
+      // If the source had an explicit pointer type, but the destination hasn't,
+      // preserve the address space.
+      if (!DstType.getQualifiers().hasAddressSpace()) {
+        if (unsigned AS =
+            dyn_cast<llvm::PointerType>(SrcTy)->getAddressSpace()) {
+          DstTy = llvm::PointerType::get(
+              dyn_cast<llvm::PointerType>(SrcTy)->getElementType(), AS);
+          if (hero::getHERODbgLevel() >= hero::NOTICE) {
+            llvm::errs().changeColor(llvm::raw_fd_ostream::Colors::CYAN, true);
+            llvm::errs() << "POINTER CAST: ";
+            llvm::errs().resetColor();
+            llvm::errs() << "CGExprScalar::EmitScalarConversion: Preserve AS: ";
+            llvm::errs() << *Src << "\n";
+          }
+        }
+      }
+      // Return the cast if it was necessary, if the AS was the only difference
+      // and we preserved it, we can return the original source value.
+      if (Src->getType() == DstTy) {
+        return Src;
+      } else {
+        return Builder.CreatePointerCast(Src, DstTy, "conv");
+      }
+    }
 
     assert(SrcType->isIntegerType() && "Not ptr->ptr or int->ptr conversion?");
     // First, convert to the correct width so that we control the kind of

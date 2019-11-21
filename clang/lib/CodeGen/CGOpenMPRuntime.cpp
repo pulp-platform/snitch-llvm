@@ -24,6 +24,7 @@
 #include "clang/AST/StmtVisitor.h"
 #include "clang/Basic/BitmaskEnum.h"
 #include "clang/Basic/FileManager.h"
+#include "clang/Basic/HEROHeterogeneous.h"
 #include "clang/Basic/OpenMPKinds.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/CodeGen/ConstantInitBuilder.h"
@@ -1359,6 +1360,10 @@ static void buildStructValue(ConstantStructBuilder &Fields, CodeGenModule &CGM,
     Fields.add(*DI);
     ++DI;
   }
+  // Fill final alignment
+  for(unsigned I = PrevIdx; I < StructTy->getNumElements(); ++I) {
+      Fields.add(llvm::Constant::getNullValue(StructTy->getElementType(I)));
+  }
 }
 
 template <class... As>
@@ -1368,6 +1373,7 @@ createGlobalStruct(CodeGenModule &CGM, QualType Ty, bool IsConstant,
                    As &&... Args) {
   const auto *RD = cast<RecordDecl>(Ty->getAsTagDecl());
   const CGRecordLayout &RL = CGM.getTypes().getCGRecordLayout(RD);
+
   ConstantInitBuilder CIBuilder(CGM);
   ConstantStructBuilder Fields = CIBuilder.beginStruct(RL.getLLVMType());
   buildStructValue(Fields, CGM, RD, RL, Data);
@@ -1544,19 +1550,34 @@ llvm::Type *CGOpenMPRuntime::getIdentTyPointerTy() {
   return OMPBuilder.IdentPtr;
 }
 
-llvm::Type *CGOpenMPRuntime::getKmpc_MicroPointerTy() {
+llvm::Type *CGOpenMPRuntime::getKmpc_MicroPointerTy(unsigned AS) {
   if (!Kmpc_MicroTy) {
     // Build void (*kmpc_micro)(kmp_int32 *global_tid, kmp_int32 *bound_tid,...)
     llvm::Type *MicroParams[] = {llvm::PointerType::getUnqual(CGM.Int32Ty),
                                  llvm::PointerType::getUnqual(CGM.Int32Ty)};
     Kmpc_MicroTy = llvm::FunctionType::get(CGM.VoidTy, MicroParams, true);
   }
-  return llvm::PointerType::getUnqual(Kmpc_MicroTy);
+  return llvm::PointerType::get(Kmpc_MicroTy, AS);
+}
+
+unsigned getOMPDeviceLocalAS(ASTContext &Ctx) {
+
+  // Handle HERO
+  if (hero::isHERODevice(Ctx)) {
+    const TargetInfo &TI = Ctx.getTargetInfo();
+    if (TI.hasFeature("hero-def-as-host")) {
+      return 1; // If Host is 0, use 1.
+    }
+  }
+
+  // Default
+  return 0;
+
 }
 
 llvm::FunctionCallee
 CGOpenMPRuntime::createForStaticInitFunction(unsigned IVSize, bool IVSigned,
-                                             bool IsGPUDistribute) {
+                                             bool IsGPUDistribute, unsigned IVargAS) {
   assert((IVSize == 32 || IVSize == 64) &&
          "IV size is not compatible with the omp runtime");
   StringRef Name;
@@ -1572,17 +1593,17 @@ CGOpenMPRuntime::createForStaticInitFunction(unsigned IVSize, bool IVSigned,
                                     : "__kmpc_for_static_init_8u");
 
   llvm::Type *ITy = IVSize == 32 ? CGM.Int32Ty : CGM.Int64Ty;
-  auto *PtrTy = llvm::PointerType::getUnqual(ITy);
+  auto *PtrTy = llvm::PointerType::get(ITy, IVargAS);
   llvm::Type *TypeParams[] = {
-    getIdentTyPointerTy(),                     // loc
-    CGM.Int32Ty,                               // tid
-    CGM.Int32Ty,                               // schedtype
-    llvm::PointerType::getUnqual(CGM.Int32Ty), // p_lastiter
-    PtrTy,                                     // p_lower
-    PtrTy,                                     // p_upper
-    PtrTy,                                     // p_stride
-    ITy,                                       // incr
-    ITy                                        // chunk
+    getIdentTyPointerTy(),                        // loc
+    CGM.Int32Ty,                                  // tid
+    CGM.Int32Ty,                                  // schedtype
+    llvm::PointerType::get(CGM.Int32Ty, IVargAS), // p_lastiter
+    PtrTy,                                        // p_lower
+    PtrTy,                                        // p_upper
+    PtrTy,                                        // p_stride
+    ITy,                                          // incr
+    ITy                                           // chunk
   };
   auto *FnTy =
       llvm::FunctionType::get(CGM.VoidTy, TypeParams, /*isVarArg*/ false);
@@ -2093,7 +2114,8 @@ void CGOpenMPRuntime::emitParallelCall(CodeGenFunction &CGF, SourceLocation Loc,
     llvm::Value *Args[] = {
         RTLoc,
         CGF.Builder.getInt32(CapturedVars.size()), // Number of captured vars
-        CGF.Builder.CreateBitCast(OutlinedFn, RT.getKmpc_MicroPointerTy())};
+        CGF.Builder.CreatePointerCast(OutlinedFn,
+            RT.getKmpc_MicroPointerTy(getOMPDeviceLocalAS(CGF.getContext())))};
     llvm::SmallVector<llvm::Value *, 16> RealArgs;
     RealArgs.append(std::begin(Args), std::end(Args));
     RealArgs.append(CapturedVars.begin(), CapturedVars.end());
@@ -2195,7 +2217,8 @@ llvm::GlobalVariable *CGOpenMPRuntime::getOrCreateInternalVariable(
 llvm::Value *CGOpenMPRuntime::getCriticalRegionLock(StringRef CriticalName) {
   std::string Prefix = Twine("gomp_critical_user_", CriticalName).str();
   std::string Name = getName({Prefix, "var"});
-  return getOrCreateInternalVariable(KmpCriticalNameTy, Name);
+  return getOrCreateInternalVariable(KmpCriticalNameTy, Name,
+                                     getOMPDeviceLocalAS(CGM.getContext()));
 }
 
 namespace {
@@ -2814,6 +2837,7 @@ static void emitForStaticInitCall(
       CGF.Builder.getIntN(Values.IVSize, 1),            // Incr
       Chunk                                             // Chunk
   };
+
   CGF.EmitRuntimeCall(ForStaticInitFunction, Args);
 }
 
@@ -2831,8 +2855,9 @@ void CGOpenMPRuntime::emitForStaticInit(CodeGenFunction &CGF,
                                                  ? OMP_IDENT_WORK_LOOP
                                                  : OMP_IDENT_WORK_SECTIONS);
   llvm::Value *ThreadId = getThreadID(CGF, Loc);
+  unsigned IVargAS = getOMPDeviceLocalAS(CGF.getContext());
   llvm::FunctionCallee StaticInitFunction =
-      createForStaticInitFunction(Values.IVSize, Values.IVSigned, false);
+      createForStaticInitFunction(Values.IVSize, Values.IVSigned, false, IVargAS);
   auto DL = ApplyDebugLocation::CreateDefaultArtificial(CGF, Loc);
   emitForStaticInitCall(CGF, UpdatedLocation, ThreadId, StaticInitFunction,
                         ScheduleNum, ScheduleKind.M1, ScheduleKind.M2, Values);
@@ -2851,9 +2876,9 @@ void CGOpenMPRuntime::emitDistributeStaticInit(
   bool isGPUDistribute =
       CGM.getLangOpts().OpenMPIsDevice &&
       (CGM.getTriple().isAMDGCN() || CGM.getTriple().isNVPTX());
+  unsigned IVargAS = getOMPDeviceLocalAS(CGF.getContext());
   StaticInitFunction = createForStaticInitFunction(
-      Values.IVSize, Values.IVSigned, isGPUDistribute);
-
+      Values.IVSize, Values.IVSigned, isGPUDistribute, IVargAS);
   emitForStaticInitCall(CGF, UpdatedLocation, ThreadId, StaticInitFunction,
                         ScheduleNum, OMPC_SCHEDULE_MODIFIER_unknown,
                         OMPC_SCHEDULE_MODIFIER_unknown, Values);
@@ -3137,22 +3162,26 @@ void CGOpenMPRuntime::createOffloadEntry(
   // Create constant string with the name.
   llvm::Constant *StrPtrInit = llvm::ConstantDataArray::getString(C, Name);
 
+  unsigned CAS = CGM.getContext().getTargetAddressSpace(CGM.getContext().getTargetInfo().getConstantAddressSpace().getValueOr(LangAS::Default));
   std::string StringName = getName({"omp_offloading", "entry_name"});
   auto *Str = new llvm::GlobalVariable(
       M, StrPtrInit->getType(), /*isConstant=*/true,
-      llvm::GlobalValue::InternalLinkage, StrPtrInit, StringName);
+      llvm::GlobalValue::InternalLinkage, StrPtrInit, StringName,
+      nullptr, llvm::GlobalVariable::NotThreadLocal, CAS);
   Str->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
 
-  llvm::Constant *Data[] = {
-      llvm::ConstantExpr::getPointerBitCastOrAddrSpaceCast(ID, CGM.VoidPtrTy),
-      llvm::ConstantExpr::getPointerBitCastOrAddrSpaceCast(Str, CGM.Int8PtrTy),
-      llvm::ConstantInt::get(CGM.SizeTy, Size),
-      llvm::ConstantInt::get(CGM.Int32Ty, Flags),
-      llvm::ConstantInt::get(CGM.Int32Ty, 0)};
+  llvm::Type *FuncPtrTy = CGM.Int8Ty->getPointerTo(M.getDataLayout().getProgramAddressSpace());
+  llvm::Type *StrPtrTy = CGM.Int8Ty->getPointerTo(CAS);
+
+  llvm::Constant *Data[] = {llvm::ConstantExpr::getBitCast(ID, FuncPtrTy),
+                            llvm::ConstantExpr::getBitCast(Str, StrPtrTy),
+                            llvm::ConstantInt::get(CGM.SizeTy, Size),
+                            llvm::ConstantInt::get(CGM.Int32Ty, Flags),
+                            llvm::ConstantInt::get(CGM.Int32Ty, 0)};
   std::string EntryName = getName({"omp_offloading", "entry", ""});
   llvm::GlobalVariable *Entry = createGlobalStruct(
       CGM, getTgtOffloadEntryQTy(), /*IsConstant=*/true, Data,
-      Twine(EntryName).concat(Name), llvm::GlobalValue::WeakAnyLinkage);
+      Twine(EntryName).concat(Name), llvm::GlobalValue::WeakAnyLinkage, CAS);
 
   // The entry has to be created in the section the linker expects it to be.
   Entry->setSection("omp_offloading_entries");
@@ -3428,8 +3457,11 @@ QualType CGOpenMPRuntime::getTgtOffloadEntryQTy() {
     ASTContext &C = CGM.getContext();
     RecordDecl *RD = C.buildImplicitRecord("__tgt_offload_entry");
     RD->startDefinition();
-    addFieldToRecordDecl(C, RD, C.VoidPtrTy);
-    addFieldToRecordDecl(C, RD, C.getPointerType(C.CharTy));
+    QualType FuncPtrTy = C.getPointerType(C.getAddrSpaceQualType(C.VoidTy, C.getLangASForBuiltinAddressSpace(CGM.getModule().getDataLayout().getProgramAddressSpace())));
+    unsigned CAS = CGM.getContext().getTargetAddressSpace(CGM.getContext().getTargetInfo().getConstantAddressSpace().getValueOr(LangAS::Default));
+    QualType StrPtrTy = C.getPointerType(C.getAddrSpaceQualType(C.CharTy, C.getLangASForBuiltinAddressSpace(CAS)));
+    addFieldToRecordDecl(C, RD, FuncPtrTy);
+    addFieldToRecordDecl(C, RD, StrPtrTy);
     addFieldToRecordDecl(C, RD, C.getSizeType());
     addFieldToRecordDecl(
         C, RD, C.getIntTypeForBitwidth(/*DestWidth=*/32, /*Signed=*/true));
@@ -6565,7 +6597,8 @@ void CGOpenMPRuntime::emitTargetOutlinedFunctionHelper(
   // the device, because these functions will be entry points to the device.
 
   if (CGM.getLangOpts().OpenMPIsDevice) {
-    OutlinedFnID = llvm::ConstantExpr::getBitCast(OutlinedFn, CGM.Int8PtrTy);
+    llvm::Type *FuncPtrTy = CGM.Int8Ty->getPointerTo(CGM.getModule().getDataLayout().getProgramAddressSpace());
+    OutlinedFnID = llvm::ConstantExpr::getBitCast(OutlinedFn, FuncPtrTy);
     OutlinedFn->setLinkage(llvm::GlobalValue::WeakAnyLinkage);
     OutlinedFn->setDSOLocal(false);
     if (CGM.getTriple().isAMDGCN())
@@ -11118,7 +11151,8 @@ void CGOpenMPRuntime::emitTeamsCall(CodeGenFunction &CGF,
   llvm::Value *Args[] = {
       RTLoc,
       CGF.Builder.getInt32(CapturedVars.size()), // Number of captured vars
-      CGF.Builder.CreateBitCast(OutlinedFn, getKmpc_MicroPointerTy())};
+      CGF.Builder.CreateBitCast(OutlinedFn,
+          getKmpc_MicroPointerTy(getOMPDeviceLocalAS(CGF.getContext())))};
   llvm::SmallVector<llvm::Value *, 16> RealArgs;
   RealArgs.append(std::begin(Args), std::end(Args));
   RealArgs.append(CapturedVars.begin(), CapturedVars.end());

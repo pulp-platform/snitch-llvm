@@ -51,6 +51,7 @@
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/CommentOptions.h"
 #include "clang/Basic/ExceptionSpecificationType.h"
+#include "clang/Basic/HEROHeterogeneous.h"
 #include "clang/Basic/IdentifierTable.h"
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/LangOptions.h"
@@ -8535,6 +8536,15 @@ static TypedefDecl *CreateMSVaListDecl(const ASTContext *Context) {
   return CreateCharPtrNamedVaListDecl(Context, "__builtin_ms_va_list");
 }
 
+static TypedefDecl *CreateHeroDevVaListDecl(const ASTContext *Context) {
+  auto Q = Context->VoidTy.getQualifiers();
+  Q.setAddressSpace(hero::getHERODeviceAS(*Context));
+  QualType HEROVaListType = Context->getPointerType(Context->getCanonicalType(
+      Context->getQualifiedType(Context->VoidTy.getUnqualifiedType(), Q)));
+  return Context->buildImplicitTypedef(HEROVaListType,
+                                       "__builtin_hero_dev_va_list");
+}
+
 static TypedefDecl *CreateCharPtrBuiltinVaListDecl(const ASTContext *Context) {
   return CreateCharPtrNamedVaListDecl(Context, "__builtin_va_list");
 }
@@ -8930,6 +8940,14 @@ TypedefDecl *ASTContext::getBuiltinMSVaListDecl() const {
 
   return BuiltinMSVaListDecl;
 }
+
+TypedefDecl *ASTContext::getBuiltinHeroDevVaListDecl() const {
+  if (!BuiltinHeroDevVaListDecl)
+    BuiltinHeroDevVaListDecl = CreateHeroDevVaListDecl(this);
+
+  return BuiltinHeroDevVaListDecl;
+}
+
 
 bool ASTContext::canBuiltinBeRedeclared(const FunctionDecl *FD) const {
   return BuiltinInfo.canBeRedeclared(FD->getBuiltinID());

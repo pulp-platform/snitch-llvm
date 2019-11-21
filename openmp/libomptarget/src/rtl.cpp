@@ -30,6 +30,7 @@ static const char *RTLNames[] = {
     /* SX-Aurora VE target  */ "libomptarget.rtl.ve.so",
     /* AMDGPU target        */ "libomptarget.rtl.amdgpu.so",
     /* Remote target        */ "libomptarget.rtl.rpc.so",
+    /* PULP target          */ "libomptarget.rtl.pulp.so"
 };
 
 PluginManager *PM;

@@ -90,6 +90,11 @@ TARGET_BUILTIN(__builtin_sdma_start_twod, "UiULLiULLiUiUiUiUiUi", "n", "xdma")
 TARGET_BUILTIN(__builtin_sdma_stat, "UiUi", "n", "xdma")
 TARGET_BUILTIN(__builtin_sdma_wait_for_idle, "v", "n", "xdma")
 
+// PULP extension
+TARGET_BUILTIN(__builtin_pulp_event_unit_read, "Uii*Ui", "n", "xpulpv2")
+TARGET_BUILTIN(__builtin_pulp_fl1, "Uii", "nc", "xpulpv2")
+
+TARGET_BUILTIN(__builtin_bitinsert, "iiiIUiIUi", "nc", "xpulpv2") // NOTE: normal builtin in GCC
+
 #undef BUILTIN
 #undef TARGET_BUILTIN
-

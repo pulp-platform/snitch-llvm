@@ -254,6 +254,7 @@ include "RISCVRegisterInfo.td"
 include "RISCVCallingConv.td"
 include "RISCVInstrInfo.td"
 include "RISCVRegisterBanks.td"
+include "RISCVSchedMempool.td"
 include "RISCVSchedRocket.td"
 include "RISCVSchedSiFive7.td"
 include "RISCVSchedSnitch.td"
@@ -265,7 +266,7 @@ include "RISCVInstrInfoXssr.td"
 // RISC-V processors supported.
 //===----------------------------------------------------------------------===//
 
-def : ProcessorModel<"generic-rv32", NoSchedModel, []>;
+def : ProcessorModel<"generic-rv32", MempoolModel, []>;
 def : ProcessorModel<"generic-rv64", NoSchedModel, [Feature64Bit]>;
 
 def : ProcessorModel<"rocket-rv32", RocketModel, []>;

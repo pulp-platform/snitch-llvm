@@ -192,6 +192,9 @@ public:
     // FIXME: Should we exclude fixed registers like SP, TP or GP?
     return 31;
   }
+
+  bool isLoweredToCall(const Function *F);
+  bool shouldFavorPostInc() const;
 };
 
 } // end namespace llvm

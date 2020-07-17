@@ -288,3 +288,14 @@ InstructionCost RISCVTTIImpl::getRegUsageForType(Type *Ty) {
 
   return BaseT::getRegUsageForType(Ty);
 }
+
+bool RISCVTTIImpl::isLoweredToCall(const Function *F) {
+  if (F->getName().startswith("llvm.riscv.pulp"))
+    return false;
+
+  return BaseT::isLoweredToCall(F);
+}
+
+bool RISCVTTIImpl::shouldFavorPostInc() const {
+  return ST->hasPULPExtV2();
+}

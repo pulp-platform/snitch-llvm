@@ -174,6 +174,18 @@ def uimm5 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<5>(Imm);}]> {
   let OperandNamespace = "RISCVOp";
 }
 
+def simm5 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isInt<5>(Imm);}]> {
+  let ParserMatchClass = SImmAsmOperand<5>;
+  let EncoderMethod = "getImmOpValue";
+  let DecoderMethod = "decodeSImmOperand<5>";
+  let MCOperandPredicate = [{
+    int64_t Imm;
+    if (MCOp.evaluateAsConstantImm(Imm))
+      return isInt<5>(Imm);
+    return MCOp.isBareSymbolRef();
+  }];
+}
+
 def InsnDirectiveOpcode : AsmOperandClass {
   let Name = "InsnDirectiveOpcode";
   let ParserMethod = "parseInsnDirectiveOpcode";

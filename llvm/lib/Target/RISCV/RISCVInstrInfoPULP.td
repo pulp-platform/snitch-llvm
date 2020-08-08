@@ -609,20 +609,49 @@ def P_CLIPU :  Pulp_ALU_ri<0b0001010, 0b010, "p.clipu">;
 def P_CLIPR :  Pulp_ALU_rr<0b0001010, 0b101, OPC_OP, "p.clipr">;
 def P_CLIPUR : Pulp_ALU_rr<0b0001010, 0b110, OPC_OP, "p.clipur">;
 
-def P_ADDN :    Pulp_ALU_rri<0b00, 0b010, RISCVOpcode<0b1011011>, "p.addN">;
-def P_ADDUN :   Pulp_ALU_rri<0b10, 0b010, RISCVOpcode<0b1011011>, "p.adduN">;
-def P_ADDRN :   Pulp_ALU_rri<0b00, 0b110, RISCVOpcode<0b1011011>, "p.addRN">;
-def P_ADDURN :  Pulp_ALU_rri<0b10, 0b110, RISCVOpcode<0b1011011>, "p.adduRN">;
-def P_SUBN :    Pulp_ALU_rri<0b00, 0b011, RISCVOpcode<0b1011011>, "p.subN">;
-def P_SUBUN :   Pulp_ALU_rri<0b10, 0b011, RISCVOpcode<0b1011011>, "p.subuN">;
-def P_SUBRN :   Pulp_ALU_rri<0b00, 0b111, RISCVOpcode<0b1011011>, "p.subRN">;
-def P_SUBURN :  Pulp_ALU_rri<0b10, 0b111, RISCVOpcode<0b1011011>, "p.subuRN">;
-def P_ADDNR :   Pulp_ALU_rr<0b0100000, 0b010, RISCVOpcode<0b1011011>, "p.addNr">;
-def P_ADDUNR :  Pulp_ALU_rr<0b1100000, 0b010, RISCVOpcode<0b1011011>, "p.adduNr">;
-def P_ADDRNR :  Pulp_ALU_rr<0b0100000, 0b110, RISCVOpcode<0b1011011>, "p.addRNr">;
-def P_ADDURNR : Pulp_ALU_rr<0b1100000, 0b110, RISCVOpcode<0b1011011>, "p.adduRNr">;
-def P_SUBNR :   Pulp_ALU_rr<0b0100000, 0b011, RISCVOpcode<0b1011011>, "p.subNr">;
-def P_SUBUNR :  Pulp_ALU_rr<0b1100000, 0b011, RISCVOpcode<0b1011011>, "p.subuNr">;
-def P_SUBRNR :  Pulp_ALU_rr<0b0100000, 0b111, RISCVOpcode<0b1011011>, "p.subRNr">;
-def P_SUBURNR : Pulp_ALU_rr<0b1100000, 0b111, RISCVOpcode<0b1011011>, "p.subuRNr">;
+def P_ADDN :    Pulp_ALU_rri<0b00, 0b010, RISCVOpcode<0b1011011>, "p.addn">;
+def P_ADDUN :   Pulp_ALU_rri<0b10, 0b010, RISCVOpcode<0b1011011>, "p.addun">;
+def P_ADDRN :   Pulp_ALU_rri<0b00, 0b110, RISCVOpcode<0b1011011>, "p.addrn">;
+def P_ADDURN :  Pulp_ALU_rri<0b10, 0b110, RISCVOpcode<0b1011011>, "p.addurn">;
+def P_SUBN :    Pulp_ALU_rri<0b00, 0b011, RISCVOpcode<0b1011011>, "p.subn">;
+def P_SUBUN :   Pulp_ALU_rri<0b10, 0b011, RISCVOpcode<0b1011011>, "p.subun">;
+def P_SUBRN :   Pulp_ALU_rri<0b00, 0b111, RISCVOpcode<0b1011011>, "p.subrn">;
+def P_SUBURN :  Pulp_ALU_rri<0b10, 0b111, RISCVOpcode<0b1011011>, "p.suburn">;
+def P_ADDNR :   Pulp_ALU_rr<0b0100000, 0b010, RISCVOpcode<0b1011011>, "p.addnr">;
+def P_ADDUNR :  Pulp_ALU_rr<0b1100000, 0b010, RISCVOpcode<0b1011011>, "p.addunr">;
+def P_ADDRNR :  Pulp_ALU_rr<0b0100000, 0b110, RISCVOpcode<0b1011011>, "p.addrnr">;
+def P_ADDURNR : Pulp_ALU_rr<0b1100000, 0b110, RISCVOpcode<0b1011011>, "p.addurnr">;
+def P_SUBNR :   Pulp_ALU_rr<0b0100000, 0b011, RISCVOpcode<0b1011011>, "p.subnr">;
+def P_SUBUNR :  Pulp_ALU_rr<0b1100000, 0b011, RISCVOpcode<0b1011011>, "p.subunr">;
+def P_SUBRNR :  Pulp_ALU_rr<0b0100000, 0b111, RISCVOpcode<0b1011011>, "p.subrnr">;
+def P_SUBURNR : Pulp_ALU_rr<0b1100000, 0b111, RISCVOpcode<0b1011011>, "p.suburnr">;
+}
+
+
+// MAC Operations
+let Predicates = [HasNonStdExtPulp] in {
+
+def P_MAC :   Pulp_ALU_rr<0b0100001, 0b000, OPC_OP, "p.mac">;
+def P_MSU :   Pulp_ALU_rr<0b0100001, 0b001, OPC_OP, "p.msu">;
+
+def P_MULS :   Pulp_ALU_rr<0b1000000, 0b000, RISCVOpcode<0b1011011>, "p.muls">;
+def P_MULHHS : Pulp_ALU_rr<0b1100000, 0b000, RISCVOpcode<0b1011011>, "p.mulhhs">;
+def P_MULSN :   Pulp_ALU_rri<0b10, 0b000, RISCVOpcode<0b1011011>, "p.mulsn">;
+def P_MULHHSN :   Pulp_ALU_rri<0b11, 0b000, RISCVOpcode<0b1011011>, "p.mulhhsn">;
+def P_MULSRN :   Pulp_ALU_rri<0b10, 0b100, RISCVOpcode<0b1011011>, "p.mulsrn">;
+def P_MULHHSRN :   Pulp_ALU_rri<0b11, 0b100, RISCVOpcode<0b1011011>, "p.mulhhsrn">;
+def P_MULU :   Pulp_ALU_rr<0b0000000, 0b000, RISCVOpcode<0b1011011>, "p.mulu">;
+def P_MULHHU : Pulp_ALU_rr<0b0100000, 0b000, RISCVOpcode<0b1011011>, "p.mulhhu">;
+def P_MULUN :   Pulp_ALU_rri<0b00, 0b000, RISCVOpcode<0b1011011>, "p.mulun">;
+def P_MULHHUN :   Pulp_ALU_rri<0b01, 0b000, RISCVOpcode<0b1011011>, "p.mulhhun">;
+def P_MULURN :   Pulp_ALU_rri<0b00, 0b100, RISCVOpcode<0b1011011>, "p.mulurn">;
+def P_MULHHURN :   Pulp_ALU_rri<0b01, 0b100, RISCVOpcode<0b1011011>, "p.mulhhurn">;
+def P_MACSN :   Pulp_ALU_rri<0b10, 0b001, RISCVOpcode<0b1011011>, "p.macsn">;
+def P_MACHHSN :   Pulp_ALU_rri<0b11, 0b001, RISCVOpcode<0b1011011>, "p.machhsn">;
+def P_MACSRN :   Pulp_ALU_rri<0b10, 0b101, RISCVOpcode<0b1011011>, "p.macsrn">;
+def P_MACHHSRN :   Pulp_ALU_rri<0b11, 0b101, RISCVOpcode<0b1011011>, "p.machhsrn">;
+def P_MACUN :   Pulp_ALU_rri<0b00, 0b001, RISCVOpcode<0b1011011>, "p.macun">;
+def P_MACHHUN :   Pulp_ALU_rri<0b01, 0b001, RISCVOpcode<0b1011011>, "p.machhun">;
+def P_MACURN :   Pulp_ALU_rri<0b00, 0b101, RISCVOpcode<0b1011011>, "p.macurn">;
+def P_MACHHURN :   Pulp_ALU_rri<0b01, 0b101, RISCVOpcode<0b1011011>, "p.machhurn">;
 }

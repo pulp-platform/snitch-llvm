@@ -741,4 +741,16 @@ def PV_PACK_H          : Pulp_ALU_rr <0b1101000,  0b000, RISCVOpcode<0b1010111>,
 def PV_PACKHI_B        : Pulp_ALU_rr <0b1101100,  0b001, RISCVOpcode<0b1010111>,    "pv.packhi.b">;
 def PV_PACKLO_B        : Pulp_ALU_rr <0b1110000,  0b001, RISCVOpcode<0b1010111>,    "pv.packlo.b">;
 
+
+// Vectorial comparison operations
+defm PV_CMPEQ : SC_SCI_H_B<0b00000, 1, 1, "cmpeq">;
+defm PV_CMPNE : SC_SCI_H_B<0b00001, 1, 1, "cmpne">;
+defm PV_CMPGT : SC_SCI_H_B<0b00010, 1, 1, "cmpgt">;
+defm PV_CMPGE : SC_SCI_H_B<0b00011, 1, 1, "cmpge">;
+defm PV_CMPLT : SC_SCI_H_B<0b00100, 1, 1, "cmplt">;
+defm PV_CMPLE : SC_SCI_H_B<0b00101, 1, 1, "cmple">;
+defm PV_CMPGTU : SC_SCI_H_B<0b00110, 1, 0, "cmpgtu">;
+defm PV_CMPGEU : SC_SCI_H_B<0b00111, 1, 0, "cmpgeu">;
+defm PV_CMPLTU : SC_SCI_H_B<0b01000, 1, 0, "cmpltu">;
+defm PV_CMPLEU : SC_SCI_H_B<0b01001, 1, 0, "cmpleu">;
 }

@@ -743,14 +743,61 @@ def PV_PACKLO_B        : Pulp_ALU_rr <0b1110000,  0b001, RISCVOpcode<0b1010111>,
 
 
 // Vectorial comparison operations
-defm PV_CMPEQ : SC_SCI_H_B<0b00000, 1, 1, "cmpeq">;
-defm PV_CMPNE : SC_SCI_H_B<0b00001, 1, 1, "cmpne">;
-defm PV_CMPGT : SC_SCI_H_B<0b00010, 1, 1, "cmpgt">;
-defm PV_CMPGE : SC_SCI_H_B<0b00011, 1, 1, "cmpge">;
-defm PV_CMPLT : SC_SCI_H_B<0b00100, 1, 1, "cmplt">;
-defm PV_CMPLE : SC_SCI_H_B<0b00101, 1, 1, "cmple">;
+defm PV_CMPEQ  : SC_SCI_H_B<0b00000, 1, 1, "cmpeq">;
+defm PV_CMPNE  : SC_SCI_H_B<0b00001, 1, 1, "cmpne">;
+defm PV_CMPGT  : SC_SCI_H_B<0b00010, 1, 1, "cmpgt">;
+defm PV_CMPGE  : SC_SCI_H_B<0b00011, 1, 1, "cmpge">;
+defm PV_CMPLT  : SC_SCI_H_B<0b00100, 1, 1, "cmplt">;
+defm PV_CMPLE  : SC_SCI_H_B<0b00101, 1, 1, "cmple">;
 defm PV_CMPGTU : SC_SCI_H_B<0b00110, 1, 0, "cmpgtu">;
 defm PV_CMPGEU : SC_SCI_H_B<0b00111, 1, 0, "cmpgeu">;
 defm PV_CMPLTU : SC_SCI_H_B<0b01000, 1, 0, "cmpltu">;
 defm PV_CMPLEU : SC_SCI_H_B<0b01001, 1, 0, "cmpleu">;
+
+}
+
+let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
+multiclass Pulp_Load<bits<7> funct7, bits<3> funct3, string opcodestr> {
+
+  def _ri_PostIncrement : RVInstI<funct3, RISCVOpcode<0b0001011>, (outs GPR:$rd),
+                                  (ins GPR:$rs1, simm12:$imm12), opcodestr, "$rd, ${imm12}(${rs1}!)">;
+
+  def _rr_PostIncrement : RVInstR<funct7, 0b111, RISCVOpcode<0b0001011>, (outs GPR:$rd),
+                                  (ins GPR:$rs1, GPR:$rs2), opcodestr, "$rd, ${rs2}(${rs1}!)">;
+
+  def _rr               : RVInstR<funct7, 0b111, RISCVOpcode<0b0000011>, (outs GPR:$rd),
+                                  (ins GPR:$rs1, GPR:$rs2), opcodestr, "$rd, ${rs2}(${rs1})">;
+
+
+}
+
+
+let Predicates = [HasNonStdExtPulp] in {
+  defm P_LB  : Pulp_Load<0b0000000, 0b000, "p.lb">,  Sched<[WriteLDB, ReadMemBase]>;
+  defm P_LBU : Pulp_Load<0b0100000, 0b100, "p.lbu">, Sched<[WriteLDB, ReadMemBase]>;
+  defm P_LH  : Pulp_Load<0b0001000, 0b001, "p.lh">,  Sched<[WriteLDH, ReadMemBase]>;
+  defm P_LHU : Pulp_Load<0b0101000, 0b101, "p.lhu">, Sched<[WriteLDH, ReadMemBase]>;
+  defm P_LW  : Pulp_Load<0b0010000, 0b010, "p.lw">,  Sched<[WriteLDW, ReadMemBase]>;
+}
+
+
+let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
+multiclass Pulp_Save<bits<2> funct2, string opcodestr> {
+
+    def _ri_PostIncrement : RVInstS<{0, funct2}, RISCVOpcode<0b0101011>, (outs), (ins GPR:$rs2, GPR:$rs1, simm12:$imm12),
+                                    opcodestr, "$rs2, ${imm12}(${rs1}!)">;
+
+    def _rr_PostIncrement : RVInstR<0b0000000, {1, funct2}, RISCVOpcode<0b0101011>, (outs),
+                                    (ins GPR:$rs2, GPR:$rd, GPR:$rs1), opcodestr, "$rs2, ${rd}(${rs1}!)">;
+
+    def _rr               : RVInstR<0b0000000, {1, funct2}, RISCVOpcode<0b0100011>, (outs),
+                                    (ins GPR:$rs2, GPR:$rd, GPR:$rs1), opcodestr, "$rs2, ${rd}(${rs1})">;
+
+
+}
+
+let Predicates = [HasNonStdExtPulp] in {
+  defm P_SB : Pulp_Save<0b00, "p.sb">, Sched<[WriteSTB, ReadStoreData, ReadMemBase]>;
+  defm P_SH : Pulp_Save<0b01, "p.sh">, Sched<[WriteSTH, ReadStoreData, ReadMemBase]>;
+  defm P_SW : Pulp_Save<0b10, "p.sw">, Sched<[WriteSTW, ReadStoreData, ReadMemBase]>;
 }

@@ -626,6 +626,35 @@ def P_SUBUNR :  Pulp_ALU_rr<0b1100000, 0b011, RISCVOpcode<0b1011011>, "p.subunr"
 def P_SUBRNR :  Pulp_ALU_rr<0b0100000, 0b111, RISCVOpcode<0b1011011>, "p.subrnr">;
 def P_SUBURNR : Pulp_ALU_rr<0b1100000, 0b111, RISCVOpcode<0b1011011>, "p.suburnr">;
 }
+
+
+def simm5 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isInt<5>(Imm);}]> {
+  let ParserMatchClass = SImmAsmOperand<5>;
+  let EncoderMethod = "getImmOpValue";
+  let DecoderMethod = "decodeSImmOperand<5>";
+  let MCOperandPredicate = [{
+    int64_t Imm;
+    if (MCOp.evaluateAsConstantImm(Imm))
+      return isInt<5>(Imm);
+    return MCOp.isBareSymbolRef();
+  }];
+}
+
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+class Pulp_Immediate_Branch<bits<3> funct3, string opcodestr>
+      : RVInstB<funct3, OPC_BRANCH, (outs), (ins GPR:$rs1, simm5:$imm5, simm13_lsb0:$imm12),
+                opcodestr, "$rs1, $imm5, $imm12">,
+        Sched<[WriteJmp, ReadJmp, ReadJmp]> {
+  bits<5> imm5;
+  let Inst{24-20} = imm5;
+
+  let isBranch = 1;
+  let isTerminator = 1;
+}
+
+def P_BEQIMM : Pulp_Immediate_Branch<0b010, "p.beqimm">;
+def P_BNEIMM : Pulp_Immediate_Branch<0b011, "p.bneimm">;
+
 // MAC Operations
 let Predicates = [HasNonStdExtPulp] in {
 

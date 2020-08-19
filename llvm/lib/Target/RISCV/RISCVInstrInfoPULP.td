@@ -830,3 +830,105 @@ let Predicates = [HasNonStdExtPulp] in {
   defm P_SH : Pulp_Save<0b01, "p.sh">, Sched<[WriteSTH, ReadStoreData, ReadMemBase]>;
   defm P_SW : Pulp_Save<0b10, "p.sw">, Sched<[WriteSTW, ReadStoreData, ReadMemBase]>;
 }
+
+def uimm1 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<1>(Imm);}]> {
+  let ParserMatchClass = UImmAsmOperand<1>;
+  let EncoderMethod = "getImmOpValue";
+  let DecoderMethod = "decodeUImmOperand<1>";
+  let MCOperandPredicate = [{
+    int64_t Imm;
+    if (MCOp.evaluateAsConstantImm(Imm))
+      return isUInt<1>(Imm);
+    return MCOp.isBareSymbolRef();
+  }];
+}
+
+def uimm12 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<12>(Imm);}]> {
+  let ParserMatchClass = UImmAsmOperand<12>;
+  let EncoderMethod = "getImmOpValue";
+  let DecoderMethod = "decodeUImmOperand<12>";
+  let MCOperandPredicate = [{
+    int64_t Imm;
+    if (MCOp.evaluateAsConstantImm(Imm))
+      return isUInt<12>(Imm);
+    return MCOp.isBareSymbolRef();
+  }];
+}
+
+def uimm13_lsb0 : Operand<OtherVT>,
+                  ImmLeaf<XLenVT, [{return isShiftedUInt<12, 1>(Imm);}]>  {
+  let ParserMatchClass = UImmAsmOperand<13, "Lsb0">;
+  let EncoderMethod = "getImmOpValueAsr1";
+  let DecoderMethod = "decodeUImmOperand<13>";
+  let MCOperandPredicate = [{
+    int64_t Imm;
+    if (MCOp.evaluateAsConstantImm(Imm))
+      return isShiftedInt<12, 1>(Imm);
+    return MCOp.isBareSymbolRef();
+  }];
+}
+
+let Predicates = [HasNonStdExtPulp],
+    hasSideEffects = 1, mayLoad = 0, mayStore = 0 in {
+  def LP_STARTI : RVInstI<0b000, RISCVOpcode<0b1111011>, (outs),
+                          (ins uimm1:$L, uimm13_lsb0:$imm12),
+                          "lp.starti", "$L, $imm12">, Sched<[WriteCSR]> {
+    bit L;
+
+    let rs1 = 0;
+    let rd{4-1} = 0;
+    let rd{0} = L;
+  }
+
+  def LP_ENDI : RVInstI<0b001, RISCVOpcode<0b1111011>, (outs),
+                        (ins uimm1:$L, uimm13_lsb0:$imm12),
+                        "lp.endi", "$L, $imm12">, Sched<[WriteCSR]> {
+    bit L;
+
+    let rs1 = 0;
+    let rd{4-1} = 0;
+    let rd{0} = L;
+  }
+
+  def LP_COUNT : RVInstI<0b010, RISCVOpcode<0b1111011>, (outs),
+                         (ins uimm1:$L, GPR:$rs1), "lp.count", "$L, $rs1">,
+                         Sched<[WriteCSR]> {
+    bit L;
+
+    let imm12 = 0;
+    let rd{4-1} = 0;
+    let rd{0} = L;
+  }
+
+  def LP_COUNTI : RVInstI<0b011, RISCVOpcode<0b1111011>, (outs),
+                          (ins uimm1:$L, uimm12:$imm12),
+                          "lp.counti", "$L, $imm12">, Sched<[WriteCSR]> {
+    bit L;
+
+    let rs1 = 0;
+    let rd{4-1} = 0;
+    let rd{0} = L;
+  }
+
+  def LP_SETUP : RVInstI<0b100, RISCVOpcode<0b1111011>, (outs),
+                         (ins uimm1:$L, GPR:$rs1, uimm13_lsb0:$imm12),
+                         "lp.setup", "$L, $rs1, $imm12">,
+                         Sched<[WriteCSR, WriteCSR, WriteCSR]> {
+    bit L;
+
+    let rd{4-1} = 0;
+    let rd{0} = L;
+  }
+
+  def LP_SETUPI : RVInstI<0b101, RISCVOpcode<0b1111011>, (outs),
+                          (ins uimm1:$L, uimm5:$imm5, uimm13_lsb0:$imm12),
+                          "lp.setupi", "$L, $imm5, $imm12">,
+                          Sched<[WriteCSR, WriteCSR, WriteCSR]> {
+    bit L;
+    bits<5> imm5;
+
+    let rs1 = imm5;
+    let rd{4-1} = 0;
+    let rd{0} = L;
+  }
+}

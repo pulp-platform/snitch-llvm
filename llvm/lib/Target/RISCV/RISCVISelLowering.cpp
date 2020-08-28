@@ -351,6 +351,20 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::DEBUGTRAP, MVT::Other, Legal);
   setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
 
+  if (Subtarget.hasNonStdExtPulp()) {
+    setOperationAction(ISD::ABS, XLenVT, Legal);
+    setOperationAction(ISD::SMIN, XLenVT, Legal);
+    setOperationAction(ISD::UMIN, XLenVT, Legal);
+    setOperationAction(ISD::SMAX, XLenVT, Legal);
+    setOperationAction(ISD::UMAX, XLenVT, Legal);
+    setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i8, Legal);
+    setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i16, Legal);
+    setOperationAction(ISD::CTLZ, XLenVT, Legal);
+    setOperationAction(ISD::CTTZ, XLenVT, Legal);
+    setOperationAction(ISD::CTPOP, XLenVT, Legal);
+    setOperationAction(ISD::ROTR, XLenVT, Legal);
+  }
+
   if (Subtarget.hasStdExtA()) {
     setMaxAtomicSizeInBitsSupported(Subtarget.getXLen());
     setMinCmpXchgSizeInBits(32);

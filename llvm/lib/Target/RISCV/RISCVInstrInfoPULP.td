@@ -827,16 +827,21 @@ defm PV_CMPLEU : SC_SCI_H_B<0b01001, 1, 0, "cmpleu">;
 let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
 multiclass Pulp_Load<bits<7> funct7, bits<3> funct3, string opcodestr> {
 
-  def _ri_PostIncrement : RVInstI<funct3, RISCVOpcode<0b0001011>, (outs GPR:$rd),
-                                  (ins GPR:$rs1, simm12:$imm12), opcodestr, "$rd, ${imm12}(${rs1}!)">;
+  def _ri_PostIncrement
+      : RVInstI<funct3, RISCVOpcode<0b0001011>, (outs GPR:$rd, GPR:$rs1_wb),
+                (ins GPR:$rs1, simm12:$imm12), opcodestr, "$rd, ${imm12}(${rs1}!)">{
+    let Constraints = "$rs1 = $rs1_wb";
+  }
 
-  def _rr_PostIncrement : RVInstR<funct7, 0b111, RISCVOpcode<0b0001011>, (outs GPR:$rd),
-                                  (ins GPR:$rs1, GPR:$rs2), opcodestr, "$rd, ${rs2}(${rs1}!)">;
+  def _rr_PostIncrement
+      : RVInstR<funct7, 0b111, RISCVOpcode<0b0001011>, (outs GPR:$rd, GPR:$rs1_wb),
+                (ins GPR:$rs1, GPR:$rs2), opcodestr, "$rd, ${rs2}(${rs1}!)">{
+    let Constraints = "$rs1 = $rs1_wb";
+  }
 
-  def _rr               : RVInstR<funct7, 0b111, RISCVOpcode<0b0000011>, (outs GPR:$rd),
-                                  (ins GPR:$rs1, GPR:$rs2), opcodestr, "$rd, ${rs2}(${rs1})">;
-
-
+  def _rr
+      : RVInstR<funct7, 0b111, RISCVOpcode<0b0000011>, (outs GPR:$rd),
+                (ins GPR:$rs1, GPR:$rs2), opcodestr, "$rd, ${rs2}(${rs1})">;
 }
 
 
@@ -852,16 +857,21 @@ let Predicates = [HasNonStdExtPulp] in {
 let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
 multiclass Pulp_Save<bits<2> funct2, string opcodestr> {
 
-    def _ri_PostIncrement : RVInstS<{0, funct2}, RISCVOpcode<0b0101011>, (outs), (ins GPR:$rs2, GPR:$rs1, simm12:$imm12),
-                                    opcodestr, "$rs2, ${imm12}(${rs1}!)">;
+  def _ri_PostIncrement
+      : RVInstS<{0, funct2}, RISCVOpcode<0b0101011>, (outs GPR:$rs1_wb),
+                (ins GPR:$rs2, GPR:$rs1, simm12:$imm12), opcodestr, "$rs2, ${imm12}(${rs1}!)">{
+    let Constraints = "$rs1 = $rs1_wb";
+  }
 
-    def _rr_PostIncrement : RVInstR<0b0000000, {1, funct2}, RISCVOpcode<0b0101011>, (outs),
-                                    (ins GPR:$rs2, GPR:$rd, GPR:$rs1), opcodestr, "$rs2, ${rd}(${rs1}!)">;
+  def _rr_PostIncrement
+      : RVInstR<0b0000000, {1, funct2}, RISCVOpcode<0b0101011>, (outs GPR:$rs1_wb),
+                (ins GPR:$rs2, GPR:$rd, GPR:$rs1), opcodestr, "$rs2, ${rd}(${rs1}!)">{
+    let Constraints = "$rs1 = $rs1_wb";
+  }
 
-    def _rr               : RVInstR<0b0000000, {1, funct2}, RISCVOpcode<0b0100011>, (outs),
-                                    (ins GPR:$rs2, GPR:$rd, GPR:$rs1), opcodestr, "$rs2, ${rd}(${rs1})">;
-
-
+  def _rr
+      : RVInstR<0b0000000, {1, funct2}, RISCVOpcode<0b0100011>, (outs),
+                (ins GPR:$rs2, GPR:$rd, GPR:$rs1), opcodestr, "$rs2, ${rd}(${rs1})">;
 }
 
 let Predicates = [HasNonStdExtPulp] in {
@@ -974,18 +984,24 @@ let Predicates = [HasNonStdExtPulp],
 
 // Pattern Fragments
 
-def powerOf2Minus1   : ImmLeaf<XLenVT, [{ return isPowerOf2_32(Imm+1); }]>;
-def negativePowerOf2 : ImmLeaf<XLenVT, [{ return isPowerOf2_32(-Imm); }]>;
-def mask : ImmLeaf<XLenVT, [{ return isMask_32(Imm); }]>;
-def shiftedMask : ImmLeaf<XLenVT, [{ return isShiftedMask_32(Imm); }]>;
-def shiftedZeroMask : ImmLeaf<XLenVT, [{ return isShiftedMask_32(~Imm); }]>;
+def powerOf2Minus1      : ImmLeaf<XLenVT, [{ return isPowerOf2_32(Imm+1);   }]>;
+def negativePowerOf2    : ImmLeaf<XLenVT, [{ return isPowerOf2_32(-Imm);    }]>;
+def powerOf2            : ImmLeaf<XLenVT, [{ return isPowerOf2_32(Imm);     }]>;
+def mask                : ImmLeaf<XLenVT, [{ return isMask_32(Imm);         }]>;
+def flippedMask         : ImmLeaf<XLenVT, [{ return isMask_32(~Imm);        }]>;
+def shiftedMask         : ImmLeaf<XLenVT, [{ return isShiftedMask_32(Imm);  }]>;
+def shiftedFlippedMask  : ImmLeaf<XLenVT, [{ return isShiftedMask_32(~Imm); }]>;
 
 
-def between : PatFrags<(ops node:$lowerBound, node:$upperBound, node:$value),
-                       [(smin (smax node:$value, node:$lowerBound),
-                              node:$upperBound),
-                        (smax (smin node:$value, node:$upperBound),
-                              node:$lowerBound)]>;
+def between
+    : PatFrags<(ops node:$lowerBound, node:$upperBound, node:$value),
+               [(smin (smax node:$value, node:$lowerBound), node:$upperBound),
+                (smax (smin node:$value, node:$upperBound), node:$lowerBound)]>;
+
+def betweenu
+    : PatFrags<(ops node:$upperBound, node:$value),
+               [(umin (umax node:$value, 0), node:$upperBound),
+                (umax (umin node:$value, node:$upperBound), 0)]>;
 
 
 def clip : PatFrag<(ops node:$lowerBound, node:$upperBound, node:$value),
@@ -997,47 +1013,66 @@ def clip : PatFrag<(ops node:$lowerBound, node:$upperBound, node:$value),
   return (bound1 == ~bound2);
 }]>;
 
-def shiftRound : PatFrag<(ops node:$in, node:$roundBit, node:$shiftAmount),
-                         (sra (add node:$in, node:$roundBit),
+def shiftRound : PatFrag<(ops node:$value, node:$shiftAmount),
+                         (sra (add node:$value, powerOf2),
                               node:$shiftAmount), [{
-  return (N->getOperand(0)->getConstantOperandVal(1))
-         == (1 << (N->getConstantOperandVal(1) - 1));
+  return (N->getOperand(0)->getConstantOperandVal(1) << 1)
+         == (1 << N->getConstantOperandVal(1));
 }]>;
 
-def ushiftRound : PatFrag<(ops node:$in, node:$roundBit, node:$shiftAmount),
-                          (srl (add node:$in, node:$roundBit),
+def ushiftRound : PatFrag<(ops node:$value, node:$shiftAmount),
+                          (srl (add node:$value, powerOf2),
                                node:$shiftAmount), [{
-  return (N->getOperand(0)->getConstantOperandVal(1))
-         == (1 << (N->getConstantOperandVal(1) - 1));
+  return (N->getOperand(0)->getConstantOperandVal(1) << 1)
+         == (1 << N->getConstantOperandVal(1));
 }]>;
+
+def roundBit : PatFrag<(ops node:$shiftAmount),
+                       (srl (shl 1, node:$shiftAmount), (i32 1))>;
 
 def extract : PatFrag<(ops node:$value, node:$leftShift, node:$rightShift),
-                         (sra (shl node:$value, node:$leftShift),
-                              node:$rightShift), [{
+                      (sra (shl node:$value, node:$leftShift),
+                           node:$rightShift), [{
   return N->getOperand(0)->getConstantOperandVal(1)
          <= N->getConstantOperandVal(1);
 }]>;
 
 def insert : PatFrag<(ops node:$dest, node:$value, node:$mask, node:$shift),
-                     (or (and node:$dest, imm),
+                     (or (and node:$dest, shiftedFlippedMask),
                          (and (shl node:$value, node:$shift), node:$mask)), [{
-  uint32_t destMask = (uint32_t) N->getOperand(0)->getConstantOperandVal(1),
-           mask = (uint32_t) N->getOperand(1)->getConstantOperandVal(1),
-           shift = (uint32_t) N->getOperand(1)->getOperand(0)->getConstantOperandVal(1);
+  SDValue maskedDest = N->getOperand(0);
+  SDValue maskedVal = N->getOperand(1);
+
+  if(maskedDest->getOperand(0)->getOpcode() == ISD::SHL){
+    maskedDest = N->getOperand(1);
+    maskedVal = N->getOperand(0);
+  }
+
+  uint32_t destMask = (uint32_t) maskedDest->getConstantOperandVal(1),
+           mask     = (uint32_t) maskedVal->getConstantOperandVal(1),
+           shift    = (uint32_t) maskedVal->getOperand(0)->getConstantOperandVal(1);
   return (mask == ~destMask) && (countTrailingZeros(mask) == shift);
 }]>;
 
-def maskWidthFromReg : PatFrag<(ops node:$rs2), (and (srl node:$rs2, 5), 31)>;
-
-def maskFromReg : PatFrag<(ops node:$rs2),
-                      (shl (add (shl 2, (maskWidthFromReg node:$rs2)), -1),
-                           (and node:$rs2, 31))>;
-
-def zeroMaskFromReg : PatFrag<(ops node:$rs2), (not (maskFromReg node:$rs2))>;
-
 def maskFromRegs : PatFrag<(ops node:$widthMinus1, node:$shift),
-                           (shl (add (shl 2, (and node:$shift, 31)), -1),
-                                (and node:$widthMinus1, 31))>;
+                           (shl (add (shl 2, node:$widthMinus1), -1),
+                                node:$shift)>;
+
+def shiftedFlippedMask_shiftImmediate : PatFrag<(ops node:$widthMinus1, node:$mask),
+                                  (or (shl flippedMask, node:$widthMinus1),
+                                           node:$mask), [{
+  uint32_t flippedMask = (uint32_t) N->getOperand(0)->getConstantOperandVal(0);
+  uint32_t mask = (uint32_t) N->getConstantOperandVal(1);
+  return countTrailingZeros(flippedMask) == (countTrailingOnes(mask) + 1);
+}]>;
+
+def shiftedMask_shiftImmediate : PatFrag<(ops node:$widthMinus1, node:$flippedMask),
+                                         (add (shl imm, node:$widthMinus1),
+                                              node:$flippedMask), [{
+  uint32_t shiftedBit = (uint32_t) N->getOperand(0)->getConstantOperandVal(0);
+  uint32_t flippedMask = (uint32_t) N->getConstantOperandVal(1);
+  return (2 << countTrailingZeros(flippedMask)) == shiftedBit;
+}]>;
 
 // SDNode transform functions
 
@@ -1066,7 +1101,7 @@ def trailing1s : SDNodeXForm<imm, [{
                           SDLoc(N), N->getValueType(0));
 }]>;
 
-def zeroMaskWidthMinus1 : SDNodeXForm<imm, [{
+def flippedMaskWidthMinus1 : SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant(31
                           - countLeadingOnes<uint32_t>(N->getSExtValue())
                           - countTrailingOnes<uint32_t>(N->getSExtValue()),
@@ -1087,56 +1122,136 @@ def maskWidthMinus1 : SDNodeXForm<imm, [{
 }]>;
 
 
+
+
 // Patterns for bit manipulation operations
 
+// extract
+// widthMinus1 and shift immediates
 def : Pat<(extract:$extract GPR:$rs1, uimm5, uimm5:$shiftRight),
           (P_EXTRACT GPR:$rs1, (31minus imm:$shiftRight), (extractOffset $extract))>;
+
+// shift = 0
+def : Pat<(sra (shl GPR:$rs1, (sub 31, GPR:$widthMinus1)),
+               (sub 31, GPR:$widthMinus1)),
+          (P_EXTRACTR GPR:$rs1, (SLLI GPR:$widthMinus1, 5))>;
+
+// shift immediate
+def : Pat<(sra (shl GPR:$rs1, (sub uimm5:$_31MinusShift, GPR:$widthMinus1)),
+               (sub 31, GPR:$widthMinus1)),
+          (P_EXTRACTR GPR:$rs1, (P_INSERT (ADDI X0, (31minus uimm5:$_31MinusShift)), GPR:$widthMinus1, 4, 5))>;
+
+// widthMinus1 immediate
+def : Pat<(sra (shl GPR:$rs1, (sub uimm5:$_32MinusWidth, GPR:$shift)),
+               uimm5:$_32MinusWidth),
+          (P_EXTRACTR GPR:$rs1, (P_INSERT GPR:$shift, (ADDI X0, (31minus uimm5:$_32MinusWidth)), 4, 5))>;
+
+// widthMinus1 = 0
+def : Pat<(sra (shl GPR:$rs1, (sub 31, GPR:$shift)), (i32 31)),
+          (P_EXTRACTR GPR:$rs1, (ANDI GPR:$shift, 31))>;
+
+// no immediates
+def : Pat<(sra (shl GPR:$rs1, (sub (sub 31, GPR:$widthMinus1), GPR:$shift)),
+               (sub 31, GPR:$widthMinus1)),
+          (P_EXTRACTR GPR:$rs1, (P_INSERT GPR:$shift, GPR:$widthMinus1, 4, 5))>;
+
+// extractu
+// widthMinus1 and shift immediates
 def : Pat<(and (srl GPR:$rs1, uimm5:$shift), mask:$mask),
           (P_EXTRACTU GPR:$rs1, (maskWidthMinus1 mask:$mask), uimm5:$shift)>;
+
+// shift = 0
+def : Pat<(and GPR:$rs1, (add (shl 2, GPR:$widthMinus1), -1)),
+          (P_EXTRACTUR GPR:$rs1, (SLLI GPR:$widthMinus1, 5))>;
+
+// no immediates
+def : Pat<(and (srl GPR:$rs1, GPR:$shift), (add (shl 2, GPR:$widthMinus1), -1)),
+          (P_EXTRACTUR GPR:$rs1, (P_INSERT GPR:$shift, GPR:$widthMinus1, 4, 5))>;
+
+// insert
+// widthMinus1 and shift immediates
 def : Pat<(insert GPR:$rd, GPR:$rs1, shiftedMask:$mask, uimm5:$shift),
           (P_INSERT GPR:$rd, GPR:$rs1, (maskWidthMinus1 imm:$mask), uimm5:$shift)>;
-def : Pat<(and GPR:$rs1, shiftedZeroMask:$mask),
-          (P_BCLR GPR:$rs1, (zeroMaskWidthMinus1 imm:$mask), (trailing1s imm:$mask))>;
+
+// widthMinus1 immediate
+def : Pat<(or (and GPR:$rd, (not (shl mask:$mask, GPR:$shift))),
+              (shl (and GPR:$rs1, mask:$mask), GPR:$shift)),
+          (P_INSERTR GPR:$rd, GPR:$rs1,
+                     (P_INSERT GPR:$shift,
+                               (ADDI X0, (maskWidthMinus1 mask:$mask)), 4, 5))>;
+
+// widthMinus1 = 0
+def : Pat<(or (and GPR:$rd, (not (shl 1, GPR:$shift))),
+              (shl (and GPR:$rs1, 1), GPR:$shift)),
+          (P_INSERTR GPR:$rd, GPR:$rs1, (ANDI GPR:$shift, 31))>;
+
+// shift = 0
+def : Pat<(or (and GPR:$rs1, (add (shl 2, GPR:$widthMinus1), -1)),
+              (and GPR:$rd, (sub 0, (shl 2, GPR:$widthMinus1)))),
+          (P_INSERTR GPR:$rd, GPR:$rs1, (SLLI GPR:$widthMinus1, 5))>;
+
+// no immediates
+def : Pat<(or (and GPR:$dest, (not (maskFromRegs GPR:$widthMinus1, GPR:$shift))),
+              (shl (and (add (shl 2, GPR:$widthMinus1), -1), GPR:$rs1), GPR:$shift)),
+          (P_INSERTR GPR:$dest, GPR:$rs1, (P_INSERT GPR:$shift, GPR:$widthMinus1, 4, 5))>;
+
+// bclr
+// widthMinus1 and shift immediates
+def : Pat<(and GPR:$rs1, shiftedFlippedMask:$mask),
+          (P_BCLR GPR:$rs1, (flippedMaskWidthMinus1 imm:$mask), (trailing1s imm:$mask))>;
+
+// widthMinus1 immediate
+def : Pat<(and GPR:$rs1, (not (shl mask:$mask, GPR:$shift))),
+          (P_BCLRR GPR:$rs1, (P_INSERT GPR:$shift, (ADDI X0, (maskWidthMinus1 mask:$mask)), 4, 5))>;
+
+// widthMinus1 = 0
+def : Pat<(and GPR:$rs1, (not (shl 1, GPR:$shift))),
+          (P_BCLRR GPR:$rs1, (ANDI GPR:$shift, 31))>;
+
+// shift immediate
+def : Pat<(and GPR:$rs1, (shiftedFlippedMask_shiftImmediate GPR:$widthMinus1, mask:$mask)),
+          (P_BCLRR GPR:$rs1, (P_INSERT (ADDI X0, (trailing1s mask:$mask)),
+                                       GPR:$widthMinus1, 4, 5))>;
+
+// shift = 0
+def : Pat<(and GPR:$rs1, (shl -2, GPR:$widthMinus1)),
+          (P_BCLRR GPR:$rs1, (SLLI GPR:$widthMinus1, 5))>;
+
+// no immediates
+def : Pat<(and (not (maskFromRegs GPR:$widthMinus1, GPR:$shift)), GPR:$rs1),
+          (P_BCLRR GPR:$rs1, (P_INSERT GPR:$shift, GPR:$widthMinus1, 4, 5))>;
+
+// bset
+// widthMinus1 and shift immediates
 def : Pat<(or GPR:$rs1, shiftedMask:$mask),
           (P_BSET GPR:$rs1, (maskWidthMinus1 imm:$mask), (trailing0s imm:$mask))>;
 
-def : Pat<(sra (shl GPR:$rs1, (sub (and (not GPR:$shift), 31),
-                                   (and GPR:$widthMinus1, 31))),
-               (xor (and GPR:$widthMinus1, 31), 31)),
-          (P_EXTRACTR GPR:$rs1, (P_INSERT GPR:$shift, GPR:$widthMinus1, 4, 5))>;
-def : Pat<(and (sra GPR:$rs1, (and GPR:$shift, 31)),
-               (add (shl 2, (and GPR:$widthMinus1, 31)), -1)),
-          (P_EXTRACTUR GPR:$rs1, (P_INSERT GPR:$shift, GPR:$widthMinus1, 4, 5))>;
-def : Pat<(or (and GPR:$dest, (not (maskFromRegs GPR:$widthMinus1, GPR:$shift))),
-              (and (maskFromRegs GPR:$widthMinus1, GPR:$shift), (shl GPR:$shift, (and GPR:$rs1, 31)))),
-          (P_INSERTR GPR:$dest, GPR:$rs1, (P_INSERT GPR:$shift, GPR:$widthMinus1, 4, 5))>;
-def : Pat<(and (not (maskFromRegs GPR:$widthMinus1, GPR:$shift)), GPR:$rs1),
-          (P_BCLRR GPR:$rs1, (P_INSERT GPR:$shift, GPR:$widthMinus1, 4, 5))>;
+// widthMinus1 immediate
+def : Pat<(or GPR:$rs1, (shl mask:$mask, GPR:$shift)),
+          (P_BSETR GPR:$rs1, (P_INSERT GPR:$shift, (ADDI X0, (maskWidthMinus1 mask:$mask)), 4, 5))>;
+
+// widthMinus1 = 0
+def : Pat<(or GPR:$rs1, (shl 1, GPR:$shift)),
+          (P_BSETR GPR:$rs1, (ANDI GPR:$shift, 31))>;
+
+// shift immediate
+def : Pat<(or GPR:$rs1, (shiftedMask_shiftImmediate GPR:$widthMinus1, flippedMask:$flippedMask)),
+          (P_BSETR GPR:$rs1, (P_INSERT (ADDI X0, (trailing0s flippedMask:$flippedMask)),
+                                       GPR:$widthMinus1, 4, 5))>;
+
+// shift = 0
+def : Pat<(or GPR:$rs1, (add (shl 2, GPR:$widthMinus1), -1)),
+          (P_BSETR GPR:$rs1, (SLLI GPR:$widthMinus1, 5))>;
+
+// no immediates
 def : Pat<(or (maskFromRegs GPR:$widthMinus1, GPR:$shift), GPR:$rs1),
           (P_BSETR GPR:$rs1, (P_INSERT GPR:$shift, GPR:$widthMinus1, 4, 5))>;
 
 
-// TODO do we really need these?
-/*
-def : Pat<(sra (shl GPR:$rs1, (sub (and (not GPR:$rs2), 31), (maskWidthFromReg GPR:$rs2))),
-               (xor (maskWidthFromReg GPR:$rs2), 31)),
-          (P_EXTRACTR GPR:$rs1, GPR:$rs2)>;
-def : Pat<(and (srl GPR:$rs1, (and GPR:$rs2, 31)),
-               (add (shl 2, (maskWidthFromReg GPR:$rs2)), -1)),
-          (P_EXTRACTUR GPR:$rs1, GPR:$rs2)>;
-def : Pat<(or (and GPR:$rd, (zeroMaskFromReg GPR:$rs2)),
-              (and (shl GPR:$rs1, (and GPR:$rs2, 31)), (maskFromReg GPR:$rs2))),
-          (P_INSERTR GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(and GPR:$rs1, (zeroMaskFromReg GPR:$rs2)),
-          (P_BCLRR GPR:$rs1, GPR:$rs2)>;
-def : Pat<(or GPR:$rs1, (maskFromReg GPR:$rs2)),
-          (P_BSETR GPR:$rs1, GPR:$rs2)>;
-*/
-
 def : Pat<(cttz GPR:$rs1), (P_FF1 GPR:$rs1)>;
-def : Pat<(ctlz GPR:$rs1), (SUB (ADDI X0, 31), (P_FL1 GPR:$rs1))>;
-def : Pat<(sub 31, (ctlz GPR:$rs1)), (P_FL1 GPR:$rs1)>;
-def : Pat<(ctlz (xor GPR:$rs1, (sub 0, (setlt GPR:$rs1, 1)))), (P_CLB GPR:$rs1)>;
+def : Pat<(ctlz_zero_undef GPR:$rs1), (XORI (P_FL1 GPR:$rs1), 31)>;
+def : Pat<(xor (ctlz_zero_undef GPR:$rs1), 31), (P_FL1 GPR:$rs1)>;
+def : Pat<(ctlz_zero_undef (xor GPR:$rs1, (sra GPR:$rs1, (i32 31)))), (P_CLB GPR:$rs1)>;
 def : Pat<(ctpop GPR:$rs1), (P_CNT GPR:$rs1)>;
 def : PatGprGpr<rotr, P_ROR>;
 
@@ -1159,25 +1274,43 @@ def : Pat<(clip negativePowerOf2, powerOf2Minus1:$upperBound, GPR:$rs1),
           (P_CLIP GPR:$rs1, (trailing1sPlus1 imm:$upperBound))>;
 def : Pat<(between (not GPR:$rs2), GPR:$rs2, GPR:$rs1),
           (P_CLIPR GPR:$rs1, GPR:$rs2)>;
-def : Pat<(between 0, powerOf2Minus1:$upperBound, GPR:$rs1),
+def : Pat<(betweenu powerOf2Minus1:$upperBound, GPR:$rs1),
           (P_CLIPU GPR:$rs1, (trailing1sPlus1 imm:$upperBound))>;
-def : Pat<(between 0, GPR:$rs2, GPR:$rs1),
+def : Pat<(betweenu GPR:$rs2, GPR:$rs1),
           (P_CLIPUR GPR:$rs1, GPR:$rs2)>;
 
-def : Pat<(sra         (add GPR:$rs1, GPR:$rs2),      uimm5:$Is3), (P_ADDN    GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(srl         (add GPR:$rs1, GPR:$rs2),      uimm5:$Is3), (P_ADDUN   GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(shiftRound  (add GPR:$rs1, GPR:$rs2), imm, uimm5:$Is3), (P_ADDRN   GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(ushiftRound (add GPR:$rs1, GPR:$rs2), imm, uimm5:$Is3), (P_ADDURN  GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(sra         (sub GPR:$rs1, GPR:$rs2),      uimm5:$Is3), (P_SUBN    GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(srl         (sub GPR:$rs1, GPR:$rs2),      uimm5:$Is3), (P_SUBUN   GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(shiftRound  (sub GPR:$rs1, GPR:$rs2), imm, uimm5:$Is3), (P_SUBRN   GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(ushiftRound (sub GPR:$rs1, GPR:$rs2), imm, uimm5:$Is3), (P_SUBURN  GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(sra (add GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_ADDN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(srl (add GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_ADDUN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(shiftRound (add GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_ADDRN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(ushiftRound (add GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_ADDURN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
 
-def : Pat<(sra      (add GPR:$rd, GPR:$rs1),                                         (and GPR:$rs2, 31)), (P_ADDNR   GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(srl      (add GPR:$rd, GPR:$rs1),                                         (and GPR:$rs2, 31)), (P_ADDUNR  GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(sra (add (add GPR:$rd, GPR:$rs1), (shl 1, (add (and GPR:$rs2, 31), -1))), (and GPR:$rs2, 31)), (P_ADDRNR  GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(srl (add (add GPR:$rd, GPR:$rs1), (shl 1, (add (and GPR:$rs2, 31), -1))), (and GPR:$rs2, 31)), (P_ADDURNR GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(sra      (sub GPR:$rd, GPR:$rs1),                                         (and GPR:$rs2, 31)), (P_SUBNR   GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(srl      (sub GPR:$rd, GPR:$rs1),                                         (and GPR:$rs2, 31)), (P_SUBUNR  GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(sra (add (sub GPR:$rd, GPR:$rs1), (shl 1, (add (and GPR:$rs2, 31), -1))), (and GPR:$rs2, 31)), (P_SUBRNR  GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(srl (add (sub GPR:$rd, GPR:$rs1), (shl 1, (add (and GPR:$rs2, 31), -1))), (and GPR:$rs2, 31)), (P_SUBURNR GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(sra (sub GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_SUBN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(srl (sub GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_SUBUN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(shiftRound (sub GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_SUBRN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(ushiftRound (sub GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_SUBURN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+
+def : Pat<(sra (add GPR:$rd, GPR:$rs1), GPR:$rs2),
+          (P_ADDNR GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(srl (add GPR:$rd, GPR:$rs1), GPR:$rs2),
+          (P_ADDUNR GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(sra (add (add GPR:$rd, GPR:$rs1), (roundBit GPR:$rs2)), GPR:$rs2),
+          (P_ADDRNR  GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(srl (add (add GPR:$rd, GPR:$rs1), (roundBit GPR:$rs2)), GPR:$rs2),
+          (P_ADDURNR GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+
+def : Pat<(sra (sub GPR:$rd, GPR:$rs1), GPR:$rs2),
+          (P_SUBNR GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(srl (sub GPR:$rd, GPR:$rs1), GPR:$rs2),
+          (P_SUBUNR GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(sra (add (sub GPR:$rd, GPR:$rs1), (roundBit GPR:$rs2)), GPR:$rs2),
+          (P_SUBRNR  GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(srl (add (sub GPR:$rd, GPR:$rs1), (roundBit GPR:$rs2)), GPR:$rs2),
+          (P_SUBURNR GPR:$rd, GPR:$rs1, GPR:$rs2)>;

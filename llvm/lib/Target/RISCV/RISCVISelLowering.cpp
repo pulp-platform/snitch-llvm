@@ -359,7 +359,7 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::UMAX, XLenVT, Legal);
     setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i8, Legal);
     setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i16, Legal);
-    setOperationAction(ISD::CTLZ, XLenVT, Legal);
+    setOperationAction(ISD::CTLZ_ZERO_UNDEF, XLenVT, Legal);
     setOperationAction(ISD::CTTZ, XLenVT, Legal);
     setOperationAction(ISD::CTPOP, XLenVT, Legal);
     setOperationAction(ISD::ROTR, XLenVT, Legal);

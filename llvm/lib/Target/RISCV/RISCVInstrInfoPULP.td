@@ -753,6 +753,26 @@ class Pulp_ALU_sci<bits<5> funct5, bit F, bits<3> funct3, RISCVOpcode opcode,
   let Opcode = opcode.Value;
 }
 
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+class Pulp_ALU_sci_wb<bits<5> funct5, bit F, bits<3> funct3, RISCVOpcode opcode,
+                   bit signedImm, string opcodestr>
+    : RVInst<(outs GPR:$rd_wb), (ins GPR:$rd, GPR:$rs1, !if(signedImm, simm6, uimm6):$Imm6), opcodestr, "$rd, $rs1, $Imm6", [], InstFormatR>,
+      Sched<[WriteIALU, ReadIALU]>  {
+  bits<6> Imm6;
+  bits<5> rs1;
+  bits<5> rd;
+
+  let Constraints = "$rd = $rd_wb";
+  let Inst{31-27} = funct5;
+  let Inst{26} = F;
+  let Inst{25} = Imm6{0};
+  let Inst{24-20} = Imm6{5-1};
+  let Inst{19-15} = rs1;
+  let Inst{14-12} = funct3;
+  let Inst{11-7} = rd;
+  let Opcode = opcode.Value;
+}
+
 multiclass SC_SCI_H_B<bits<5> funct5, bit F, bit signedImm, string opcodestr> {
   def _H     : Pulp_ALU_rr<{funct5, F, 0}, 0b000, RISCVOpcode<0b1010111>,            "pv." # opcodestr # ".h">;
   def _SC_H  : Pulp_ALU_rr<{funct5, F, 0}, 0b100, RISCVOpcode<0b1010111>,            "pv." # opcodestr # ".sc.h">;
@@ -786,8 +806,8 @@ def PV_EXTRACT_H  : Pulp_ALU_sci<0b01111, 0, 0b110, RISCVOpcode<0b1010111>, 1, "
 def PV_EXTRACT_B  : Pulp_ALU_sci<0b01111, 0, 0b111, RISCVOpcode<0b1010111>, 1, "pv.extract.b">;
 def PV_EXTRACTU_H : Pulp_ALU_sci<0b10010, 0, 0b110, RISCVOpcode<0b1010111>, 1, "pv.extractu.h">;
 def PV_EXTRACTU_B : Pulp_ALU_sci<0b10010, 0, 0b111, RISCVOpcode<0b1010111>, 1, "pv.extractu.b">;
-def PV_INSERT_H   : Pulp_ALU_sci<0b10110, 0, 0b110, RISCVOpcode<0b1010111>, 1, "pv.insert.h">;
-def PV_INSERT_B   : Pulp_ALU_sci<0b10110, 0, 0b111, RISCVOpcode<0b1010111>, 1, "pv.insert.b">;
+def PV_INSERT_H   : Pulp_ALU_sci_wb<0b10110, 0, 0b110, RISCVOpcode<0b1010111>, 1, "pv.insert.h">;
+def PV_INSERT_B   : Pulp_ALU_sci_wb<0b10110, 0, 0b111, RISCVOpcode<0b1010111>, 1, "pv.insert.b">;
 
 defm PV_DOTUP   : SC_SCI_H_B<0b10000, 0, 0, "dotup">;
 defm PV_DOTUSP  : SC_SCI_H_B<0b10001, 0, 1, "dotusp">;
@@ -796,18 +816,18 @@ defm PV_SDOTUP  : SC_SCI_H_B<0b10100, 0, 0, "sdotup">;
 defm PV_SDOTUSP : SC_SCI_H_B<0b10101, 0, 1, "sdotusp">;
 defm PV_SDOTSP  : SC_SCI_H_B<0b10111, 0, 1, "sdotsp">;
 
-def PV_SHUFFLE_H       : Pulp_ALU_rr <0b1100000,  0b000, RISCVOpcode<0b1010111>,    "pv.shuffle.h">;
-def PV_SHUFFLE_SCI_H   : Pulp_ALU_sci<0b11000, 0, 0b110, RISCVOpcode<0b1010111>, 0, "pv.shuffle.sci.h">;
-def PV_SHUFFLE_B       : Pulp_ALU_rr <0b1100000,  0b001, RISCVOpcode<0b1010111>,    "pv.shuffle.b">;
-def PV_SHUFFLEI0_SCI_B : Pulp_ALU_sci<0b11000, 0, 0b111, RISCVOpcode<0b1010111>, 0, "pv.shufflei0.sci.b">;
-def PV_SHUFFLEI1_SCI_B : Pulp_ALU_sci<0b11101, 0, 0b111, RISCVOpcode<0b1010111>, 0, "pv.shufflei1.sci.b">;
-def PV_SHUFFLEI2_SCI_B : Pulp_ALU_sci<0b11110, 0, 0b111, RISCVOpcode<0b1010111>, 0, "pv.shufflei2.sci.b">;
-def PV_SHUFFLEI3_SCI_B : Pulp_ALU_sci<0b11111, 0, 0b111, RISCVOpcode<0b1010111>, 0, "pv.shufflei3.sci.b">;
-def PV_SHUFFLE2_H      : Pulp_ALU_rr <0b1100100,  0b000, RISCVOpcode<0b1010111>,    "pv.shuffle2.h">;
-def PV_SHUFFLE2_B      : Pulp_ALU_rr <0b1100100,  0b001, RISCVOpcode<0b1010111>,    "pv.shuffle2.b">;
-def PV_PACK_H          : Pulp_ALU_rr <0b1101000,  0b000, RISCVOpcode<0b1010111>,    "pv.pack.h">;
-def PV_PACKHI_B        : Pulp_ALU_rr <0b1101100,  0b001, RISCVOpcode<0b1010111>,    "pv.packhi.b">;
-def PV_PACKLO_B        : Pulp_ALU_rr <0b1110000,  0b001, RISCVOpcode<0b1010111>,    "pv.packlo.b">;
+def PV_SHUFFLE_H       : Pulp_ALU_rr   <0b1100000,  0b000, RISCVOpcode<0b1010111>,    "pv.shuffle.h">;
+def PV_SHUFFLE_SCI_H   : Pulp_ALU_sci  <0b11000, 0, 0b110, RISCVOpcode<0b1010111>, 0, "pv.shuffle.sci.h">;
+def PV_SHUFFLE_B       : Pulp_ALU_rr   <0b1100000,  0b001, RISCVOpcode<0b1010111>,    "pv.shuffle.b">;
+def PV_SHUFFLEI0_SCI_B : Pulp_ALU_sci  <0b11000, 0, 0b111, RISCVOpcode<0b1010111>, 0, "pv.shufflei0.sci.b">;
+def PV_SHUFFLEI1_SCI_B : Pulp_ALU_sci  <0b11101, 0, 0b111, RISCVOpcode<0b1010111>, 0, "pv.shufflei1.sci.b">;
+def PV_SHUFFLEI2_SCI_B : Pulp_ALU_sci  <0b11110, 0, 0b111, RISCVOpcode<0b1010111>, 0, "pv.shufflei2.sci.b">;
+def PV_SHUFFLEI3_SCI_B : Pulp_ALU_sci  <0b11111, 0, 0b111, RISCVOpcode<0b1010111>, 0, "pv.shufflei3.sci.b">;
+def PV_SHUFFLE2_H      : Pulp_ALU_rr_wb<0b1100100,  0b000, RISCVOpcode<0b1010111>,    "pv.shuffle2.h">;
+def PV_SHUFFLE2_B      : Pulp_ALU_rr_wb<0b1100100,  0b001, RISCVOpcode<0b1010111>,    "pv.shuffle2.b">;
+def PV_PACK_H          : Pulp_ALU_rr   <0b1101000,  0b000, RISCVOpcode<0b1010111>,    "pv.pack.h">;
+def PV_PACKHI_B        : Pulp_ALU_rr_wb<0b1101100,  0b001, RISCVOpcode<0b1010111>,    "pv.packhi.b">;
+def PV_PACKLO_B        : Pulp_ALU_rr_wb<0b1110000,  0b001, RISCVOpcode<0b1010111>,    "pv.packlo.b">;
 
 
 // Vectorial comparison operations
@@ -855,7 +875,7 @@ let Predicates = [HasNonStdExtPulp] in {
 
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
-multiclass Pulp_Save<bits<2> funct2, string opcodestr> {
+multiclass Pulp_Store<bits<2> funct2, string opcodestr> {
 
   def _ri_PostIncrement
       : RVInstS<{0, funct2}, RISCVOpcode<0b0101011>, (outs GPR:$rs1_wb),
@@ -865,19 +885,19 @@ multiclass Pulp_Save<bits<2> funct2, string opcodestr> {
 
   def _rr_PostIncrement
       : RVInstR<0b0000000, {1, funct2}, RISCVOpcode<0b0101011>, (outs GPR:$rs1_wb),
-                (ins GPR:$rs2, GPR:$rd, GPR:$rs1), opcodestr, "$rs2, ${rd}(${rs1}!)">{
+                (ins GPR:$rs2, GPR:$rs3, GPR:$rs1), opcodestr, "$rs2, ${rs3}(${rs1}!)">{
     let Constraints = "$rs1 = $rs1_wb";
   }
 
   def _rr
       : RVInstR<0b0000000, {1, funct2}, RISCVOpcode<0b0100011>, (outs),
-                (ins GPR:$rs2, GPR:$rd, GPR:$rs1), opcodestr, "$rs2, ${rd}(${rs1})">;
+                (ins GPR:$rs2, GPR:$rs3, GPR:$rs1), opcodestr, "$rs2, ${rs3}(${rs1})">;
 }
 
 let Predicates = [HasNonStdExtPulp] in {
-  defm P_SB : Pulp_Save<0b00, "p.sb">, Sched<[WriteSTB, ReadStoreData, ReadMemBase]>;
-  defm P_SH : Pulp_Save<0b01, "p.sh">, Sched<[WriteSTH, ReadStoreData, ReadMemBase]>;
-  defm P_SW : Pulp_Save<0b10, "p.sw">, Sched<[WriteSTW, ReadStoreData, ReadMemBase]>;
+  defm P_SB : Pulp_Store<0b00, "p.sb">, Sched<[WriteSTB, ReadStoreData, ReadMemBase]>;
+  defm P_SH : Pulp_Store<0b01, "p.sh">, Sched<[WriteSTH, ReadStoreData, ReadMemBase]>;
+  defm P_SW : Pulp_Store<0b10, "p.sw">, Sched<[WriteSTW, ReadStoreData, ReadMemBase]>;
 }
 
 def uimm1 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<1>(Imm);}]> {
@@ -1123,7 +1143,7 @@ def maskWidthMinus1 : SDNodeXForm<imm, [{
 
 
 
-
+let Predicates = [HasNonStdExtPulp] in {
 // Patterns for bit manipulation operations
 
 // extract
@@ -1255,6 +1275,7 @@ def : Pat<(ctlz_zero_undef (xor GPR:$rs1, (sra GPR:$rs1, (i32 31)))), (P_CLB GPR
 def : Pat<(ctpop GPR:$rs1), (P_CNT GPR:$rs1)>;
 def : PatGprGpr<rotr, P_ROR>;
 
+
 // Patterns for general ALU operations
 
 def : Pat<(abs GPR:$rs1), (P_ABS GPR:$rs1)>;
@@ -1314,3 +1335,232 @@ def : Pat<(sra (add (sub GPR:$rd, GPR:$rs1), (roundBit GPR:$rs2)), GPR:$rs2),
           (P_SUBRNR  GPR:$rd, GPR:$rs1, GPR:$rs2)>;
 def : Pat<(srl (add (sub GPR:$rd, GPR:$rs1), (roundBit GPR:$rs2)), GPR:$rs2),
           (P_SUBURNR GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+
+
+
+
+
+
+
+// Patterns for builtin functions
+class UnaryBuiltin<Intrinsic intrinsic, Instruction instruction>
+      : Pat<(intrinsic GPR:$rs1), (instruction GPR:$rs1)>;
+
+def : UnaryBuiltin<int_riscv_pulp_fl1, P_FL1>;
+def : UnaryBuiltin<int_riscv_pulp_ff1, P_FF1>;
+def : UnaryBuiltin<int_riscv_pulp_clb, P_CLB>;
+def : UnaryBuiltin<int_riscv_pulp_cnt, P_CNT>;
+def : Pat<(int_riscv_pulp_parity GPR:$rs1), (P_BCLR (P_CNT GPR:$rs1), 30, 1)>;
+def : UnaryBuiltin<int_riscv_pulp_abs, P_ABS>;
+
+def : Pat<(int_riscv_pulp_mac GPR:$rs1, GPR:$rs2, GPR:$rd), (P_MAC GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(int_riscv_pulp_msu GPR:$rs1, GPR:$rs2, GPR:$rd), (P_MSU GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+
+//def : Pat<(int_riscv_pulp_macs GPR:$rs1, GPR:$rs2, GPR:$rd), (P_MACSN GPR:$rd, GPR:$rs1, GPR:$rs2, 0)>;
+//def : Pat<(int_riscv_pulp_macu GPR:$rs1, GPR:$rs2, GPR:$rd), (P_MACUN GPR:$rd, GPR:$rs1, GPR:$rs2, 0)>;
+
+//def : Pat<(int_riscv_pulp_machhs GPR:$rs1, GPR:$rs2, GPR:$rd), (P_MACHHSN GPR:$rd, GPR:$rs1, GPR:$rs2, 0)>;
+//def : Pat<(int_riscv_pulp_machhu GPR:$rs1, GPR:$rs2, GPR:$rd), (P_MACHHUN GPR:$rd, GPR:$rs1, GPR:$rs2, 0)>;
+
+def : PatGprGpr<int_riscv_pulp_rotr, P_ROR>;
+
+def : PatGprGpr<int_riscv_pulp_maxsi, P_MAX>;
+def : PatGprGpr<int_riscv_pulp_minsi, P_MIN>;
+def : PatGprGpr<int_riscv_pulp_maxusi, P_MAXU>;
+def : PatGprGpr<int_riscv_pulp_minusi, P_MINU>;
+
+multiclass BinaryVectorBuiltin<string intrin, string instr> {
+  def : PatGprGpr<!cast<Intrinsic>("int_riscv_pulp_" # intrin # "2"),
+                  !cast<RVInst>("PV_" # instr # "_H")>;
+
+  def : PatGprGpr<!cast<Intrinsic>("int_riscv_pulp_" # intrin # "4"),
+                  !cast<RVInst>("PV_" # instr # "_B")>;
+}
+
+/*defm : BinaryVectorBuiltin<"add",  "ADD">;
+defm : BinaryVectorBuiltin<"sub",  "SUB">;
+defm : BinaryVectorBuiltin<"avg",  "AVG">;
+defm : BinaryVectorBuiltin<"avgu", "AVGU">;
+defm : BinaryVectorBuiltin<"min",  "MIN">;
+defm : BinaryVectorBuiltin<"minu", "MINU">;
+defm : BinaryVectorBuiltin<"max",  "MAX">;
+defm : BinaryVectorBuiltin<"maxu", "MAXU">;
+defm : BinaryVectorBuiltin<"and",  "AND">;
+defm : BinaryVectorBuiltin<"or",   "OR">;
+defm : BinaryVectorBuiltin<"exor", "XOR">;
+defm : BinaryVectorBuiltin<"srl",  "SRL">;
+defm : BinaryVectorBuiltin<"sra",  "SRA">;
+defm : BinaryVectorBuiltin<"sll",  "SLL">;
+defm : BinaryVectorBuiltin<"abs",  "ABS">;
+def : Pat<(int_riscv_pulp_neg2 GPR:$rs1), (PV_SUB_H X0, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_neg4 GPR:$rs1), (PV_SUB_B X0, GPR:$rs1)>;
+*/
+
+multiclass DotproductBuiltin<string intrin, string instr> {
+  def : PatGprGpr<!cast<Intrinsic>("int_riscv_pulp_dot" # intrin # "p2"),
+                  !cast<RVInst>("PV_DOT" # instr # "P_H")>;
+
+  def : PatGprGpr<!cast<Intrinsic>("int_riscv_pulp_dot" # intrin # "psc2"),
+                  !cast<RVInst>("PV_DOT" # instr # "P_SC_H")>;
+
+  def : PatGprGpr<!cast<Intrinsic>("int_riscv_pulp_dot" # intrin # "p4"),
+                  !cast<RVInst>("PV_DOT" # instr # "P_B")>;
+
+  def : PatGprGpr<!cast<Intrinsic>("int_riscv_pulp_dot" # intrin # "psc4"),
+                  !cast<RVInst>("PV_DOT" # instr # "P_SC_B")>;
+
+  def : PatGprGpr<!cast<Intrinsic>("int_riscv_pulp_sdot" # intrin # "p2"),
+                  !cast<RVInst>("PV_SDOT" # instr # "P_H")>;
+
+  def : PatGprGpr<!cast<Intrinsic>("int_riscv_pulp_sdot" # intrin # "psc2"),
+                  !cast<RVInst>("PV_SDOT" # instr # "P_SC_H")>;
+
+  def : PatGprGpr<!cast<Intrinsic>("int_riscv_pulp_sdot" # intrin # "p4"),
+                  !cast<RVInst>("PV_SDOT" # instr # "P_B")>;
+
+  def : PatGprGpr<!cast<Intrinsic>("int_riscv_pulp_sdot" # intrin # "psc4"),
+                  !cast<RVInst>("PV_SDOT" # instr # "P_SC_B")>;
+
+}
+
+//defm : DotproductBuiltin<"s",  "S">;
+//defm : DotproductBuiltin<"u",  "U">;
+//defm : DotproductBuiltin<"us", "US">;
+
+//def : PatGprGpr<int_riscv_pulp_muls, P_MULS>;
+//def : PatGprGpr<int_riscv_pulp_mulu, P_MULU>;
+def : PatGprGpr<int_riscv_pulp_mulhhs, P_MULHHS>;
+def : PatGprGpr<int_riscv_pulp_mulhhu, P_MULHHU>;
+
+multiclass MulMacBuiltin<string intrin, string instr> {
+
+    def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mul" # intrin # "N")
+                    GPR:$rs1, GPR:$rs2, uimm5:$shift),
+              (!cast<RVInst>("P_MUL" # instr # "N")
+                    GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
+
+    def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mul" # intrin # "RN")
+                    GPR:$rs1, GPR:$rs2, uimm5:$shift, imm),
+              (!cast<RVInst>("P_MUL" # instr # "RN")
+                    GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
+
+    def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mac" # intrin # "N")
+                    GPR:$rs1, GPR:$rs2, GPR:$rd, uimm5:$shift),
+              (!cast<RVInst>("P_MAC" # instr # "N")
+                    GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
+
+    def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mac" # intrin # "RN")
+                    GPR:$rs1, GPR:$rs2, GPR:$rd, uimm5:$shift, imm),
+              (!cast<RVInst>("P_MAC" # instr # "RN")
+                    GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
+
+}
+
+//defm : MulMacBuiltin<"s",   "S">;
+//defm : MulMacBuiltin<"u",   "U">;
+//defm : MulMacBuiltin<"hhs", "HHS">;
+//defm : MulMacBuiltin<"hhu", "HHU">;
+
+multiclass add_sub_N_RN_r<string intrin, string instr> {
+
+      def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "N")
+                      GPR:$rs1, GPR:$rs2, uimm5:$shift),
+                (!cast<RVInst>("P_" # instr # "N")
+                      GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
+
+      def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "N_r")
+                      GPR:$rs1, GPR:$rs2, uimm5:$shift),
+                (!cast<RVInst>("P_" # instr # "NR")
+                      GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
+
+      def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "RN")
+                      GPR:$rs1, GPR:$rs2, uimm5:$shift, imm),
+                (!cast<RVInst>("P_" # instr # "RN")
+                      GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
+
+      def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "RN_r")
+                      GPR:$rs1, GPR:$rs2, uimm5:$shift),
+                (!cast<RVInst>("P_" # instr # "RNR")
+                      GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
+
+}
+
+defm : add_sub_N_RN_r<"add",  "ADD">;
+defm : add_sub_N_RN_r<"addu", "ADDU">;
+defm : add_sub_N_RN_r<"sub",  "SUB">;
+defm : add_sub_N_RN_r<"subu", "SUBU">;
+
+/*
+def : PatGprGpr<int_riscv_pulp_pack2, PV_PACK_H>;
+def : Pat<(set GPR:$rd, (int_riscv_pulp_pack4 GPR:$rs1, GPR:$rs2, GPR:$rs3, GPR:$rs4)),
+          (PV_PACKLO_B (PV_PACKHI_B GPR:$rd, GPR:$rs4, GPR:$rs3), GPR:$rs2, GPR:$rs1)>;
+def : PatGprGpr<int_riscv_pulp_shuffleh, PV_SHUFFLE_H>;
+def : PatGprGpr<int_riscv_pulp_shuffleb, PV_SHUFFLE_B>;
+def : Pat<(int_riscv_pulp_pack4_lo GPR:$rd, GPR:$rs2, GPR:$rs1), (PV_PACKLO_B GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(int_riscv_pulp_pack4_hi GPR:$rd, GPR:$rs2, GPR:$rs1), (PV_PACKHI_B GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(int_riscv_pulp_pack4_lo GPR:$rs2, GPR:$rs1, GPR:$rd),
+          (PV_PACKLO_B GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(int_riscv_pulp_pack4_hi GPR:$rs2, GPR:$rs1, GPR:$rd),
+          (PV_PACKHI_B GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+// TODO shuffle4b & shuffle2b
+*/
+
+def : Pat<(int_riscv_pulp_bclr GPR:$rs1, shiftedFlippedMask:$mask),
+          (P_BCLR GPR:$rs1, (flippedMaskWidthMinus1 imm:$mask), (trailing1s imm:$mask))>;
+def : PatGprGpr<int_riscv_pulp_bclr_r, P_BCLRR>;
+
+def : Pat<(int_riscv_pulp_bset GPR:$rs1, shiftedMask:$mask),
+          (P_BCLR GPR:$rs1, (maskWidthMinus1 imm:$mask), (trailing0s imm:$mask))>;
+def : PatGprGpr<int_riscv_pulp_bset_r, P_BSETR>;
+
+def : Pat<(int_riscv_pulp_bextract GPR:$rs1, uimm5:$size, uimm5:$shift),
+          (P_EXTRACT GPR:$rs1, uimm5:$size, uimm5:$shift)>;
+def : PatGprGpr<int_riscv_pulp_bextract_r, P_EXTRACTR>;
+
+def : Pat<(int_riscv_pulp_bextractu GPR:$rs1, uimm5:$size, uimm5:$shift),
+          (P_EXTRACTU GPR:$rs1, uimm5:$size, uimm5:$shift)>;
+def : PatGprGpr<int_riscv_pulp_bextractu_r, P_EXTRACTUR>;
+
+def : Pat<(int_riscv_pulp_binsert GPR:$rd, shiftedFlippedMask,
+                                  GPR:$rs1, shiftedMask:$srcMask, uimm5:$shift),
+          (P_INSERT GPR:$rd, GPR:$rs1, (maskWidthMinus1 imm:$srcMask), uimm5:$shift)>;
+def : Pat<(int_riscv_pulp_binsert_r GPR:$rd, GPR:$rs1, GPR:$rs2),
+          (P_INSERTR GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+
+def : Pat<(int_riscv_pulp_clip GPR:$rs1, negativePowerOf2:$lowerBound,
+                               powerOf2Minus1),
+          (P_CLIP GPR:$rs1, (trailing0s imm:$lowerBound))>;
+def : PatGprGpr<int_riscv_pulp_clip_r, P_CLIPR>;
+
+def : Pat<(int_riscv_pulp_clipu GPR:$rs1, 0, powerOf2Minus1:$upperBound),
+          (P_CLIPU GPR:$rs1, (trailing1sPlus1 imm:$upperBound))>;
+def : PatGprGpr<int_riscv_pulp_clip_r, P_CLIPR>;
+
+
+def : Pat<(int_riscv_pulp_OffsetedRead GPR:$rs1, GPR:$rs2), (P_LW_rr GPR:$rs1, GPR:$rs2)>;
+//def : Pat<(int_riscv_pulp_OffsetedReadHalf GPR:$rs1, GPR:$rs2), (P_LH_rr GPR:$rs1, GPR:$rs2)>;
+//def : Pat<(int_riscv_pulp_OffsetedReadByte GPR:$rs1, GPR:$rs2), (P_LB_rr GPR:$rs1, GPR:$rs2)>;
+
+def : Pat<(int_riscv_pulp_OffsetedWrite GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SW_rr GPR:$rs2, GPR:$rs3, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_OffsetedWriteHalf GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SH_rr GPR:$rs2, GPR:$rs3, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_OffsetedWriteByte GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SB_rr GPR:$rs2, GPR:$rs3, GPR:$rs1)>;
+
+
+def : Pat<(int_riscv_pulp_read_base_off GPR:$rs1, GPR:$rs2), (P_LW_rr GPR:$rs1, GPR:$rs2)>;
+def : Pat<(int_riscv_pulp_write_base_off GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SW_rr GPR:$rs2, GPR:$rs3, GPR:$rs1)>;
+
+def : Pat<(int_riscv_pulp_spr_read_vol uimm12:$imm12), (CSRRS csr_sysreg:$imm12, X0)>;
+def : Pat<(int_riscv_pulp_spr_read uimm12:$imm12), (CSRRS csr_sysreg:$imm12, X0)>;
+
+def : Pat<(int_riscv_pulp_spr_write uimm12:$imm12, GPR:$rs1), (CSRRW csr_sysreg:$imm12, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_spr_bit_set uimm12:$imm12, GPR:$rs1), (CSRRS csr_sysreg:$imm12, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_spr_bit_clr uimm12:$imm12, GPR:$rs1), (CSRRC csr_sysreg:$imm12, GPR:$rs1)>;
+
+def : Pat<(int_riscv_pulp_read_then_spr_write uimm12:$imm12, GPR:$rs1), (CSRRW csr_sysreg:$imm12, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_read_then_spr_bit_set uimm12:$imm12, GPR:$rs1), (CSRRS csr_sysreg:$imm12, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_read_then_spr_bit_clr uimm12:$imm12, GPR:$rs1), (CSRRC csr_sysreg:$imm12, GPR:$rs1)>;
+
+def : Pat<(int_riscv_pulp_read_base_off_v GPR:$rs1, GPR:$rs2), (P_LW_rr GPR:$rs1, GPR:$rs2)>;
+def : Pat<(int_riscv_pulp_write_base_off_v GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SW_rr GPR:$rs2, GPR:$rs3, GPR:$rs1)>;
+
+}

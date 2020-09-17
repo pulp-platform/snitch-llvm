@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "RISCV.h"
+#include "clang/Basic/TargetBuiltins.h"
 #include "clang/Basic/MacroBuilder.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/TargetParser.h"

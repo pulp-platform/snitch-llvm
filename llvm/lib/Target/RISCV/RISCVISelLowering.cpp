@@ -89,6 +89,10 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
     addRegisterClass(MVT::f32, &RISCV::FPR32RegClass);
   if (Subtarget.hasStdExtD())
     addRegisterClass(MVT::f64, &RISCV::FPR64RegClass);
+  if (Subtarget.hasNonStdExtPulp()) {
+    addRegisterClass(MVT::v2i16, &RISCV::PulpV2RegClass);
+    addRegisterClass(MVT::v4i8, &RISCV::PulpV4RegClass);
+  }
 
   if (Subtarget.hasStdExtV()) {
     addRegisterClass(RISCVVMVTs::vbool64_t, &RISCV::VRRegClass);
@@ -353,16 +357,32 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
 
   if (Subtarget.hasNonStdExtPulp()) {
     setOperationAction(ISD::ABS, XLenVT, Legal);
+    setOperationAction(ISD::ABS, MVT::v2i16, Legal);
+    setOperationAction(ISD::ABS, MVT::v4i8, Legal);
     setOperationAction(ISD::SMIN, XLenVT, Legal);
+    setOperationAction(ISD::SMIN, MVT::v2i16, Legal);
+    setOperationAction(ISD::SMIN, MVT::v4i8, Legal);
     setOperationAction(ISD::UMIN, XLenVT, Legal);
+    setOperationAction(ISD::UMIN, MVT::v2i16, Legal);
+    setOperationAction(ISD::UMIN, MVT::v4i8, Legal);
     setOperationAction(ISD::SMAX, XLenVT, Legal);
+    setOperationAction(ISD::SMAX, MVT::v2i16, Legal);
+    setOperationAction(ISD::SMAX, MVT::v4i8, Legal);
     setOperationAction(ISD::UMAX, XLenVT, Legal);
+    setOperationAction(ISD::UMAX, MVT::v2i16, Legal);
+    setOperationAction(ISD::UMAX, MVT::v4i8, Legal);
     setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i8, Legal);
     setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i16, Legal);
     setOperationAction(ISD::CTLZ_ZERO_UNDEF, XLenVT, Legal);
     setOperationAction(ISD::CTTZ, XLenVT, Legal);
     setOperationAction(ISD::CTPOP, XLenVT, Legal);
     setOperationAction(ISD::ROTR, XLenVT, Legal);
+    setOperationAction(ISD::SPLAT_VECTOR, MVT::v2i16, Legal);
+    setOperationAction(ISD::SPLAT_VECTOR, MVT::v4i8, Legal);
+    setOperationAction(ISD::VECTOR_SHUFFLE, MVT::v2i16, Expand);
+    setOperationAction(ISD::VECTOR_SHUFFLE, MVT::v4i8, Expand);
+    setOperationAction(ISD::VSELECT, MVT::v2i16, Expand);
+    setOperationAction(ISD::VSELECT, MVT::v4i8, Expand);
   }
 
   if (Subtarget.hasStdExtA()) {

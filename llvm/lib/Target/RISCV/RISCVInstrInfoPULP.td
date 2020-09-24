@@ -528,19 +528,24 @@ class Pulp_ALU_r<bits<7> funct7, bits<3> funct3,
 }
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-class Pulp_ALU_rr<bits<7> funct7, bits<3> funct3, RISCVOpcode opcode, string opcodestr>
-    : RVInstR<funct7, funct3, opcode, (outs GPR:$rd), (ins GPR:$rs1, GPR:$rs2),
+class Pulp_ALU_rr<bits<7> funct7, bits<3> funct3, RISCVOpcode opcode, string opcodestr,
+                  RegisterClass ty1 = GPR, RegisterClass ty2 = ty1, RegisterClass resty = ty1>
+    : RVInstR<funct7, funct3, opcode, (outs resty:$rd), (ins ty1:$rs1, ty2:$rs2),
               opcodestr, "$rd, $rs1, $rs2">,
       Sched<[WriteIALU, ReadIALU, ReadIALU]>;
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-class Pulp_ALU_rr_wb<bits<7> funct7, bits<3> funct3, RISCVOpcode opcode, string opcodestr>
-    : RVInstR<funct7, funct3, opcode, (outs GPR:$rd_wb), (ins GPR:$rd, GPR:$rs1, GPR:$rs2),
+class Pulp_ALU_rr_wb<bits<7> funct7, bits<3> funct3, RISCVOpcode opcode, string opcodestr,
+                     RegisterClass ty1 = GPR, RegisterClass ty2 = ty1, RegisterClass resty = ty1>
+    : RVInstR<funct7, funct3, opcode, (outs resty:$rd_wb), (ins resty:$rd, ty1:$rs1, ty2:$rs2),
               opcodestr, "$rd, $rs1, $rs2">,
       Sched<[WriteIALU, ReadIALU, ReadIALU]>{
 
   let Constraints = "$rd = $rd_wb";
 }
+
+
+
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 class Pulp_ALU_ri<bits<7> funct7, bits<3> funct3, string opcodestr>
@@ -734,10 +739,12 @@ def uimm6 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<6>(Imm);}]> {
   }];
 }
 
+
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-class Pulp_ALU_sci<bits<5> funct5, bit F, bits<3> funct3, RISCVOpcode opcode,
-                   bit signedImm, string opcodestr>
-    : RVInst<(outs GPR:$rd), (ins GPR:$rs1, !if(signedImm, simm6, uimm6):$Imm6), opcodestr, "$rd, $rs1, $Imm6", [], InstFormatR>,
+class Pulp_ALU_vsci<bits<5> funct5, bit F, bits<3> funct3, string opcodestr,
+                    RegisterClass vec, Operand sci, RegisterClass res = vec>
+    : RVInst<(outs res:$rd), (ins vec:$rs1, sci:$Imm6), opcodestr,
+             "$rd, $rs1, $Imm6", [], InstFormatOther>,
       Sched<[WriteIALU, ReadIALU]>  {
   bits<6> Imm6;
   bits<5> rs1;
@@ -750,13 +757,14 @@ class Pulp_ALU_sci<bits<5> funct5, bit F, bits<3> funct3, RISCVOpcode opcode,
   let Inst{19-15} = rs1;
   let Inst{14-12} = funct3;
   let Inst{11-7} = rd;
-  let Opcode = opcode.Value;
+  let Opcode = 0b1010111;
 }
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-class Pulp_ALU_sci_wb<bits<5> funct5, bit F, bits<3> funct3, RISCVOpcode opcode,
-                   bit signedImm, string opcodestr>
-    : RVInst<(outs GPR:$rd_wb), (ins GPR:$rd, GPR:$rs1, !if(signedImm, simm6, uimm6):$Imm6), opcodestr, "$rd, $rs1, $Imm6", [], InstFormatR>,
+class Pulp_ALU_vsci_wb<bits<5> funct5, bit F, bits<3> funct3, string opcodestr,
+                    RegisterClass vec, Operand sci, RegisterClass res = vec>
+    : RVInst<(outs res:$rd_wb), (ins res:$rd, vec:$rs1, sci:$Imm6), opcodestr,
+             "$rd, $rs1, $Imm6", [], InstFormatOther>,
       Sched<[WriteIALU, ReadIALU]>  {
   bits<6> Imm6;
   bits<5> rs1;
@@ -770,77 +778,154 @@ class Pulp_ALU_sci_wb<bits<5> funct5, bit F, bits<3> funct3, RISCVOpcode opcode,
   let Inst{19-15} = rs1;
   let Inst{14-12} = funct3;
   let Inst{11-7} = rd;
-  let Opcode = opcode.Value;
+  let Opcode = 0b1010111;
 }
 
-multiclass SC_SCI_H_B<bits<5> funct5, bit F, bit signedImm, string opcodestr> {
-  def _H     : Pulp_ALU_rr<{funct5, F, 0}, 0b000, RISCVOpcode<0b1010111>,            "pv." # opcodestr # ".h">;
-  def _SC_H  : Pulp_ALU_rr<{funct5, F, 0}, 0b100, RISCVOpcode<0b1010111>,            "pv." # opcodestr # ".sc.h">;
-  def _SCI_H : Pulp_ALU_sci<funct5, F,     0b110, RISCVOpcode<0b1010111>, signedImm, "pv." # opcodestr # ".sci.h">;
-  def _B     : Pulp_ALU_rr<{funct5, F, 0}, 0b001, RISCVOpcode<0b1010111>,            "pv." # opcodestr # ".b">;
-  def _SC_B  : Pulp_ALU_rr<{funct5, F, 0}, 0b101, RISCVOpcode<0b1010111>,            "pv." # opcodestr # ".sc.b">;
-  def _SCI_B : Pulp_ALU_sci<funct5, F,     0b111, RISCVOpcode<0b1010111>, signedImm, "pv." # opcodestr # ".sci.b">;
+
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+class Pulp_ALU_vinsert<bits<3> funct3, RegisterClass res, string opcodestr>
+    : RVInst<(outs res:$rd_wb), (ins res:$rd, GPR:$rs1, uimm6:$Imm6), opcodestr, "$rd, $rs1, $Imm6", [], InstFormatOther>,
+      Sched<[WriteIALU, ReadIALU]>  {
+  bits<6> Imm6;
+  bits<5> rs1;
+  bits<5> rd;
+
+  let Constraints = "$rd = $rd_wb";
+  let Inst{31-27} = 0b10110;
+  let Inst{26} = 0;
+  let Inst{25} = Imm6{0};
+  let Inst{24-20} = Imm6{5-1};
+  let Inst{19-15} = rs1;
+  let Inst{14-12} = funct3;
+  let Inst{11-7} = rd;
+  let Opcode = 0b1010111;
 }
+
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+class Pulp_ALU_vextract<bits<5> funct5, bits<3> funct3, RegisterClass res, string opcodestr>
+    : RVInst<(outs GPR:$rd), (ins res:$rs1, uimm6:$Imm6),
+             opcodestr, "$rd, $rs1, $Imm6", [], InstFormatOther>,
+      Sched<[WriteIALU, ReadIALU]>  {
+  bits<6> Imm6;
+  bits<5> rs1;
+  bits<5> rd;
+
+  let Inst{31-27} = funct5;
+  let Inst{26} = 0;
+  let Inst{25} = Imm6{0};
+  let Inst{24-20} = Imm6{5-1};
+  let Inst{19-15} = rs1;
+  let Inst{14-12} = funct3;
+  let Inst{11-7} = rd;
+  let Opcode = 0b1010111;
+}
+
+
+
+multiclass SC_SCI_H_B<bits<5> funct5, bit F, Operand sci, string opcodestr> {
+  def _H     : Pulp_ALU_rr<{funct5, F, 0}, 0b000, RISCVOpcode<0b1010111>, "pv." # opcodestr # ".h", PulpV2>;
+  def _SC_H  : Pulp_ALU_rr<{funct5, F, 0}, 0b100, RISCVOpcode<0b1010111>, "pv." # opcodestr # ".sc.h", PulpV2, GPR>;
+  def _SCI_H : Pulp_ALU_vsci<funct5, F,    0b110,                         "pv." # opcodestr # ".sci.h", PulpV2, sci>;
+  def _B     : Pulp_ALU_rr<{funct5, F, 0}, 0b001, RISCVOpcode<0b1010111>, "pv." # opcodestr # ".b", PulpV4>;
+  def _SC_B  : Pulp_ALU_rr<{funct5, F, 0}, 0b101, RISCVOpcode<0b1010111>, "pv." # opcodestr # ".sc.b", PulpV4, GPR>;
+  def _SCI_B : Pulp_ALU_vsci<funct5, F,    0b111,                         "pv." # opcodestr # ".sci.b", PulpV4, sci>;
+}
+
+multiclass DOTP<bits<5> funct5, bit F, Operand sci, string opcodestr> {
+  def _H     : Pulp_ALU_rr<{funct5, F, 0}, 0b000, RISCVOpcode<0b1010111>, "pv." # opcodestr # ".h", PulpV2, PulpV2, GPR>;
+  def _SC_H  : Pulp_ALU_rr<{funct5, F, 0}, 0b100, RISCVOpcode<0b1010111>, "pv." # opcodestr # ".sc.h", PulpV2, GPR, GPR>;
+  def _SCI_H : Pulp_ALU_vsci<funct5, F,    0b110,                         "pv." # opcodestr # ".sci.h", PulpV2, sci, GPR>;
+  def _B     : Pulp_ALU_rr<{funct5, F, 0}, 0b001, RISCVOpcode<0b1010111>, "pv." # opcodestr # ".b", PulpV4, PulpV4, GPR>;
+  def _SC_B  : Pulp_ALU_rr<{funct5, F, 0}, 0b101, RISCVOpcode<0b1010111>, "pv." # opcodestr # ".sc.b", PulpV4, GPR, GPR>;
+  def _SCI_B : Pulp_ALU_vsci<funct5, F,    0b111,                         "pv." # opcodestr # ".sci.b", PulpV4, sci, GPR>;
+}
+
+multiclass SDOTP<bits<5> funct5, bit F, Operand sci, string opcodestr> {
+  def _H     : Pulp_ALU_rr_wb<{funct5, F, 0}, 0b000, RISCVOpcode<0b1010111>, "pv." # opcodestr # ".h", PulpV2, PulpV2, GPR>;
+  def _SC_H  : Pulp_ALU_rr_wb<{funct5, F, 0}, 0b100, RISCVOpcode<0b1010111>, "pv." # opcodestr # ".sc.h", PulpV2, GPR, GPR>;
+  def _SCI_H : Pulp_ALU_vsci_wb<funct5, F,    0b110,                         "pv." # opcodestr # ".sci.h", PulpV2, sci, GPR>;
+  def _B     : Pulp_ALU_rr_wb<{funct5, F, 0}, 0b001, RISCVOpcode<0b1010111>, "pv." # opcodestr # ".b", PulpV4, PulpV4, GPR>;
+  def _SC_B  : Pulp_ALU_rr_wb<{funct5, F, 0}, 0b101, RISCVOpcode<0b1010111>, "pv." # opcodestr # ".sc.b", PulpV4, GPR, GPR>;
+  def _SCI_B : Pulp_ALU_vsci_wb<funct5, F,    0b111,                         "pv." # opcodestr # ".sci.b", PulpV4, sci, GPR>;
+}
+
+
 
 // Vectorial ALU Operations
 let Predicates = [HasNonStdExtPulp] in {
 
-defm PV_ADD  : SC_SCI_H_B<0b00000, 0, 1, "add">;
-defm PV_SUB  : SC_SCI_H_B<0b00001, 0, 1, "sub">;
-defm PV_AVG  : SC_SCI_H_B<0b00010, 0, 1, "avg">;
-defm PV_AVGU : SC_SCI_H_B<0b00011, 0, 0, "avgu">;
-defm PV_MIN  : SC_SCI_H_B<0b00100, 0, 1, "min">;
-defm PV_MINU : SC_SCI_H_B<0b00101, 0, 0, "minu">;
-defm PV_MAX  : SC_SCI_H_B<0b00110, 0, 1, "max">;
-defm PV_MAXU : SC_SCI_H_B<0b00111, 0, 0, "maxu">;
-defm PV_SRL  : SC_SCI_H_B<0b01000, 0, 0, "srl">;
-defm PV_SRA  : SC_SCI_H_B<0b01001, 0, 0, "sra">;
-defm PV_SLL  : SC_SCI_H_B<0b01010, 0, 0, "sll">;
-defm PV_OR   : SC_SCI_H_B<0b01011, 0, 1, "or">;
-defm PV_XOR  : SC_SCI_H_B<0b01100, 0, 1, "xor">;
-defm PV_AND  : SC_SCI_H_B<0b01101, 0, 1, "and">;
+defm PV_ADD  : SC_SCI_H_B<0b00000, 0, simm6, "add">;
+defm PV_SUB  : SC_SCI_H_B<0b00001, 0, simm6, "sub">;
+defm PV_AVG  : SC_SCI_H_B<0b00010, 0, simm6, "avg">;
+defm PV_AVGU : SC_SCI_H_B<0b00011, 0, uimm6, "avgu">;
+defm PV_MIN  : SC_SCI_H_B<0b00100, 0, simm6, "min">;
+defm PV_MINU : SC_SCI_H_B<0b00101, 0, uimm6, "minu">;
+defm PV_MAX  : SC_SCI_H_B<0b00110, 0, simm6, "max">;
+defm PV_MAXU : SC_SCI_H_B<0b00111, 0, uimm6, "maxu">;
+defm PV_SRL  : SC_SCI_H_B<0b01000, 0, uimm6, "srl">;
+defm PV_SRA  : SC_SCI_H_B<0b01001, 0, uimm6, "sra">;
+defm PV_SLL  : SC_SCI_H_B<0b01010, 0, uimm6, "sll">;
+defm PV_OR   : SC_SCI_H_B<0b01011, 0, simm6, "or">;
+defm PV_XOR  : SC_SCI_H_B<0b01100, 0, simm6, "xor">;
+defm PV_AND  : SC_SCI_H_B<0b01101, 0, simm6, "and">;
 
-def PV_ABS_H      : Pulp_ALU_r  <0b0111000,  0b000, RISCVOpcode<0b1010111>,    "pv.abs.h">;
-def PV_ABS_B      : Pulp_ALU_r  <0b0111000,  0b001, RISCVOpcode<0b1010111>,    "pv.abs.b">;
-def PV_EXTRACT_H  : Pulp_ALU_sci<0b01111, 0, 0b110, RISCVOpcode<0b1010111>, 1, "pv.extract.h">;
-def PV_EXTRACT_B  : Pulp_ALU_sci<0b01111, 0, 0b111, RISCVOpcode<0b1010111>, 1, "pv.extract.b">;
-def PV_EXTRACTU_H : Pulp_ALU_sci<0b10010, 0, 0b110, RISCVOpcode<0b1010111>, 1, "pv.extractu.h">;
-def PV_EXTRACTU_B : Pulp_ALU_sci<0b10010, 0, 0b111, RISCVOpcode<0b1010111>, 1, "pv.extractu.b">;
-def PV_INSERT_H   : Pulp_ALU_sci_wb<0b10110, 0, 0b110, RISCVOpcode<0b1010111>, 1, "pv.insert.h">;
-def PV_INSERT_B   : Pulp_ALU_sci_wb<0b10110, 0, 0b111, RISCVOpcode<0b1010111>, 1, "pv.insert.b">;
+let hasSideEffects = 0, mayStore = 0, mayLoad = 0 in {
+  def PV_ABS_H : RVInstR<0b0111000, 0b000, RISCVOpcode<0b1010111>,
+                         (outs PulpV2:$rd), (ins PulpV2:$rs1),
+                         "pv.abs.h", "$rd, $rs1">, Sched<[WriteIALU, ReadIALU]>{
+    let rs2 = 0;
+  }
 
-defm PV_DOTUP   : SC_SCI_H_B<0b10000, 0, 0, "dotup">;
-defm PV_DOTUSP  : SC_SCI_H_B<0b10001, 0, 1, "dotusp">;
-defm PV_DOTSP   : SC_SCI_H_B<0b10011, 0, 1, "dotsp">;
-defm PV_SDOTUP  : SC_SCI_H_B<0b10100, 0, 0, "sdotup">;
-defm PV_SDOTUSP : SC_SCI_H_B<0b10101, 0, 1, "sdotusp">;
-defm PV_SDOTSP  : SC_SCI_H_B<0b10111, 0, 1, "sdotsp">;
+  def PV_ABS_B : RVInstR<0b0111000, 0b001, RISCVOpcode<0b1010111>,
+                         (outs PulpV4:$rd), (ins PulpV4:$rs1),
+                         "pv.abs.b", "$rd, $rs1">, Sched<[WriteIALU, ReadIALU]>{
+    let rs2 = 0;
+  }
+}
 
-def PV_SHUFFLE_H       : Pulp_ALU_rr   <0b1100000,  0b000, RISCVOpcode<0b1010111>,    "pv.shuffle.h">;
-def PV_SHUFFLE_SCI_H   : Pulp_ALU_sci  <0b11000, 0, 0b110, RISCVOpcode<0b1010111>, 0, "pv.shuffle.sci.h">;
-def PV_SHUFFLE_B       : Pulp_ALU_rr   <0b1100000,  0b001, RISCVOpcode<0b1010111>,    "pv.shuffle.b">;
-def PV_SHUFFLEI0_SCI_B : Pulp_ALU_sci  <0b11000, 0, 0b111, RISCVOpcode<0b1010111>, 0, "pv.shufflei0.sci.b">;
-def PV_SHUFFLEI1_SCI_B : Pulp_ALU_sci  <0b11101, 0, 0b111, RISCVOpcode<0b1010111>, 0, "pv.shufflei1.sci.b">;
-def PV_SHUFFLEI2_SCI_B : Pulp_ALU_sci  <0b11110, 0, 0b111, RISCVOpcode<0b1010111>, 0, "pv.shufflei2.sci.b">;
-def PV_SHUFFLEI3_SCI_B : Pulp_ALU_sci  <0b11111, 0, 0b111, RISCVOpcode<0b1010111>, 0, "pv.shufflei3.sci.b">;
-def PV_SHUFFLE2_H      : Pulp_ALU_rr_wb<0b1100100,  0b000, RISCVOpcode<0b1010111>,    "pv.shuffle2.h">;
-def PV_SHUFFLE2_B      : Pulp_ALU_rr_wb<0b1100100,  0b001, RISCVOpcode<0b1010111>,    "pv.shuffle2.b">;
-def PV_PACK_H          : Pulp_ALU_rr   <0b1101000,  0b000, RISCVOpcode<0b1010111>,    "pv.pack.h">;
-def PV_PACKHI_B        : Pulp_ALU_rr_wb<0b1101100,  0b001, RISCVOpcode<0b1010111>,    "pv.packhi.b">;
-def PV_PACKLO_B        : Pulp_ALU_rr_wb<0b1110000,  0b001, RISCVOpcode<0b1010111>,    "pv.packlo.b">;
+def PV_EXTRACT_H : Pulp_ALU_vextract<0b01111, 0b110, PulpV2, "pv.extract.h">;
+def PV_EXTRACT_B : Pulp_ALU_vextract<0b01111, 0b111, PulpV4, "pv.extract.b">;
+def PV_EXTRACTU_H : Pulp_ALU_vextract<0b10010, 0b110, PulpV2, "pv.extractu.h">;
+def PV_EXTRACTU_B : Pulp_ALU_vextract<0b10010, 0b111, PulpV4, "pv.extractu.b">;
+def PV_INSERT_H   : Pulp_ALU_vinsert<0b110, PulpV2, "pv.insert.h">;
+def PV_INSERT_B   : Pulp_ALU_vinsert<0b111, PulpV4, "pv.insert.b">;
+
+defm PV_DOTUP   : DOTP<0b10000, 0, uimm6, "dotup">;
+defm PV_DOTUSP  : DOTP<0b10001, 0, simm6, "dotusp">;
+defm PV_DOTSP   : DOTP<0b10011, 0, simm6, "dotsp">;
+defm PV_SDOTUP  : SDOTP<0b10100, 0, uimm6, "sdotup">;
+defm PV_SDOTUSP : SDOTP<0b10101, 0, simm6, "sdotusp">;
+defm PV_SDOTSP  : SDOTP<0b10111, 0, simm6, "sdotsp">;
+
+def PV_SHUFFLE_H       : Pulp_ALU_rr<0b1100000, 0b000, RISCVOpcode<0b1010111>, "pv.shuffle.h", PulpV2>;
+def PV_SHUFFLE_SCI_H   : Pulp_ALU_vsci<0b11000, 0, 0b110, "pv.shuffle.sci.h", PulpV2, uimm6>;
+def PV_SHUFFLE_B       : Pulp_ALU_rr<0b1100000, 0b001, RISCVOpcode<0b1010111>, "pv.shuffle.b", PulpV4>;
+def PV_SHUFFLEI0_SCI_B : Pulp_ALU_vsci<0b11000, 0, 0b111, "pv.shufflei0.sci.b", PulpV4, uimm6>;
+def PV_SHUFFLEI1_SCI_B : Pulp_ALU_vsci<0b11101, 0, 0b111, "pv.shufflei1.sci.b", PulpV4, uimm6>;
+def PV_SHUFFLEI2_SCI_B : Pulp_ALU_vsci<0b11110, 0, 0b111, "pv.shufflei2.sci.b", PulpV4, uimm6>;
+def PV_SHUFFLEI3_SCI_B : Pulp_ALU_vsci<0b11111, 0, 0b111, "pv.shufflei3.sci.b", PulpV4, uimm6>;
+
+def PV_SHUFFLE2_H : Pulp_ALU_rr_wb<0b1100100, 0b000, RISCVOpcode<0b1010111>, "pv.shuffle2.h", PulpV2>;
+def PV_SHUFFLE2_B : Pulp_ALU_rr_wb<0b1100100, 0b001, RISCVOpcode<0b1010111>, "pv.shuffle2.b", PulpV4>;
+def PV_PACK_H : Pulp_ALU_rr<0b1101000, 0b000, RISCVOpcode<0b1010111>, "pv.pack.h", GPR, GPR, PulpV2>;
+def PV_PACKHI_B : Pulp_ALU_rr_wb<0b1101100, 0b001, RISCVOpcode<0b1010111>, "pv.packhi.b", GPR, GPR, PulpV4>;
+def PV_PACKLO_B : Pulp_ALU_rr_wb<0b1110000, 0b001, RISCVOpcode<0b1010111>, "pv.packlo.b", GPR, GPR, PulpV4>;
+
+let isCodeGenOnly = 1 in
+def PV_PACKHI_B_nowb : Pulp_ALU_rr<0b1101100, 0b001, RISCVOpcode<0b1010111>, "pv.packhi.b", GPR, GPR, PulpV4>;
 
 
 // Vectorial comparison operations
-defm PV_CMPEQ  : SC_SCI_H_B<0b00000, 1, 1, "cmpeq">;
-defm PV_CMPNE  : SC_SCI_H_B<0b00001, 1, 1, "cmpne">;
-defm PV_CMPGT  : SC_SCI_H_B<0b00010, 1, 1, "cmpgt">;
-defm PV_CMPGE  : SC_SCI_H_B<0b00011, 1, 1, "cmpge">;
-defm PV_CMPLT  : SC_SCI_H_B<0b00100, 1, 1, "cmplt">;
-defm PV_CMPLE  : SC_SCI_H_B<0b00101, 1, 1, "cmple">;
-defm PV_CMPGTU : SC_SCI_H_B<0b00110, 1, 0, "cmpgtu">;
-defm PV_CMPGEU : SC_SCI_H_B<0b00111, 1, 0, "cmpgeu">;
-defm PV_CMPLTU : SC_SCI_H_B<0b01000, 1, 0, "cmpltu">;
-defm PV_CMPLEU : SC_SCI_H_B<0b01001, 1, 0, "cmpleu">;
+defm PV_CMPEQ  : SC_SCI_H_B<0b00000, 1, simm6, "cmpeq">;
+defm PV_CMPNE  : SC_SCI_H_B<0b00001, 1, simm6, "cmpne">;
+defm PV_CMPGT  : SC_SCI_H_B<0b00010, 1, simm6, "cmpgt">;
+defm PV_CMPGE  : SC_SCI_H_B<0b00011, 1, simm6, "cmpge">;
+defm PV_CMPLT  : SC_SCI_H_B<0b00100, 1, simm6, "cmplt">;
+defm PV_CMPLE  : SC_SCI_H_B<0b00101, 1, simm6, "cmple">;
+defm PV_CMPGTU : SC_SCI_H_B<0b00110, 1, uimm6, "cmpgtu">;
+defm PV_CMPGEU : SC_SCI_H_B<0b00111, 1, uimm6, "cmpgeu">;
+defm PV_CMPLTU : SC_SCI_H_B<0b01000, 1, uimm6, "cmpltu">;
+defm PV_CMPLEU : SC_SCI_H_B<0b01001, 1, uimm6, "cmpleu">;
 
 }
 
@@ -1094,6 +1179,16 @@ def shiftedMask_shiftImmediate : PatFrag<(ops node:$widthMinus1, node:$flippedMa
   return (2 << countTrailingZeros(flippedMask)) == shiftedBit;
 }]>;
 
+
+
+
+
+
+
+
+
+
+
 // SDNode transform functions
 
 def trailing1sPlus1 : SDNodeXForm<imm, [{
@@ -1335,6 +1430,345 @@ def : Pat<(sra (add (sub GPR:$rd, GPR:$rs1), (roundBit GPR:$rs2)), GPR:$rs2),
           (P_SUBRNR  GPR:$rd, GPR:$rs1, GPR:$rs2)>;
 def : Pat<(srl (add (sub GPR:$rd, GPR:$rs1), (roundBit GPR:$rs2)), GPR:$rs2),
           (P_SUBURNR GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+
+}
+
+
+
+
+// Patterns for vectorial ALU operations
+class PatV2V2<SDPatternOperator OpNode, RVInst Inst>
+    : Pat<(OpNode PulpV2:$rs1, PulpV2:$rs2), (Inst PulpV2:$rs1, PulpV2:$rs2)>;
+
+class PatV4V4<SDPatternOperator OpNode, RVInst Inst>
+    : Pat<(OpNode PulpV4:$rs1, PulpV4:$rs2), (Inst PulpV4:$rs1, PulpV4:$rs2)>;
+
+class PatV2GPR<SDPatternOperator OpNode, RVInst Inst>
+    : Pat<(OpNode PulpV2:$rs1, (v2i16 (splat_vector GPR:$rs2))), (Inst PulpV2:$rs1, GPR:$rs2)>;
+
+class PatV4GPR<SDPatternOperator OpNode, RVInst Inst>
+    : Pat<(OpNode PulpV4:$rs1, (v4i8 (splat_vector GPR:$rs2))), (Inst PulpV4:$rs1, GPR:$rs2)>;
+
+class PatV2Simm6<SDPatternOperator OpNode, RVInst Inst>
+    : Pat<(OpNode PulpV2:$rs1, (v2i16 (splat_vector simm6:$imm))), (Inst PulpV2:$rs1, simm6:$imm)>;
+
+class PatV4Simm6<SDPatternOperator OpNode, RVInst Inst>
+    : Pat<(OpNode PulpV4:$rs1, (v4i8 (splat_vector simm6:$imm))), (Inst PulpV4:$rs1, simm6:$imm)>;
+
+class PatV2Uimm6<SDPatternOperator OpNode, RVInst Inst>
+    : Pat<(OpNode PulpV2:$rs1, (v2i16 (splat_vector uimm6:$imm))), (Inst PulpV2:$rs1, uimm6:$imm)>;
+
+class PatV4Uimm6<SDPatternOperator OpNode, RVInst Inst>
+    : Pat<(OpNode PulpV4:$rs1, (v4i8 (splat_vector uimm6:$imm))), (Inst PulpV4:$rs1, uimm6:$imm)>;
+
+multiclass GeneralSVectorPattern<SDPatternOperator OpNode, string Inst> {
+  def : PatV2V2   <OpNode, !cast<RVInst>("PV_" # Inst # "_H")>;
+  def : PatV2GPR  <OpNode, !cast<RVInst>("PV_" # Inst # "_SC_H")>;
+  def : PatV2Simm6<OpNode, !cast<RVInst>("PV_" # Inst # "_SCI_H")>;
+  def : PatV4V4   <OpNode, !cast<RVInst>("PV_" # Inst # "_B")>;
+  def : PatV4GPR  <OpNode, !cast<RVInst>("PV_" # Inst # "_SC_B")>;
+  def : PatV4Simm6<OpNode, !cast<RVInst>("PV_" # Inst # "_SCI_B")>;
+}
+
+multiclass GeneralUVectorPattern<SDPatternOperator OpNode, string Inst> {
+  def : PatV2V2   <OpNode, !cast<RVInst>("PV_" # Inst # "_H")>;
+  def : PatV2GPR  <OpNode, !cast<RVInst>("PV_" # Inst # "_SC_H")>;
+  def : PatV2Uimm6<OpNode, !cast<RVInst>("PV_" # Inst # "_SCI_H")>;
+  def : PatV4V4   <OpNode, !cast<RVInst>("PV_" # Inst # "_B")>;
+  def : PatV4GPR  <OpNode, !cast<RVInst>("PV_" # Inst # "_SC_B")>;
+  def : PatV4Uimm6<OpNode, !cast<RVInst>("PV_" # Inst # "_SCI_B")>;
+}
+
+class vec_avg<ValueType vectype, SDNode shiftOp>
+    : PatFrag<(ops node:$rs1, node:$rs2),
+              (shiftOp (add node:$rs1, node:$rs2),
+                       (vectype (splat_vector (i32 1))))>;
+
+
+let Predicates = [HasNonStdExtPulp] in {
+
+defm : GeneralSVectorPattern<add, "ADD">;
+defm : GeneralSVectorPattern<sub, "SUB">;
+defm : GeneralSVectorPattern<smin, "MIN">;
+defm : GeneralUVectorPattern<umin, "MINU">;
+defm : GeneralSVectorPattern<smax, "MAX">;
+defm : GeneralUVectorPattern<umax, "MAXU">;
+defm : GeneralUVectorPattern<srl, "SRL">;
+defm : GeneralUVectorPattern<sra, "SRA">;
+defm : GeneralUVectorPattern<shl, "SLL">;
+defm : GeneralSVectorPattern<or, "OR">;
+defm : GeneralSVectorPattern<xor, "XOR">;
+defm : GeneralSVectorPattern<and, "AND">;
+
+def : PatV2V2<vec_avg<v2i16, sra>, PV_AVG_H>;
+def : PatV2GPR<vec_avg<v2i16, sra>, PV_AVG_SC_H>;
+def : PatV2Simm6<vec_avg<v2i16, sra>, PV_AVG_SCI_H>;
+def : PatV4V4<vec_avg<v4i8, sra>, PV_AVG_B>;
+def : PatV4GPR<vec_avg<v4i8, sra>, PV_AVG_SC_B>;
+def : PatV4Simm6<vec_avg<v4i8, sra>, PV_AVG_SCI_B>;
+
+def : PatV2V2<vec_avg<v2i16, srl>, PV_AVGU_H>;
+def : PatV2GPR<vec_avg<v2i16, srl>, PV_AVGU_SC_H>;
+def : PatV2Simm6<vec_avg<v2i16, srl>, PV_AVGU_SCI_H>;
+def : PatV4V4<vec_avg<v4i8, srl>, PV_AVGU_B>;
+def : PatV4GPR<vec_avg<v4i8, srl>, PV_AVGU_SC_B>;
+def : PatV4Simm6<vec_avg<v4i8, srl>, PV_AVGU_SCI_B>;
+
+def : Pat<(abs PulpV2:$rs1), (PV_ABS_H PulpV2:$rs1)>;
+def : Pat<(abs PulpV4:$rs1), (PV_ABS_B PulpV4:$rs1)>;
+
+
+def : Pat<(i32 (vector_extract (v2i16 PulpV2:$rs1), uimm6:$index)),
+          (PV_EXTRACT_H PulpV2:$rs1, uimm6:$index)>;
+def : Pat<(i32 (vector_extract (v4i8 PulpV4:$rs1), uimm6:$index)),
+          (PV_EXTRACT_B PulpV4:$rs1, uimm6:$index)>;
+def : Pat<(i32 (sext_inreg (vector_extract PulpV2:$rs1, uimm6:$index), i16)),
+          (PV_EXTRACT_H PulpV2:$rs1, uimm6:$index)>;
+def : Pat<(i32 (sext_inreg (vector_extract PulpV4:$rs1, uimm6:$index), i8)),
+          (PV_EXTRACT_B PulpV4:$rs1, uimm6:$index)>;
+def : Pat<(i32 (and (vector_extract (v2i16 PulpV2:$rs1), uimm6:$index), 65535)),
+          (PV_EXTRACT_H PulpV2:$rs1, uimm6:$index)>;
+def : Pat<(i32 (and (vector_extract (v4i8 PulpV4:$rs1), uimm6:$index), 255)),
+          (PV_EXTRACT_B PulpV4:$rs1, uimm6:$index)>;
+def : Pat<(vector_insert PulpV2:$rd, GPR:$rs1, uimm6:$index),
+          (PV_INSERT_H PulpV2:$rd, GPR:$rs1, uimm6:$index)>;
+def : Pat<(vector_insert PulpV4:$rd, GPR:$rs1, uimm6:$index),
+          (PV_INSERT_B PulpV4:$rd, GPR:$rs1, uimm6:$index)>;
+
+
+let isCodeGenOnly = 1 in { // Helper for Patterns
+  def P_INSERTR_v2 : Pulp_ALU_rr_wb<0b1000000, 0b010, OPC_OP, "p.insertr", GPR, GPR, PulpV2>;
+  def P_INSERTR_v4 : Pulp_ALU_rr_wb<0b1000000, 0b010, OPC_OP, "p.insertr", GPR, GPR, PulpV4>;
+  def PV_SHUFFLE_H_GPR : Pulp_ALU_rr<0b1100000, 0b000, RISCVOpcode<0b1010111>, "pv.shuffle.h", PulpV2, GPR, GPR>;
+  def PV_SHUFFLE_B_GPR : Pulp_ALU_rr<0b1100000, 0b001, RISCVOpcode<0b1010111>, "pv.shuffle.b", PulpV4, GPR, GPR>;
+}
+
+// insert/extract without immediate index
+
+def : Pat<(vector_insert PulpV2:$rd, GPR:$rs1, GPR:$index),
+          (P_INSERTR_v2 PulpV2:$rd, GPR:$rs1,
+                     (P_INSERT (ADDI X0, 0b111100000), GPR:$index, 0, 4))>;
+def : Pat<(vector_insert PulpV4:$rd, GPR:$rs1, GPR:$index),
+          (P_INSERTR_v4 PulpV4:$rd, GPR:$rs1,
+                     (P_INSERT (ADDI X0, 0b11100000), GPR:$index, 1, 3))>;
+
+def : Pat<(i32 (vector_extract PulpV2:$rs1, GPR:$rs2)),
+          (PV_SHUFFLE_H_GPR PulpV2:$rs1, GPR:$rs2)>;
+def : Pat<(i32 (vector_extract PulpV4:$rs1, GPR:$rs2)),
+          (PV_SHUFFLE_B_GPR PulpV4:$rs1, GPR:$rs2)>;
+
+}
+
+def sbextract : PatFrag<(ops node:$vector, node:$index),
+                        (sext_inreg (vector_extract (v4i8 node:$vector), node:$index), i8)>;
+def ubextract : PatFrag<(ops node:$vector, node:$index),
+                        (and (vector_extract (v4i8 node:$vector), node:$index), 255)>;
+def shextract : PatFrag<(ops node:$vector, node:$index),
+                        (sext_inreg (vector_extract (v2i16 node:$vector), node:$index), i16)>;
+def uhextract : PatFrag<(ops node:$vector, node:$index),
+                        (and (vector_extract (v2i16 node:$vector), node:$index), 65535)>;
+
+class dotp_h<PatFrag extractOp1, PatFrag extractOp2>
+    : PatFrag<(ops node:$rs1, node:$rs2),
+              (add (mul (extractOp1 node:$rs1, 0), (extractOp2 node:$rs2, 0)),
+                   (mul (extractOp1 node:$rs1, 1), (extractOp2 node:$rs2, 1)))>;
+
+def dotup_h  : dotp_h<uhextract, uhextract>;
+def dotusp_h : dotp_h<uhextract, shextract>;
+def dotsp_h  : dotp_h<shextract, shextract>;
+
+class dotp_sc_h<PatFrag extractOp>
+    : PatFrag<(ops node:$rs1, node:$sc),
+              (mul (add (extractOp node:$rs1, 0), (extractOp node:$rs1, 1)), node:$sc)>;
+
+def dotup_sc_h : dotp_sc_h<uhextract>;
+def dotsp_sc_h : dotp_sc_h<shextract>;
+
+// Tablegen only permutes 3 operands, so we have to permute the 4th operand manually
+def sum4 : PatFrags<(ops node:$a, node:$b, node:$c, node:$d),
+                    [(add (add (add node:$a, node:$b), node:$c), node:$d),
+                     (add (add (add node:$a, node:$b), node:$d), node:$c),
+                     (add (add (add node:$a, node:$d), node:$c), node:$b),
+                     (add (add (add node:$d, node:$b), node:$c), node:$a),
+                     (add (add node:$a, node:$b), (add node:$c, node:$d))]>;
+
+class dotp_b<PatFrag extractOp1, PatFrag extractOp2>
+    : PatFrag<(ops node:$rs1, node:$rs2),
+              (sum4 (mul (extractOp1 node:$rs1, 0), (extractOp2 node:$rs2, 0)),
+                    (mul (extractOp1 node:$rs1, 1), (extractOp2 node:$rs2, 1)),
+                    (mul (extractOp1 node:$rs1, 2), (extractOp2 node:$rs2, 2)),
+                    (mul (extractOp1 node:$rs1, 3), (extractOp2 node:$rs2, 3)))>;
+
+def dotup_b  : dotp_b<ubextract, ubextract>;
+def dotusp_b : dotp_b<ubextract, sbextract>;
+def dotsp_b  : dotp_b<sbextract, sbextract>;
+
+class dotp_sc_b<PatFrag extractOp>
+    : PatFrag<(ops node:$rs1, node:$sc),
+              (mul (sum4 (extractOp node:$rs1, 0),
+                         (extractOp node:$rs1, 1),
+                         (extractOp node:$rs1, 2),
+                         (extractOp node:$rs1, 3)), node:$sc)>;
+
+def dotup_sc_b : dotp_sc_b<ubextract>;
+def dotsp_sc_b : dotp_sc_b<sbextract>;
+
+let Predicates = [HasNonStdExtPulp] in {
+
+def : PatV2V2<dotup_h, PV_DOTUP_H>;
+
+def : Pat<(dotup_sc_h PulpV2:$rs1, (and GPR:$rs2, 65535)),
+          (PV_DOTUP_SC_H PulpV2:$rs1, GPR:$rs2)>;
+
+def : Pat<(dotup_sc_h PulpV2:$rs1, uimm6:$sci),
+          (PV_DOTUP_SCI_H PulpV2:$rs1, uimm6:$sci)>;
+
+def : PatV4V4<dotup_b, PV_DOTUP_B>;
+
+def : Pat<(dotup_sc_b PulpV4:$rs1, (and GPR:$rs2, 255)),
+          (PV_DOTUP_SC_B PulpV4:$rs1, GPR:$rs2)>;
+
+def : Pat<(dotup_sc_b PulpV4:$rs1, uimm6:$sci),
+          (PV_DOTUP_SCI_B PulpV4:$rs1, uimm6:$sci)>;
+
+
+def : PatV2V2<dotusp_h , PV_DOTUSP_H>;
+
+def : Pat<(dotup_sc_h PulpV2:$rs1, (sext_inreg GPR:$rs2, i16)),
+          (PV_DOTUSP_SC_H PulpV2:$rs1, GPR:$rs2)>;
+
+def : Pat<(dotup_sc_h PulpV2:$rs1, simm6:$sci),
+          (PV_DOTUSP_SCI_H PulpV2:$rs1, simm6:$sci)>;
+
+def : PatV4V4<dotusp_b, PV_DOTUSP_B>;
+
+def : Pat<(dotup_sc_b PulpV4:$rs1, (sext_inreg GPR:$rs2, i8)),
+          (PV_DOTUSP_SC_B PulpV4:$rs1, GPR:$rs2)>;
+
+def : Pat<(dotup_sc_b PulpV4:$rs1, simm6:$sci),
+          (PV_DOTUSP_SCI_B PulpV4:$rs1, simm6:$sci)>;
+
+
+def : PatV2V2<dotsp_h , PV_DOTSP_H>;
+
+def : Pat<(dotsp_sc_h PulpV2:$rs1, (sext_inreg GPR:$rs2, i16)),
+          (PV_DOTSP_SC_H PulpV2:$rs1, GPR:$rs2)>;
+
+def : Pat<(dotsp_sc_h PulpV2:$rs1, simm6:$sci),
+          (PV_DOTSP_SCI_H PulpV2:$rs1, simm6:$sci)>;
+
+def : PatV4V4<dotsp_b, PV_DOTSP_B>;
+
+def : Pat<(dotsp_sc_b PulpV4:$rs1, (sext_inreg GPR:$rs2, i8)),
+          (PV_DOTSP_SC_B PulpV4:$rs1, GPR:$rs2)>;
+
+def : Pat<(dotsp_sc_b PulpV4:$rs1, simm6:$sci),
+          (PV_DOTSP_SCI_B PulpV4:$rs1, simm6:$sci)>;
+
+
+
+
+
+def : Pat<(add GPR:$rd, (dotup_h PulpV2:$rs1, PulpV2:$rs2)),
+          (PV_SDOTUP_H GPR:$rd, PulpV2:$rs1, PulpV2:$rs2)>;
+
+def : Pat<(add GPR:$rd, (dotup_sc_h PulpV2:$rs1, (and GPR:$rs2, 65535))),
+          (PV_SDOTUP_SC_H GPR:$rd, PulpV2:$rs1, GPR:$rs2)>;
+
+def : Pat<(add GPR:$rd, (dotup_sc_h PulpV2:$rs1, uimm6:$sci)),
+          (PV_SDOTUP_SCI_H GPR:$rd, PulpV2:$rs1, uimm6:$sci)>;
+
+def : Pat<(add GPR:$rd, (dotup_b PulpV4:$rs1, PulpV4:$rs2)),
+          (PV_SDOTUP_B GPR:$rd, PulpV4:$rs1, PulpV4:$rs2)>;
+
+def : Pat<(add GPR:$rd, (dotup_sc_b PulpV4:$rs1, (and GPR:$rs2, 255))),
+          (PV_SDOTUP_SC_B GPR:$rd, PulpV4:$rs1, GPR:$rs2)>;
+
+def : Pat<(add GPR:$rd, (dotup_sc_b PulpV4:$rs1, uimm6:$sci)),
+          (PV_SDOTUP_SCI_B GPR:$rd, PulpV4:$rs1, uimm6:$sci)>;
+
+
+def : Pat<(add GPR:$rd, (dotusp_h PulpV2:$rs1, PulpV2:$rs2)),
+          (PV_SDOTUSP_H GPR:$rd, PulpV2:$rs1, PulpV2:$rs2)>;
+
+def : Pat<(add GPR:$rd, (dotup_sc_h PulpV2:$rs1, (sext_inreg GPR:$rs2, i16))),
+          (PV_SDOTUSP_SC_H GPR:$rd, PulpV2:$rs1, GPR:$rs2)>;
+
+def : Pat<(add GPR:$rd, (dotup_sc_h PulpV2:$rs1, simm6:$sci)),
+          (PV_SDOTUSP_SCI_H GPR:$rd, PulpV2:$rs1, simm6:$sci)>;
+
+def : Pat<(add GPR:$rd, (dotusp_b PulpV4:$rs1, PulpV4:$rs2)),
+          (PV_SDOTUSP_B GPR:$rd, PulpV4:$rs1, PulpV4:$rs2)>;
+
+def : Pat<(add GPR:$rd, (dotup_sc_b PulpV4:$rs1, (sext_inreg GPR:$rs2, i8))),
+          (PV_SDOTUSP_SC_B GPR:$rd, PulpV4:$rs1, GPR:$rs2)>;
+
+def : Pat<(add GPR:$rd, (dotup_sc_b PulpV4:$rs1, simm6:$sci)),
+          (PV_SDOTUSP_SCI_B GPR:$rd, PulpV4:$rs1, simm6:$sci)>;
+
+
+def : Pat<(add GPR:$rd, (dotsp_h PulpV2:$rs1, PulpV2:$rs2)),
+          (PV_SDOTSP_H GPR:$rd, PulpV2:$rs1, PulpV2:$rs2)>;
+
+def : Pat<(add GPR:$rd, (dotsp_sc_h PulpV2:$rs1, (sext_inreg GPR:$rs2, i16))),
+          (PV_SDOTSP_SC_H GPR:$rd, PulpV2:$rs1, GPR:$rs2)>;
+
+def : Pat<(add GPR:$rd, (dotsp_sc_h PulpV2:$rs1, simm6:$sci)),
+          (PV_SDOTSP_SCI_H GPR:$rd, PulpV2:$rs1, simm6:$sci)>;
+
+def : Pat<(add GPR:$rd, (dotsp_b PulpV4:$rs1, PulpV4:$rs2)),
+          (PV_SDOTSP_B GPR:$rd, PulpV4:$rs1, PulpV4:$rs2)>;
+
+def : Pat<(add GPR:$rd, (dotsp_sc_b PulpV4:$rs1, (sext_inreg GPR:$rs2, i8))),
+          (PV_SDOTSP_SC_B GPR:$rd, PulpV4:$rs1, GPR:$rs2)>;
+
+def : Pat<(add GPR:$rd, (dotsp_sc_b PulpV4:$rs1, simm6:$sci)),
+          (PV_SDOTSP_SCI_B GPR:$rd, PulpV4:$rs1, simm6:$sci)>;
+
+
+// TODO shuffle instructions
+
+
+
+
+
+
+
+
+
+def : Pat<(v2i16 (build_vector GPR:$rs1, GPR:$rs2)),
+          (PV_PACK_H GPR:$rs2, GPR:$rs1)>;
+def : Pat<(v4i8 (build_vector GPR:$rs1, GPR:$rs2, GPR:$rs3, GPR:$rs4)),
+          (PV_PACKLO_B (PV_PACKHI_B_nowb GPR:$rs4, GPR:$rs3), GPR:$rs2, GPR:$rs1)>;
+
+def : Pat<(v2i16 (splat_vector GPR:$rs1)), (PV_PACK_H GPR:$rs1, GPR:$rs1)>;
+def : Pat<(v4i8 (splat_vector GPR:$rs1)), (PV_ADD_SC_B X0, GPR:$rs1)>;
+
+
+
+defm : GeneralSVectorPattern<seteq, "CMPEQ">;
+defm : GeneralSVectorPattern<setne, "CMPNE">;
+defm : GeneralSVectorPattern<setgt, "CMPGT">;
+defm : GeneralSVectorPattern<setge, "CMPGE">;
+defm : GeneralSVectorPattern<setlt, "CMPLT">;
+defm : GeneralSVectorPattern<setle, "CMPLE">;
+defm : GeneralUVectorPattern<setugt, "CMPGTU">;
+defm : GeneralUVectorPattern<setuge, "CMPGEU">;
+defm : GeneralUVectorPattern<setult, "CMPLTU">;
+defm : GeneralUVectorPattern<setule, "CMPLEU">;
+
+
+
+
+def : Pat<(v2i16 (bitconvert GPR:$rs1)), (v2i16 PulpV2:$rs1)>;
+def : Pat<(v4i8 (bitconvert GPR:$rs1)), (v4i8 PulpV4:$rs1)>;
+def : Pat<(i32 (bitconvert PulpV2:$rs1)), (i32 GPR:$rs1)>;
+def : Pat<(i32 (bitconvert PulpV4:$rs1)), (i32 GPR:$rs1)>;
+
+
+
+
+
 
 
 

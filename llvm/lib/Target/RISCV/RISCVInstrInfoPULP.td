@@ -970,13 +970,13 @@ multiclass Pulp_Store<bits<2> funct2, string opcodestr> {
 
   def _rr_PostIncrement
       : RVInstR<0b0000000, {1, funct2}, RISCVOpcode<0b0101011>, (outs GPR:$rs1_wb),
-                (ins GPR:$rs2, GPR:$rs3, GPR:$rs1), opcodestr, "$rs2, ${rs3}(${rs1}!)">{
+                (ins GPR:$rs2, GPR:$rs1, GPR:$rd), opcodestr, "$rs2, ${rd}(${rs1}!)">{
     let Constraints = "$rs1 = $rs1_wb";
   }
 
   def _rr
       : RVInstR<0b0000000, {1, funct2}, RISCVOpcode<0b0100011>, (outs),
-                (ins GPR:$rs2, GPR:$rs3, GPR:$rs1), opcodestr, "$rs2, ${rs3}(${rs1})">;
+                (ins GPR:$rs2, GPR:$rs1, GPR:$rd), opcodestr, "$rs2, ${rd}(${rs1})">;
 }
 
 let Predicates = [HasNonStdExtPulp] in {
@@ -1766,7 +1766,42 @@ def : Pat<(i32 (bitconvert PulpV2:$rs1)), (i32 GPR:$rs1)>;
 def : Pat<(i32 (bitconvert PulpV4:$rs1)), (i32 GPR:$rs1)>;
 
 
+// Patterns for load/store instructions
 
+// post increment loads need custom selection, because tablegen can't deal with
+// multiple result values
+
+def : Pat<(sextloadi8 (add GPR:$base, GPR:$offset)),
+          (P_LB_rr GPR:$base, GPR:$offset)>;
+def : Pat<(zextloadi8 (add GPR:$base, GPR:$offset)),
+          (P_LBU_rr GPR:$base, GPR:$offset)>;
+def : Pat<(sextloadi16 (add GPR:$base, GPR:$offset)),
+          (P_LH_rr GPR:$base, GPR:$offset)>;
+def : Pat<(zextloadi16 (add GPR:$base, GPR:$offset)),
+          (P_LHU_rr GPR:$base, GPR:$offset)>;
+def : Pat<(load (add GPR:$base, GPR:$offset)),
+          (P_LW_rr GPR:$base, GPR:$offset)>;
+
+def : Pat<(post_truncsti8 GPR:$val, GPR:$base, simm12:$offset),
+          (P_SB_ri_PostIncrement GPR:$val, GPR:$base, simm12:$offset)>;
+def : Pat<(post_truncsti16 GPR:$val, GPR:$base, simm12:$offset),
+          (P_SH_ri_PostIncrement GPR:$val, GPR:$base, simm12:$offset)>;
+def : Pat<(post_store GPR:$val, GPR:$base, simm12:$offset),
+          (P_SW_ri_PostIncrement GPR:$val, GPR:$base, simm12:$offset)>;
+
+def : Pat<(post_truncsti8 GPR:$val, GPR:$base, GPR:$offset),
+          (P_SB_rr_PostIncrement GPR:$val, GPR:$base, GPR:$offset)>;
+def : Pat<(post_truncsti16 GPR:$val, GPR:$base, GPR:$offset),
+          (P_SH_rr_PostIncrement GPR:$val, GPR:$base, GPR:$offset)>;
+def : Pat<(post_store GPR:$val, GPR:$base, GPR:$offset),
+          (P_SW_rr_PostIncrement GPR:$val, GPR:$base, GPR:$offset)>;
+
+def : Pat<(truncstorei8 GPR:$val, (add GPR:$base, GPR:$offset)),
+          (P_SB_rr GPR:$val, GPR:$base, GPR:$offset)>;
+def : Pat<(truncstorei16 GPR:$val, (add GPR:$base, GPR:$offset)),
+          (P_SH_rr GPR:$val, GPR:$base, GPR:$offset)>;
+def : Pat<(store GPR:$val, (add GPR:$base, GPR:$offset)),
+          (P_SW_rr GPR:$val, GPR:$base, GPR:$offset)>;
 
 
 
@@ -1975,13 +2010,13 @@ def : Pat<(int_riscv_pulp_OffsetedRead GPR:$rs1, GPR:$rs2), (P_LW_rr GPR:$rs1, G
 //def : Pat<(int_riscv_pulp_OffsetedReadHalf GPR:$rs1, GPR:$rs2), (P_LH_rr GPR:$rs1, GPR:$rs2)>;
 //def : Pat<(int_riscv_pulp_OffsetedReadByte GPR:$rs1, GPR:$rs2), (P_LB_rr GPR:$rs1, GPR:$rs2)>;
 
-def : Pat<(int_riscv_pulp_OffsetedWrite GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SW_rr GPR:$rs2, GPR:$rs3, GPR:$rs1)>;
-def : Pat<(int_riscv_pulp_OffsetedWriteHalf GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SH_rr GPR:$rs2, GPR:$rs3, GPR:$rs1)>;
-def : Pat<(int_riscv_pulp_OffsetedWriteByte GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SB_rr GPR:$rs2, GPR:$rs3, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_OffsetedWrite GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SW_rr GPR:$rs2, GPR:$rs1, GPR:$rs3)>;
+def : Pat<(int_riscv_pulp_OffsetedWriteHalf GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SH_rr GPR:$rs2, GPR:$rs1, GPR:$rs3)>;
+def : Pat<(int_riscv_pulp_OffsetedWriteByte GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SB_rr GPR:$rs2, GPR:$rs1, GPR:$rs3)>;
 
 
 def : Pat<(int_riscv_pulp_read_base_off GPR:$rs1, GPR:$rs2), (P_LW_rr GPR:$rs1, GPR:$rs2)>;
-def : Pat<(int_riscv_pulp_write_base_off GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SW_rr GPR:$rs2, GPR:$rs3, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_write_base_off GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SW_rr GPR:$rs2, GPR:$rs1, GPR:$rs3)>;
 
 def : Pat<(int_riscv_pulp_spr_read_vol uimm12:$imm12), (CSRRS csr_sysreg:$imm12, X0)>;
 def : Pat<(int_riscv_pulp_spr_read uimm12:$imm12), (CSRRS csr_sysreg:$imm12, X0)>;

@@ -705,26 +705,30 @@ let Predicates = [HasNonStdExtPulp] in {
 def P_MAC :      Pulp_ALU_rr_wb<0b0100001, 0b000, OPC_OP, "p.mac">;
 def P_MSU :      Pulp_ALU_rr_wb<0b0100001, 0b001, OPC_OP, "p.msu">;
 
-def P_MULS :     Pulp_ALU_rr<0b1000000, 0b000, RISCVOpcode<0b1011011>, "p.muls">;
-def P_MULHHS :   Pulp_ALU_rr<0b1100000, 0b000, RISCVOpcode<0b1011011>, "p.mulhhs">;
-def P_MULSN :    Pulp_ALU_rri    <0b10, 0b000, RISCVOpcode<0b1011011>, "p.mulsn">;
-def P_MULHHSN :  Pulp_ALU_rri    <0b11, 0b000, RISCVOpcode<0b1011011>, "p.mulhhsn">;
-def P_MULSRN :   Pulp_ALU_rri    <0b10, 0b100, RISCVOpcode<0b1011011>, "p.mulsrn">;
-def P_MULHHSRN : Pulp_ALU_rri    <0b11, 0b100, RISCVOpcode<0b1011011>, "p.mulhhsrn">;
-def P_MULU :     Pulp_ALU_rr<0b0000000, 0b000, RISCVOpcode<0b1011011>, "p.mulu">;
-def P_MULHHU :   Pulp_ALU_rr<0b0100000, 0b000, RISCVOpcode<0b1011011>, "p.mulhhu">;
-def P_MULUN :    Pulp_ALU_rri    <0b00, 0b000, RISCVOpcode<0b1011011>, "p.mulun">;
-def P_MULHHUN :  Pulp_ALU_rri    <0b01, 0b000, RISCVOpcode<0b1011011>, "p.mulhhun">;
-def P_MULURN :   Pulp_ALU_rri    <0b00, 0b100, RISCVOpcode<0b1011011>, "p.mulurn">;
-def P_MULHHURN : Pulp_ALU_rri    <0b01, 0b100, RISCVOpcode<0b1011011>, "p.mulhhurn">;
-def P_MACSN :    Pulp_ALU_rri_wb <0b10, 0b001, RISCVOpcode<0b1011011>, "p.macsn">;
-def P_MACHHSN :  Pulp_ALU_rri_wb <0b11, 0b001, RISCVOpcode<0b1011011>, "p.machhsn">;
-def P_MACSRN :   Pulp_ALU_rri_wb <0b10, 0b101, RISCVOpcode<0b1011011>, "p.macsrn">;
-def P_MACHHSRN : Pulp_ALU_rri_wb <0b11, 0b101, RISCVOpcode<0b1011011>, "p.machhsrn">;
-def P_MACUN :    Pulp_ALU_rri_wb <0b00, 0b001, RISCVOpcode<0b1011011>, "p.macun">;
-def P_MACHHUN :  Pulp_ALU_rri_wb <0b01, 0b001, RISCVOpcode<0b1011011>, "p.machhun">;
-def P_MACURN :   Pulp_ALU_rri_wb <0b00, 0b101, RISCVOpcode<0b1011011>, "p.macurn">;
-def P_MACHHURN : Pulp_ALU_rri_wb <0b01, 0b101, RISCVOpcode<0b1011011>, "p.machhurn">;
+def P_MULS :     Pulp_ALU_rr   <0b1000000, 0b000, RISCVOpcode<0b1011011>, "p.muls">;
+def P_MULHHS :   Pulp_ALU_rr   <0b1100000, 0b000, RISCVOpcode<0b1011011>, "p.mulhhs">;
+def P_MULSN :    Pulp_ALU_rri       <0b10, 0b000, RISCVOpcode<0b1011011>, "p.mulsn">;
+def P_MULHHSN :  Pulp_ALU_rri       <0b11, 0b000, RISCVOpcode<0b1011011>, "p.mulhhsn">;
+def P_MULSRN :   Pulp_ALU_rri       <0b10, 0b100, RISCVOpcode<0b1011011>, "p.mulsrn">;
+def P_MULHHSRN : Pulp_ALU_rri       <0b11, 0b100, RISCVOpcode<0b1011011>, "p.mulhhsrn">;
+def P_MULU :     Pulp_ALU_rr   <0b0000000, 0b000, RISCVOpcode<0b1011011>, "p.mulu">;
+def P_MULHHU :   Pulp_ALU_rr   <0b0100000, 0b000, RISCVOpcode<0b1011011>, "p.mulhhu">;
+def P_MULUN :    Pulp_ALU_rri       <0b00, 0b000, RISCVOpcode<0b1011011>, "p.mulun">;
+def P_MULHHUN :  Pulp_ALU_rri       <0b01, 0b000, RISCVOpcode<0b1011011>, "p.mulhhun">;
+def P_MULURN :   Pulp_ALU_rri       <0b00, 0b100, RISCVOpcode<0b1011011>, "p.mulurn">;
+def P_MULHHURN : Pulp_ALU_rri       <0b01, 0b100, RISCVOpcode<0b1011011>, "p.mulhhurn">;
+def P_MACS :     Pulp_ALU_rr_wb<0b1000000, 0b001, RISCVOpcode<0b1011011>, "p.macs">;
+def P_MACHHS :   Pulp_ALU_rr_wb<0b1100000, 0b001, RISCVOpcode<0b1011011>, "p.machhs">;
+def P_MACSN :    Pulp_ALU_rri_wb    <0b10, 0b001, RISCVOpcode<0b1011011>, "p.macsn">;
+def P_MACHHSN :  Pulp_ALU_rri_wb    <0b11, 0b001, RISCVOpcode<0b1011011>, "p.machhsn">;
+def P_MACSRN :   Pulp_ALU_rri_wb    <0b10, 0b101, RISCVOpcode<0b1011011>, "p.macsrn">;
+def P_MACHHSRN : Pulp_ALU_rri_wb    <0b11, 0b101, RISCVOpcode<0b1011011>, "p.machhsrn">;
+def P_MACU :     Pulp_ALU_rr_wb<0b0000000, 0b001, RISCVOpcode<0b1011011>, "p.macu">;
+def P_MACHHU :   Pulp_ALU_rr_wb<0b0100000, 0b001, RISCVOpcode<0b1011011>, "p.machhu">;
+def P_MACUN :    Pulp_ALU_rri_wb    <0b00, 0b001, RISCVOpcode<0b1011011>, "p.macun">;
+def P_MACHHUN :  Pulp_ALU_rri_wb    <0b01, 0b001, RISCVOpcode<0b1011011>, "p.machhun">;
+def P_MACURN :   Pulp_ALU_rri_wb    <0b00, 0b101, RISCVOpcode<0b1011011>, "p.macurn">;
+def P_MACHHURN : Pulp_ALU_rri_wb    <0b01, 0b101, RISCVOpcode<0b1011011>, "p.machhurn">;
 }
 
 def uimm6 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<6>(Imm);}]> {
@@ -1437,6 +1441,93 @@ def : Pat<(brcond (XLenVT (seteq GPR:$rs1, simm5:$imm5)), bb:$imm12),
           (P_BEQIMM GPR:$rs1, simm5:$imm5, simm13_lsb0:$imm12)>;
 def : Pat<(brcond (XLenVT (setne GPR:$rs1, simm5:$imm5)), bb:$imm12),
           (P_BNEIMM GPR:$rs1, simm5:$imm5, simm13_lsb0:$imm12)>;
+
+}
+
+// Patterns for multiply operations
+
+def muls : PatFrag<(ops node:$rs1, node:$rs2),
+                   (mul (sext_inreg node:$rs1, i16),
+                        (sext_inreg node:$rs2, i16))>;
+def mulhhs : PatFrag<(ops node:$rs1, node:$rs2),
+                     (mul (sra node:$rs1, (i32 16)),
+                          (sra node:$rs2, (i32 16)))>;
+def mulu : PatFrag<(ops node:$rs1, node:$rs2),
+                   (mul (and node:$rs1, 65535),
+                        (and node:$rs2, 65535))>;
+def mulhhu : PatFrag<(ops node:$rs1, node:$rs2),
+                     (mul (srl node:$rs1, (i32 16)),
+                          (srl node:$rs2, (i32 16)))>;
+
+def macs : PatFrag<(ops node:$rd, node:$rs1, node:$rs2),
+                   (add node:$rd, (muls node:$rs1, node:$rs2))>;
+def machhs : PatFrag<(ops node:$rd, node:$rs1, node:$rs2),
+                     (add node:$rd, (mulhhs node:$rs1, node:$rs2))>;
+def macu : PatFrag<(ops node:$rd, node:$rs1, node:$rs2),
+                   (add node:$rd, (mulu node:$rs1, node:$rs2))>;
+def machhu : PatFrag<(ops node:$rd, node:$rs1, node:$rs2),
+                     (add node:$rd, (mulhhu node:$rs1, node:$rs2))>;
+
+
+let Predicates = [HasNonStdExtPulp] in {
+
+def : Pat<(add GPR:$rd, (mul GPR:$rs1, GPR:$rs2)),
+          (P_MAC GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(sub GPR:$rd, (mul GPR:$rs1, GPR:$rs2)),
+          (P_MSU GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+
+def : Pat<(muls GPR:$rs1, GPR:$rs2),
+          (P_MULS GPR:$rs1, GPR:$rs2)>;
+def : Pat<(mulhhs GPR:$rs1, GPR:$rs2),
+          (P_MULHHS GPR:$rs1, GPR:$rs2)>;
+def : Pat<(sra (muls GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_MULSN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(sra (mulhhs GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_MULHHSN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(shiftRound (muls GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_MULSRN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(shiftRound (mulhhs GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_MULHHSRN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+
+def : Pat<(mulu GPR:$rs1, GPR:$rs2),
+          (P_MULU GPR:$rs1, GPR:$rs2)>;
+def : Pat<(mulhhu GPR:$rs1, GPR:$rs2),
+          (P_MULHHU GPR:$rs1, GPR:$rs2)>;
+def : Pat<(srl (mulu GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_MULUN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(srl (mulhhu GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_MULHHUN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(ushiftRound (mulu GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_MULURN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(ushiftRound (mulhhu GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_MULHHURN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+
+def : Pat<(macs GPR:$rd, GPR:$rs1, GPR:$rs2),
+          (P_MACS GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(machhs GPR:$rd, GPR:$rs1, GPR:$rs2),
+          (P_MACHHS GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(sra (macs GPR:$rd, GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_MACSN GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(sra (machhs GPR:$rd, GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_MACHHSN GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(shiftRound (macs GPR:$rd, GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_MACSRN GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(shiftRound (machhs GPR:$rd, GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_MACHHSRN GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+
+def : Pat<(macu GPR:$rd, GPR:$rs1, GPR:$rs2),
+          (P_MACU GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(machhu GPR:$rd, GPR:$rs1, GPR:$rs2),
+          (P_MACHHU GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(srl (macu GPR:$rd, GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_MACUN GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(srl (machhu GPR:$rd, GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_MACHHUN GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(ushiftRound (macu GPR:$rd, GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_MACURN GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(ushiftRound (machhu GPR:$rd, GPR:$rs1, GPR:$rs2), uimm5:$Is3),
+          (P_MACHHURN GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+
 
 }
 

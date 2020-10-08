@@ -1431,6 +1431,13 @@ def : Pat<(sra (add (sub GPR:$rd, GPR:$rs1), (roundBit GPR:$rs2)), GPR:$rs2),
 def : Pat<(srl (add (sub GPR:$rd, GPR:$rs1), (roundBit GPR:$rs2)), GPR:$rs2),
           (P_SUBURNR GPR:$rd, GPR:$rs1, GPR:$rs2)>;
 
+
+// Patterns for immediate branching Operations
+def : Pat<(brcond (XLenVT (seteq GPR:$rs1, simm5:$imm5)), bb:$imm12),
+          (P_BEQIMM GPR:$rs1, simm5:$imm5, simm13_lsb0:$imm12)>;
+def : Pat<(brcond (XLenVT (setne GPR:$rs1, simm5:$imm5)), bb:$imm12),
+          (P_BNEIMM GPR:$rs1, simm5:$imm5, simm13_lsb0:$imm12)>;
+
 }
 
 

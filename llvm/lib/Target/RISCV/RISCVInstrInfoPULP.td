@@ -1824,14 +1824,17 @@ def : Pat<(add GPR:$rd, (dotsp_sc_b PulpV4:$rs1, simm6:$sci)),
           (PV_SDOTSP_SCI_B GPR:$rd, PulpV4:$rs1, simm6:$sci)>;
 
 
-// TODO shuffle instructions
 
+def : Pat<(v2i16 (build_vector (i32 (vector_extract PulpV2:$rs1, GPR:$index0)),
+                               (i32 (vector_extract PulpV2:$rs1, GPR:$index1)))),
+          (PV_SHUFFLE_H PulpV2:$rs1, (PV_PACK_H GPR:$index1, GPR:$index0))>;
 
-
-
-
-
-
+def : Pat<(v4i8 (build_vector (i32 (vector_extract PulpV4:$rs1, GPR:$index0)),
+                              (i32 (vector_extract PulpV4:$rs1, GPR:$index1)),
+                              (i32 (vector_extract PulpV4:$rs1, GPR:$index2)),
+                              (i32 (vector_extract PulpV4:$rs1, GPR:$index3)))),
+          (PV_SHUFFLE_B PulpV4:$rs1, (PV_PACKLO_B (PV_PACKHI_B_nowb GPR:$index3,
+                                     GPR:$index2), GPR:$index1, GPR:$index0))>;
 
 
 def : Pat<(v2i16 (build_vector GPR:$rs1, GPR:$rs2)),

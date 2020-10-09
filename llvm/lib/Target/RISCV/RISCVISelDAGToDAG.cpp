@@ -821,6 +821,48 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
                                              Base, Offset, Chain));
     return;
   }
+  case ISD::VECTOR_SHUFFLE: {
+    ShuffleVectorSDNode *Shuffle = cast<ShuffleVectorSDNode>(Node);
+    SDValue Vec0 = Shuffle->getOperand(0);
+    SDValue Vec1 = Shuffle->getOperand(1);
+    unsigned Opcode;
+    int imm;
+    if (Vec1->getOpcode() == ISD::UNDEF) {
+      if (VT == MVT::v2i16) {
+        Opcode = RISCV::PV_SHUFFLE_SCI_H;
+        imm = (Shuffle->getMaskElt(1) & 1) << 1;
+        imm |= Shuffle->getMaskElt(0) & 1;
+      } else {
+        switch (Shuffle->getMaskElt(3)) {
+          default:
+          case 0: Opcode = RISCV::PV_SHUFFLEI0_SCI_B; break;
+          case 1: Opcode = RISCV::PV_SHUFFLEI1_SCI_B; break;
+          case 2: Opcode = RISCV::PV_SHUFFLEI2_SCI_B; break;
+          case 3: Opcode = RISCV::PV_SHUFFLEI3_SCI_B; break;
+        }
+        imm = (Shuffle->getMaskElt(2) & 3) << 4;
+        imm |= (Shuffle->getMaskElt(1) & 3) << 2;
+        imm |= Shuffle->getMaskElt(0) & 3;
+      }
+      SDValue Imm = CurDAG->getTargetConstant(imm, SDLoc(Node), MVT::i32);
+      ReplaceNode(Node, CurDAG->getMachineNode(Opcode, DL, VT, Vec0, Imm));
+      return;
+    }
+    if (VT == MVT::v2i16) {
+      Opcode = RISCV::PV_SHUFFLE2_H;
+      imm = (Shuffle->getMaskElt(1) & 1) << 16;
+      imm |= Shuffle->getMaskElt(0) & 1;
+    } else {
+      Opcode = RISCV::PV_SHUFFLE2_B;
+      imm  = (Shuffle->getMaskElt(3) & 3) << 24;
+      imm |= (Shuffle->getMaskElt(2) & 3) << 16;
+      imm |= (Shuffle->getMaskElt(1) & 3) << 8;
+      imm |=  Shuffle->getMaskElt(0) & 3;
+    }
+    SDValue Imm = SDValue(selectImm(CurDAG, DL, imm, MVT::i32), 0);
+    ReplaceNode(Node, CurDAG->getMachineNode(Opcode, DL, VT, Vec0, Vec1, Imm));
+    return;
+  }
   }
   }
 

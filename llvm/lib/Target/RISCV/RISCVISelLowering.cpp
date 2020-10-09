@@ -379,8 +379,6 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::ROTR, XLenVT, Legal);
     setOperationAction(ISD::SPLAT_VECTOR, MVT::v2i16, Legal);
     setOperationAction(ISD::SPLAT_VECTOR, MVT::v4i8, Legal);
-    setOperationAction(ISD::VECTOR_SHUFFLE, MVT::v2i16, Expand);
-    setOperationAction(ISD::VECTOR_SHUFFLE, MVT::v4i8, Expand);
     setOperationAction(ISD::VSELECT, MVT::v2i16, Expand);
     setOperationAction(ISD::VSELECT, MVT::v4i8, Expand);
   }

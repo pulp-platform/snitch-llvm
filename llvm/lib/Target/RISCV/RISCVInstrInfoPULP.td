@@ -1116,24 +1116,28 @@ def betweenu
 def clip : PatFrag<(ops node:$lowerBound, node:$upperBound, node:$value),
                    (between node:$lowerBound, node:$upperBound, node:$value), [{
 
-  uint32_t bound1 = (uint32_t) N->getOperand(0)->getConstantOperandVal(1);
-  uint32_t bound2 = (uint32_t) N->getConstantOperandVal(1);
-
-  return (bound1 == ~bound2);
+  if (auto bound1 = dyn_cast<ConstantSDNode>(N->getOperand(0)->getOperand(1)))
+    if (auto bound2 = dyn_cast<ConstantSDNode>(N->getOperand(1)))
+      return (bound1->getZExtValue() == ~bound2->getZExtValue());
+  return false;
 }]>;
 
 def shiftRound : PatFrag<(ops node:$value, node:$shiftAmount),
                          (sra (add node:$value, powerOf2),
                               node:$shiftAmount), [{
-  return (N->getOperand(0)->getConstantOperandVal(1) << 1)
-         == (1 << N->getConstantOperandVal(1));
+  if (auto powerOf2 = dyn_cast<ConstantSDNode>(N->getOperand(0)->getOperand(1)))
+    return (powerOf2->getZExtValue() << 1)
+           == (1U << N->getConstantOperandVal(1));
+  return false;
 }]>;
 
 def ushiftRound : PatFrag<(ops node:$value, node:$shiftAmount),
                           (srl (add node:$value, powerOf2),
                                node:$shiftAmount), [{
-  return (N->getOperand(0)->getConstantOperandVal(1) << 1)
-         == (1 << N->getConstantOperandVal(1));
+  if (auto powerOf2 = dyn_cast<ConstantSDNode>(N->getOperand(0)->getOperand(1)))
+    return (powerOf2->getZExtValue() << 1)
+           == (1U << N->getConstantOperandVal(1));
+  return false;
 }]>;
 
 def roundBit : PatFrag<(ops node:$shiftAmount),
@@ -1180,7 +1184,7 @@ def shiftedMask_shiftImmediate : PatFrag<(ops node:$widthMinus1, node:$flippedMa
                                               node:$flippedMask), [{
   uint32_t shiftedBit = (uint32_t) N->getOperand(0)->getConstantOperandVal(0);
   uint32_t flippedMask = (uint32_t) N->getConstantOperandVal(1);
-  return (2 << countTrailingZeros(flippedMask)) == shiftedBit;
+  return (2U << countTrailingZeros(flippedMask)) == shiftedBit;
 }]>;
 
 

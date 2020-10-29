@@ -356,31 +356,55 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
 
   if (Subtarget.hasNonStdExtPulp()) {
-    setOperationAction(ISD::ABS, XLenVT, Legal);
-    setOperationAction(ISD::ABS, MVT::v2i16, Legal);
-    setOperationAction(ISD::ABS, MVT::v4i8, Legal);
-    setOperationAction(ISD::SMIN, XLenVT, Legal);
-    setOperationAction(ISD::SMIN, MVT::v2i16, Legal);
-    setOperationAction(ISD::SMIN, MVT::v4i8, Legal);
-    setOperationAction(ISD::UMIN, XLenVT, Legal);
-    setOperationAction(ISD::UMIN, MVT::v2i16, Legal);
-    setOperationAction(ISD::UMIN, MVT::v4i8, Legal);
-    setOperationAction(ISD::SMAX, XLenVT, Legal);
-    setOperationAction(ISD::SMAX, MVT::v2i16, Legal);
-    setOperationAction(ISD::SMAX, MVT::v4i8, Legal);
-    setOperationAction(ISD::UMAX, XLenVT, Legal);
-    setOperationAction(ISD::UMAX, MVT::v2i16, Legal);
-    setOperationAction(ISD::UMAX, MVT::v4i8, Legal);
+    for (auto VT : {XLenVT.SimpleTy, MVT::v2i16, MVT::v4i8}){
+      setOperationAction(ISD::ABS, VT, Legal);
+      setOperationAction(ISD::SMIN, VT, Legal);
+      setOperationAction(ISD::UMIN, VT, Legal);
+      setOperationAction(ISD::SMAX, VT, Legal);
+      setOperationAction(ISD::UMAX, VT, Legal);
+
+    }
     setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i8, Legal);
     setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i16, Legal);
     setOperationAction(ISD::CTLZ_ZERO_UNDEF, XLenVT, Legal);
     setOperationAction(ISD::CTTZ, XLenVT, Legal);
     setOperationAction(ISD::CTPOP, XLenVT, Legal);
     setOperationAction(ISD::ROTR, XLenVT, Legal);
-    setOperationAction(ISD::SPLAT_VECTOR, MVT::v2i16, Legal);
-    setOperationAction(ISD::SPLAT_VECTOR, MVT::v4i8, Legal);
-    setOperationAction(ISD::VSELECT, MVT::v2i16, Expand);
-    setOperationAction(ISD::VSELECT, MVT::v4i8, Expand);
+    setOperationAction(ISD::INTRINSIC_W_CHAIN, MVT::i1, Custom);
+
+
+    for (auto VT : {MVT::v2i16, MVT::v4i8}){
+      setOperationAction(ISD::SPLAT_VECTOR, VT, Legal);
+      setOperationAction(ISD::VECREDUCE_ADD, VT, Legal);
+      setOperationPromotedToType(ISD::LOAD, VT, MVT::i32);
+      setOperationPromotedToType(ISD::STORE, VT, MVT::i32);
+      setOperationAction(ISD::VSELECT, VT, Expand);
+      setOperationAction(ISD::MUL, VT, Expand);
+      setOperationAction(ISD::SDIV, VT, Expand);
+      setOperationAction(ISD::UDIV, VT, Expand);
+      setOperationAction(ISD::SREM, VT, Expand);
+      setOperationAction(ISD::UREM, VT, Expand);
+      setOperationAction(ISD::ROTR, VT, Expand);
+      setOperationAction(ISD::ROTL, VT, Expand);
+      setOperationAction(ISD::BSWAP, VT, Expand);
+      setOperationAction(ISD::CTTZ, VT, Expand);
+      setOperationAction(ISD::CTLZ, VT, Expand);
+      setOperationAction(ISD::CTPOP, VT, Expand);
+      setOperationAction(ISD::SDIVREM, VT, Expand);
+      setOperationAction(ISD::UDIVREM, VT, Expand);
+      setOperationAction(ISD::SMUL_LOHI, VT, Expand);
+      setOperationAction(ISD::UMUL_LOHI, VT, Expand);
+    }
+
+    setLoadExtAction(ISD::EXTLOAD, MVT::v2i16, MVT::v2i8, Expand);
+    setLoadExtAction(ISD::SEXTLOAD, MVT::v2i16, MVT::v2i8, Expand);
+    setLoadExtAction(ISD::ZEXTLOAD, MVT::v2i16, MVT::v2i8, Expand);
+
+    setTruncStoreAction(MVT::v2i16, MVT::v2i8, Expand);
+
+    setTargetDAGCombine(ISD::BR);
+
+    setBooleanVectorContents(ZeroOrNegativeOneBooleanContent);
   }
 
   if (Subtarget.hasStdExtA()) {
@@ -403,9 +427,13 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
     setIndexedLoadAction(ISD::POST_INC, MVT::i8, Legal);
     setIndexedLoadAction(ISD::POST_INC, MVT::i16, Legal);
     setIndexedLoadAction(ISD::POST_INC, MVT::i32, Legal);
+    setIndexedLoadAction(ISD::POST_INC, MVT::v2i16, Legal);
+    setIndexedLoadAction(ISD::POST_INC, MVT::v4i8, Legal);
     setIndexedStoreAction(ISD::POST_INC, MVT::i8, Legal);
     setIndexedStoreAction(ISD::POST_INC, MVT::i16, Legal);
     setIndexedStoreAction(ISD::POST_INC, MVT::i32, Legal);
+    setIndexedStoreAction(ISD::POST_INC, MVT::v2i16, Legal);
+    setIndexedStoreAction(ISD::POST_INC, MVT::v4i8, Legal);
   }
 
   setBooleanContents(ZeroOrOneBooleanContent);
@@ -2389,6 +2417,29 @@ SDValue RISCVTargetLowering::PerformDAGCombine(SDNode *N,
       return DAG.getSetCC(DL, N->getValueType(0), LHS, Zero, CC);
     }
     break;
+  }
+  case ISD::BR: {
+    SDValue BrCond = N->getOperand(0);
+    if (BrCond->getOpcode() != ISD::BRCOND)
+      break;
+    SDValue Xor = BrCond->getOperand(1);
+    if (Xor->getOpcode() != ISD::XOR)
+      break;
+    if (auto True = dyn_cast<ConstantSDNode>(Xor->getOperand(1))){
+      if (True->getSExtValue() != -1) break;
+    }
+    else break;
+    SDValue LoopDecrement = Xor->getOperand(0);
+    if (LoopDecrement->getOpcode() != ISD::INTRINSIC_W_CHAIN ||
+        LoopDecrement->getConstantOperandVal(1) != Intrinsic::loop_decrement)
+      break;
+    SDValue BB1 = N->getOperand(1);
+    SDValue LoopBranch = DAG.getNode(ISD::BRCOND, SDLoc(BrCond), MVT::Other,
+                                     BrCond->getOperand(0), LoopDecrement, BB1);
+    SDValue BB2 = BrCond->getOperand(2);
+    SDValue ElseBranch = DAG.getNode(ISD::BR, SDLoc(N), MVT::Other,
+                                     LoopBranch, BB2);
+    return DCI.CombineTo(N, ElseBranch);
   }
   }
 

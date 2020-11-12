@@ -4806,6 +4806,19 @@ RISCVTargetLowering::getRegisterByName(const char *RegName, LLT VT,
   return Reg;
 }
 
+bool RISCVTargetLowering::allowsMisalignedMemoryAccesses(
+       EVT VT, unsigned AddrSpace = 0, unsigned Align = 1,
+       MachineMemOperand::Flags Flags = MachineMemOperand::MONone,
+       bool *Fast = nullptr) const {
+  if(Subtarget.hasNonStdExtPulp()) {
+    if (Fast) {
+      *Fast = false;
+    }
+    return true;
+  }
+  return false;
+}
+
 namespace llvm {
 namespace RISCVVIntrinsicsTable {
 

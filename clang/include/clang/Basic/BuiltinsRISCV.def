@@ -125,11 +125,11 @@ TARGET_BUILTIN(__builtin_pulp_sra4, "V4cV4cV4c", "nc", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_sll2, "V2sV2sV2s", "nc", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_sll4, "V4cV4cV4c", "nc", "xpulpv")
 
-TARGET_BUILTIN(__builtin_pulp_abs2, "V2sV2sV2s", "nc", "xpulpv")
-TARGET_BUILTIN(__builtin_pulp_abs4, "V4cV4cV4c", "nc", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_abs2, "V2sV2s", "nc", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_abs4, "V4cV4c", "nc", "xpulpv")
 
-TARGET_BUILTIN(__builtin_pulp_neg2, "V2sV2sV2s", "nc", "xpulpv")
-TARGET_BUILTIN(__builtin_pulp_neg4, "V4cV4cV4c", "nc", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_neg2, "V2sV2s", "nc", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_neg4, "V4cV4c", "nc", "xpulpv")
 
 TARGET_BUILTIN(__builtin_pulp_dotsp2, "iV2sV2s", "nc", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_dotspsc2, "iV2si", "nc", "xpulpv")

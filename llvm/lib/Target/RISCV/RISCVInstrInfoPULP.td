@@ -518,7 +518,7 @@ def : Pat<(int_riscv_pulp_bitinsert GPR:$rd, GPR:$rs1, uimm5:$ls2, uimm5:$ls3),
 // Unary
 //===----------------------------------------------------------------------===//
 
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, Predicates = [HasNonStdExtPulp] in {
 class Pulp_ALU_r<bits<7> funct7, bits<3> funct3,
                  RISCVOpcode opcode, string opcodestr>
     : RVInstR<funct7, funct3, opcode, (outs GPR:$rd), (ins GPR:$rs1),
@@ -527,93 +527,101 @@ class Pulp_ALU_r<bits<7> funct7, bits<3> funct3,
   let rs2 = 0;
 }
 
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 class Pulp_ALU_rr<bits<7> funct7, bits<3> funct3, RISCVOpcode opcode, string opcodestr,
                   RegisterClass ty1 = GPR, RegisterClass ty2 = ty1, RegisterClass resty = ty1>
     : RVInstR<funct7, funct3, opcode, (outs resty:$rd), (ins ty1:$rs1, ty2:$rs2),
               opcodestr, "$rd, $rs1, $rs2">,
       Sched<[WriteIALU, ReadIALU, ReadIALU]>;
 
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 class Pulp_ALU_rr_wb<bits<7> funct7, bits<3> funct3, RISCVOpcode opcode, string opcodestr,
                      RegisterClass ty1 = GPR, RegisterClass ty2 = ty1, RegisterClass resty = ty1>
     : RVInstR<funct7, funct3, opcode, (outs resty:$rd_wb), (ins resty:$rd, ty1:$rs1, ty2:$rs2),
               opcodestr, "$rd, $rs1, $rs2">,
-      Sched<[WriteIALU, ReadIALU, ReadIALU]>{
-
+      Sched<[WriteIALU, ReadIALU, ReadIALU]> {
   let Constraints = "$rd = $rd_wb";
 }
 
-
-
-
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 class Pulp_ALU_ri<bits<7> funct7, bits<3> funct3, string opcodestr>
-    : RVInstR<funct7, funct3, OPC_OP, (outs GPR:$rd), (ins GPR:$rs1, uimm5:$Is2),
-              opcodestr, "$rd, $rs1, $Is2">,
-      Sched<[WriteIALU, ReadIALU]> {
-  bits<5> Is2;
-  let Inst{24-20} = Is2;
-}
+    : RVInstR<funct7, funct3, OPC_OP, (outs GPR:$rd), (ins GPR:$rs1, uimm5:$rs2),
+              opcodestr, "$rd, $rs1, $rs2">,
+      Sched<[WriteIALU, ReadIALU]>;
 
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 class Pulp_ALU_rii<bits<2> funct2, bits<3> funct3, string opcodestr>
-    : RVInstI<funct3, OPC_OP, (outs GPR:$rd), (ins GPR:$rs1, uimm5:$Is3, uimm5:$Is2),
-              opcodestr, "$rd, $rs1, $Is3, $Is2">,
+    : RVInst<(outs GPR:$rd), (ins GPR:$rs1, uimm5:$Is3, uimm5:$Is2),
+              opcodestr, "$rd, $rs1, $Is3, $Is2", [], InstFormatOther>,
       Sched<[WriteIALU, ReadIALU]> {
   bits<5> Is3;
   bits<5> Is2;
+  bits<5> rs1;
+  bits<5> rd;
 
   let Inst{31-30} = funct2;
   let Inst{29-25} = Is3;
   let Inst{24-20} = Is2;
+  let Inst{19-15} = rs1;
+  let Inst{14-12} = funct3;
+  let Inst{11-7} = rd;
+  let Opcode = 0b0110011;
 }
 
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 class Pulp_ALU_rii_wb<bits<2> funct2, bits<3> funct3, string opcodestr>
-    : RVInstI<funct3, OPC_OP, (outs GPR:$rd_wb), (ins GPR:$rd, GPR:$rs1, uimm5:$Is3, uimm5:$Is2),
-              opcodestr, "$rd, $rs1, $Is3, $Is2">,
+    : RVInst<(outs GPR:$rd_wb), (ins GPR:$rd, GPR:$rs1, uimm5:$Is3, uimm5:$Is2),
+              opcodestr, "$rd, $rs1, $Is3, $Is2", [], InstFormatOther>,
       Sched<[WriteIALU, ReadIALU]> {
   bits<5> Is3;
   bits<5> Is2;
+  bits<5> rs1;
+  bits<5> rd;
 
   let Inst{31-30} = funct2;
   let Inst{29-25} = Is3;
   let Inst{24-20} = Is2;
+  let Inst{19-15} = rs1;
+  let Inst{14-12} = funct3;
+  let Inst{11-7} = rd;
+  let Opcode = 0b0110011;
 
   let Constraints = "$rd = $rd_wb";
 }
 
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 class Pulp_ALU_rri<bits<2> funct2, bits<3> funct3, RISCVOpcode opcode, string opcodestr>
-    : RVInstI<funct3, opcode, (outs GPR:$rd), (ins GPR:$rs1, GPR:$rs2, uimm5:$Is3),
-              opcodestr, "$rd, $rs1, $rs2, $Is3">,
+    : RVInst<(outs GPR:$rd), (ins GPR:$rs1, GPR:$rs2, uimm5:$Is3),
+              opcodestr, "$rd, $rs1, $rs2, $Is3", [], InstFormatOther>,
       Sched<[WriteIALU, ReadIALU, ReadIALU]> {
-  bits<5> rs2;
   bits<5> Is3;
+  bits<5> rs2;
+  bits<5> rs1;
+  bits<5> rd;
 
   let Inst{31-30} = funct2;
   let Inst{29-25} = Is3;
   let Inst{24-20} = rs2;
+  let Inst{19-15} = rs1;
+  let Inst{14-12} = funct3;
+  let Inst{11-7} = rd;
+  let Opcode = opcode.Value;
 }
 
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 class Pulp_ALU_rri_wb<bits<2> funct2, bits<3> funct3, RISCVOpcode opcode, string opcodestr>
-    : RVInstI<funct3, opcode, (outs GPR:$rd_wb), (ins GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3),
-              opcodestr, "$rd, $rs1, $rs2, $Is3">,
+    : RVInst<(outs GPR:$rd_wb), (ins GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3),
+              opcodestr, "$rd, $rs1, $rs2, $Is3", [], InstFormatOther>,
       Sched<[WriteIALU, ReadIALU, ReadIALU]> {
-  bits<5> rs2;
   bits<5> Is3;
+  bits<5> rs2;
+  bits<5> rs1;
+  bits<5> rd;
 
   let Inst{31-30} = funct2;
   let Inst{29-25} = Is3;
   let Inst{24-20} = rs2;
+  let Inst{19-15} = rs1;
+  let Inst{14-12} = funct3;
+  let Inst{11-7} = rd;
+  let Opcode = opcode.Value;
 
   let Constraints = "$rd = $rd_wb";
 }
-
-
-let Predicates = [HasNonStdExtPulp] in {
+}
 
 // Bit manipulation operations
 def P_EXTRACT :   Pulp_ALU_rii   <0b11, 0b000, "p.extract">;
@@ -669,7 +677,6 @@ def P_SUBNR :   Pulp_ALU_rr_wb<0b0100000, 0b011, RISCVOpcode<0b1011011>, "p.subn
 def P_SUBUNR :  Pulp_ALU_rr_wb<0b1100000, 0b011, RISCVOpcode<0b1011011>, "p.subunr">;
 def P_SUBRNR :  Pulp_ALU_rr_wb<0b0100000, 0b111, RISCVOpcode<0b1011011>, "p.subrnr">;
 def P_SUBURNR : Pulp_ALU_rr_wb<0b1100000, 0b111, RISCVOpcode<0b1011011>, "p.suburnr">;
-}
 
 
 def simm5 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isInt<5>(Imm);}]> {
@@ -684,23 +691,18 @@ def simm5 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isInt<5>(Imm);}]> {
   }];
 }
 
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0,
+    isBranch = 1, isTerminator = 1, Predicates = [HasNonStdExtPulp] in
 class Pulp_Immediate_Branch<bits<3> funct3, string opcodestr>
-      : RVInstB<funct3, OPC_BRANCH, (outs), (ins GPR:$rs1, simm5:$imm5, simm13_lsb0:$imm12),
-                opcodestr, "$rs1, $imm5, $imm12">,
-        Sched<[WriteJmp, ReadJmp, ReadJmp]> {
-  bits<5> imm5;
-  let Inst{24-20} = imm5;
-
-  let isBranch = 1;
-  let isTerminator = 1;
-}
+      : RVInstB<funct3, OPC_BRANCH, (outs),
+                (ins GPR:$rs1, simm5:$rs2, simm13_lsb0:$imm12),
+                opcodestr, "$rs1, $rs2, $imm12">,
+        Sched<[WriteJmp, ReadJmp, ReadJmp]>;
 
 def P_BEQIMM : Pulp_Immediate_Branch<0b010, "p.beqimm">;
 def P_BNEIMM : Pulp_Immediate_Branch<0b011, "p.bneimm">;
 
 // MAC Operations
-let Predicates = [HasNonStdExtPulp] in {
 
 def P_MAC :      Pulp_ALU_rr_wb<0b0100001, 0b000, OPC_OP, "p.mac">;
 def P_MSU :      Pulp_ALU_rr_wb<0b0100001, 0b001, OPC_OP, "p.msu">;
@@ -729,7 +731,7 @@ def P_MACUN :    Pulp_ALU_rri_wb    <0b00, 0b001, RISCVOpcode<0b1011011>, "p.mac
 def P_MACHHUN :  Pulp_ALU_rri_wb    <0b01, 0b001, RISCVOpcode<0b1011011>, "p.machhun">;
 def P_MACURN :   Pulp_ALU_rri_wb    <0b00, 0b101, RISCVOpcode<0b1011011>, "p.macurn">;
 def P_MACHHURN : Pulp_ALU_rri_wb    <0b01, 0b101, RISCVOpcode<0b1011011>, "p.machhurn">;
-}
+
 
 def uimm6 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<6>(Imm);}]> {
   let ParserMatchClass = UImmAsmOperand<6>;
@@ -744,12 +746,12 @@ def uimm6 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<6>(Imm);}]> {
 }
 
 
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, Predicates = [HasNonStdExtPulp] in
 class Pulp_ALU_vsci<bits<5> funct5, bit F, bits<3> funct3, string opcodestr,
                     RegisterClass vec, Operand sci, RegisterClass res = vec>
     : RVInst<(outs res:$rd), (ins vec:$rs1, sci:$Imm6), opcodestr,
              "$rd, $rs1, $Imm6", [], InstFormatOther>,
-      Sched<[WriteIALU, ReadIALU]>  {
+      Sched<[WriteIALU, ReadIALU]> {
   bits<6> Imm6;
   bits<5> rs1;
   bits<5> rd;
@@ -764,12 +766,12 @@ class Pulp_ALU_vsci<bits<5> funct5, bit F, bits<3> funct3, string opcodestr,
   let Opcode = 0b1010111;
 }
 
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, Predicates = [HasNonStdExtPulp] in
 class Pulp_ALU_vsci_wb<bits<5> funct5, bit F, bits<3> funct3, string opcodestr,
                     RegisterClass vec, Operand sci, RegisterClass res = vec>
     : RVInst<(outs res:$rd_wb), (ins res:$rd, vec:$rs1, sci:$Imm6), opcodestr,
              "$rd, $rs1, $Imm6", [], InstFormatOther>,
-      Sched<[WriteIALU, ReadIALU]>  {
+      Sched<[WriteIALU, ReadIALU]> {
   bits<6> Imm6;
   bits<5> rs1;
   bits<5> rd;
@@ -784,46 +786,6 @@ class Pulp_ALU_vsci_wb<bits<5> funct5, bit F, bits<3> funct3, string opcodestr,
   let Inst{11-7} = rd;
   let Opcode = 0b1010111;
 }
-
-
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-class Pulp_ALU_vinsert<bits<3> funct3, RegisterClass res, string opcodestr>
-    : RVInst<(outs res:$rd_wb), (ins res:$rd, GPR:$rs1, uimm6:$Imm6), opcodestr, "$rd, $rs1, $Imm6", [], InstFormatOther>,
-      Sched<[WriteIALU, ReadIALU]>  {
-  bits<6> Imm6;
-  bits<5> rs1;
-  bits<5> rd;
-
-  let Constraints = "$rd = $rd_wb";
-  let Inst{31-27} = 0b10110;
-  let Inst{26} = 0;
-  let Inst{25} = Imm6{0};
-  let Inst{24-20} = Imm6{5-1};
-  let Inst{19-15} = rs1;
-  let Inst{14-12} = funct3;
-  let Inst{11-7} = rd;
-  let Opcode = 0b1010111;
-}
-
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-class Pulp_ALU_vextract<bits<5> funct5, bits<3> funct3, RegisterClass res, string opcodestr>
-    : RVInst<(outs GPR:$rd), (ins res:$rs1, uimm6:$Imm6),
-             opcodestr, "$rd, $rs1, $Imm6", [], InstFormatOther>,
-      Sched<[WriteIALU, ReadIALU]>  {
-  bits<6> Imm6;
-  bits<5> rs1;
-  bits<5> rd;
-
-  let Inst{31-27} = funct5;
-  let Inst{26} = 0;
-  let Inst{25} = Imm6{0};
-  let Inst{24-20} = Imm6{5-1};
-  let Inst{19-15} = rs1;
-  let Inst{14-12} = funct3;
-  let Inst{11-7} = rd;
-  let Opcode = 0b1010111;
-}
-
 
 
 multiclass SC_SCI_H_B<bits<5> funct5, bit F, Operand sci, string opcodestr> {
@@ -856,7 +818,6 @@ multiclass SDOTP<bits<5> funct5, bit F, Operand sci, string opcodestr> {
 
 
 // Vectorial ALU Operations
-let Predicates = [HasNonStdExtPulp] in {
 
 defm PV_ADD  : SC_SCI_H_B<0b00000, 0, simm6, "add">;
 defm PV_SUB  : SC_SCI_H_B<0b00001, 0, simm6, "sub">;
@@ -873,26 +834,23 @@ defm PV_OR   : SC_SCI_H_B<0b01011, 0, simm6, "or">;
 defm PV_XOR  : SC_SCI_H_B<0b01100, 0, simm6, "xor">;
 defm PV_AND  : SC_SCI_H_B<0b01101, 0, simm6, "and">;
 
-let hasSideEffects = 0, mayStore = 0, mayLoad = 0 in {
+let hasSideEffects = 0, mayStore = 0, mayLoad = 0,
+    Predicates = [HasNonStdExtPulp], rs2 = 0 in {
   def PV_ABS_H : RVInstR<0b0111000, 0b000, RISCVOpcode<0b1010111>,
                          (outs PulpV2:$rd), (ins PulpV2:$rs1),
-                         "pv.abs.h", "$rd, $rs1">, Sched<[WriteIALU, ReadIALU]>{
-    let rs2 = 0;
-  }
+                         "pv.abs.h", "$rd, $rs1">, Sched<[WriteIALU, ReadIALU]>;
 
   def PV_ABS_B : RVInstR<0b0111000, 0b001, RISCVOpcode<0b1010111>,
                          (outs PulpV4:$rd), (ins PulpV4:$rs1),
-                         "pv.abs.b", "$rd, $rs1">, Sched<[WriteIALU, ReadIALU]>{
-    let rs2 = 0;
-  }
+                         "pv.abs.b", "$rd, $rs1">, Sched<[WriteIALU, ReadIALU]>;
 }
 
-def PV_EXTRACT_H : Pulp_ALU_vextract<0b01111, 0b110, PulpV2, "pv.extract.h">;
-def PV_EXTRACT_B : Pulp_ALU_vextract<0b01111, 0b111, PulpV4, "pv.extract.b">;
-def PV_EXTRACTU_H : Pulp_ALU_vextract<0b10010, 0b110, PulpV2, "pv.extractu.h">;
-def PV_EXTRACTU_B : Pulp_ALU_vextract<0b10010, 0b111, PulpV4, "pv.extractu.b">;
-def PV_INSERT_H   : Pulp_ALU_vinsert<0b110, PulpV2, "pv.insert.h">;
-def PV_INSERT_B   : Pulp_ALU_vinsert<0b111, PulpV4, "pv.insert.b">;
+def PV_EXTRACT_H : Pulp_ALU_vsci<0b01111, 0, 0b110, "pv.extract.h", PulpV2, uimm6, GPR>;
+def PV_EXTRACT_B : Pulp_ALU_vsci<0b01111, 0, 0b111, "pv.extract.b", PulpV4, uimm6, GPR>;
+def PV_EXTRACTU_H : Pulp_ALU_vsci<0b10010, 0, 0b110, "pv.extractu.h", PulpV2, uimm6, GPR>;
+def PV_EXTRACTU_B : Pulp_ALU_vsci<0b10010, 0, 0b111, "pv.extractu.b", PulpV4, uimm6, GPR>;
+def PV_INSERT_H   : Pulp_ALU_vsci_wb<0b10110, 0, 0b110, "pv.insert.h", GPR, uimm6, PulpV2>;
+def PV_INSERT_B   : Pulp_ALU_vsci_wb<0b10110, 0, 0b111, "pv.insert.b", GPR, uimm6, PulpV4>;
 
 defm PV_DOTUP   : DOTP<0b10000, 0, uimm6, "dotup">;
 defm PV_DOTUSP  : DOTP<0b10001, 0, simm6, "dotusp">;
@@ -931,9 +889,8 @@ defm PV_CMPGEU : SC_SCI_H_B<0b00111, 1, uimm6, "cmpgeu">;
 defm PV_CMPLTU : SC_SCI_H_B<0b01000, 1, uimm6, "cmpltu">;
 defm PV_CMPLEU : SC_SCI_H_B<0b01001, 1, uimm6, "cmpleu">;
 
-}
 
-let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 1, mayStore = 0, Predicates = [HasNonStdExtPulp] in
 multiclass Pulp_Load<bits<7> funct7, bits<3> funct3, string opcodestr> {
 
   def _ri_PostIncrement
@@ -954,16 +911,14 @@ multiclass Pulp_Load<bits<7> funct7, bits<3> funct3, string opcodestr> {
 }
 
 
-let Predicates = [HasNonStdExtPulp] in {
-  defm P_LB  : Pulp_Load<0b0000000, 0b000, "p.lb">,  Sched<[WriteLDB, ReadMemBase]>;
-  defm P_LBU : Pulp_Load<0b0100000, 0b100, "p.lbu">, Sched<[WriteLDB, ReadMemBase]>;
-  defm P_LH  : Pulp_Load<0b0001000, 0b001, "p.lh">,  Sched<[WriteLDH, ReadMemBase]>;
-  defm P_LHU : Pulp_Load<0b0101000, 0b101, "p.lhu">, Sched<[WriteLDH, ReadMemBase]>;
-  defm P_LW  : Pulp_Load<0b0010000, 0b010, "p.lw">,  Sched<[WriteLDW, ReadMemBase]>;
-}
+defm P_LB  : Pulp_Load<0b0000000, 0b000, "p.lb">,  Sched<[WriteLDB, ReadMemBase]>;
+defm P_LBU : Pulp_Load<0b0100000, 0b100, "p.lbu">, Sched<[WriteLDB, ReadMemBase]>;
+defm P_LH  : Pulp_Load<0b0001000, 0b001, "p.lh">,  Sched<[WriteLDH, ReadMemBase]>;
+defm P_LHU : Pulp_Load<0b0101000, 0b101, "p.lhu">, Sched<[WriteLDH, ReadMemBase]>;
+defm P_LW  : Pulp_Load<0b0010000, 0b010, "p.lw">,  Sched<[WriteLDW, ReadMemBase]>;
 
 
-let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 1, Predicates = [HasNonStdExtPulp] in
 multiclass Pulp_Store<bits<2> funct2, string opcodestr> {
 
   def _ri_PostIncrement
@@ -983,11 +938,9 @@ multiclass Pulp_Store<bits<2> funct2, string opcodestr> {
                 (ins GPR:$rs2, GPR:$rs1, GPR:$rd), opcodestr, "$rs2, ${rd}(${rs1})">;
 }
 
-let Predicates = [HasNonStdExtPulp] in {
-  defm P_SB : Pulp_Store<0b00, "p.sb">, Sched<[WriteSTB, ReadStoreData, ReadMemBase]>;
-  defm P_SH : Pulp_Store<0b01, "p.sh">, Sched<[WriteSTH, ReadStoreData, ReadMemBase]>;
-  defm P_SW : Pulp_Store<0b10, "p.sw">, Sched<[WriteSTW, ReadStoreData, ReadMemBase]>;
-}
+defm P_SB : Pulp_Store<0b00, "p.sb">, Sched<[WriteSTB, ReadStoreData, ReadMemBase]>;
+defm P_SH : Pulp_Store<0b01, "p.sh">, Sched<[WriteSTH, ReadStoreData, ReadMemBase]>;
+defm P_SW : Pulp_Store<0b10, "p.sw">, Sched<[WriteSTW, ReadStoreData, ReadMemBase]>;
 
 def uimm1 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<1>(Imm);}]> {
   let ParserMatchClass = UImmAsmOperand<1>;
@@ -1079,9 +1032,9 @@ let Predicates = [HasNonStdExtPulp],
   }
 
   def LP_SETUPI : RVInstI<0b101, RISCVOpcode<0b1111011>, (outs),
-                          (ins uimm1:$L, uimm5:$imm5, uimm13_lsb0:$imm12),
-                          "lp.setupi", "$L, $imm5, $imm12">,
-                          Sched<[WriteCSR, WriteCSR, WriteCSR]> {
+                          (ins uimm1:$L, uimm12:$imm12, uimm6_lsb0:$imm5),
+                          "lp.setupi", "$L, $imm12, $imm5">,
+                         Sched<[WriteCSR, WriteCSR, WriteCSR]> {
     bit L;
     bits<5> imm5;
 
@@ -1930,11 +1883,11 @@ def : UnaryBuiltin<int_riscv_pulp_abs, P_ABS>;
 def : Pat<(int_riscv_pulp_mac GPR:$rs1, GPR:$rs2, GPR:$rd), (P_MAC GPR:$rd, GPR:$rs1, GPR:$rs2)>;
 def : Pat<(int_riscv_pulp_msu GPR:$rs1, GPR:$rs2, GPR:$rd), (P_MSU GPR:$rd, GPR:$rs1, GPR:$rs2)>;
 
-//def : Pat<(int_riscv_pulp_macs GPR:$rs1, GPR:$rs2, GPR:$rd), (P_MACSN GPR:$rd, GPR:$rs1, GPR:$rs2, 0)>;
-//def : Pat<(int_riscv_pulp_macu GPR:$rs1, GPR:$rs2, GPR:$rd), (P_MACUN GPR:$rd, GPR:$rs1, GPR:$rs2, 0)>;
+def : Pat<(int_riscv_pulp_macs GPR:$rs1, GPR:$rs2, GPR:$rd), (P_MACS GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(int_riscv_pulp_macu GPR:$rs1, GPR:$rs2, GPR:$rd), (P_MACU GPR:$rd, GPR:$rs1, GPR:$rs2)>;
 
-//def : Pat<(int_riscv_pulp_machhs GPR:$rs1, GPR:$rs2, GPR:$rd), (P_MACHHSN GPR:$rd, GPR:$rs1, GPR:$rs2, 0)>;
-//def : Pat<(int_riscv_pulp_machhu GPR:$rs1, GPR:$rs2, GPR:$rd), (P_MACHHUN GPR:$rd, GPR:$rs1, GPR:$rs2, 0)>;
+def : Pat<(int_riscv_pulp_machhs GPR:$rs1, GPR:$rs2, GPR:$rd), (P_MACHHS GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(int_riscv_pulp_machhu GPR:$rs1, GPR:$rs2, GPR:$rd), (P_MACHHU GPR:$rd, GPR:$rs1, GPR:$rs2)>;
 
 def : PatGprGpr<int_riscv_pulp_rotr, P_ROR>;
 
@@ -1944,14 +1897,14 @@ def : PatGprGpr<int_riscv_pulp_maxusi, P_MAXU>;
 def : PatGprGpr<int_riscv_pulp_minusi, P_MINU>;
 
 multiclass BinaryVectorBuiltin<string intrin, string instr> {
-  def : PatGprGpr<!cast<Intrinsic>("int_riscv_pulp_" # intrin # "2"),
-                  !cast<RVInst>("PV_" # instr # "_H")>;
+  def : PatV2V2<!cast<Intrinsic>("int_riscv_pulp_" # intrin # "2"),
+                !cast<RVInst>("PV_" # instr # "_H")>;
 
-  def : PatGprGpr<!cast<Intrinsic>("int_riscv_pulp_" # intrin # "4"),
-                  !cast<RVInst>("PV_" # instr # "_B")>;
+  def : PatV4V4<!cast<Intrinsic>("int_riscv_pulp_" # intrin # "4"),
+                !cast<RVInst>("PV_" # instr # "_B")>;
 }
 
-/*defm : BinaryVectorBuiltin<"add",  "ADD">;
+defm : BinaryVectorBuiltin<"add",  "ADD">;
 defm : BinaryVectorBuiltin<"sub",  "SUB">;
 defm : BinaryVectorBuiltin<"avg",  "AVG">;
 defm : BinaryVectorBuiltin<"avgu", "AVGU">;
@@ -1965,44 +1918,60 @@ defm : BinaryVectorBuiltin<"exor", "XOR">;
 defm : BinaryVectorBuiltin<"srl",  "SRL">;
 defm : BinaryVectorBuiltin<"sra",  "SRA">;
 defm : BinaryVectorBuiltin<"sll",  "SLL">;
-defm : BinaryVectorBuiltin<"abs",  "ABS">;
-def : Pat<(int_riscv_pulp_neg2 GPR:$rs1), (PV_SUB_H X0, GPR:$rs1)>;
-def : Pat<(int_riscv_pulp_neg4 GPR:$rs1), (PV_SUB_B X0, GPR:$rs1)>;
-*/
+def : Pat<(int_riscv_pulp_abs2 PulpV2:$rs1), (PV_ABS_H PulpV2:$rs1)>;
+def : Pat<(int_riscv_pulp_abs4 PulpV4:$rs1), (PV_ABS_B PulpV4:$rs1)>;
+def : Pat<(int_riscv_pulp_neg2 PulpV2:$rs1), (PV_SUB_H X0, PulpV2:$rs1)>;
+def : Pat<(int_riscv_pulp_neg4 PulpV4:$rs1), (PV_SUB_B X0, PulpV4:$rs1)>;
+
+class PatV2V2GPR<SDPatternOperator op, Instruction instr>
+    : Pat<(op PulpV2:$rs1, PulpV2:$rs2, GPR:$rd),
+          (instr GPR:$rd, PulpV2:$rs1, PulpV2:$rs2)>;
+
+class PatV2GPRGPR<SDPatternOperator op, Instruction instr>
+    : Pat<(op PulpV2:$rs1, GPR:$rs2, GPR:$rd),
+          (instr GPR:$rd, PulpV2:$rs1, GPR:$rs2)>;
+
+class PatV4V4GPR<SDPatternOperator op, Instruction instr>
+    : Pat<(op PulpV4:$rs1, PulpV4:$rs2, GPR:$rd),
+          (instr GPR:$rd, PulpV4:$rs1, PulpV4:$rs2)>;
+
+class PatV4GPRGPR<SDPatternOperator op, Instruction instr>
+    : Pat<(op PulpV4:$rs1, GPR:$rs2, GPR:$rd),
+          (instr GPR:$rd, PulpV4:$rs1, GPR:$rs2)>;
 
 multiclass DotproductBuiltin<string intrin, string instr> {
-  def : PatGprGpr<!cast<Intrinsic>("int_riscv_pulp_dot" # intrin # "p2"),
-                  !cast<RVInst>("PV_DOT" # instr # "P_H")>;
+  def : PatV2V2<!cast<Intrinsic>("int_riscv_pulp_dot" # intrin # "p2"),
+                !cast<RVInst>("PV_DOT" # instr # "P_H")>;
 
-  def : PatGprGpr<!cast<Intrinsic>("int_riscv_pulp_dot" # intrin # "psc2"),
-                  !cast<RVInst>("PV_DOT" # instr # "P_SC_H")>;
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_dot" # intrin # "psc2") PulpV2:$rs1, GPR:$rs2),
+            (!cast<RVInst>("PV_DOT" # instr # "P_SC_H") PulpV2:$rs1, GPR:$rs2)>;
 
-  def : PatGprGpr<!cast<Intrinsic>("int_riscv_pulp_dot" # intrin # "p4"),
-                  !cast<RVInst>("PV_DOT" # instr # "P_B")>;
+  def : PatV4V4<!cast<Intrinsic>("int_riscv_pulp_dot" # intrin # "p4"),
+                !cast<RVInst>("PV_DOT" # instr # "P_B")>;
 
-  def : PatGprGpr<!cast<Intrinsic>("int_riscv_pulp_dot" # intrin # "psc4"),
-                  !cast<RVInst>("PV_DOT" # instr # "P_SC_B")>;
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_dot" # intrin # "psc4") PulpV4:$rs1, GPR:$rs2),
+            (!cast<RVInst>("PV_DOT" # instr # "P_SC_B") PulpV4:$rs1, GPR:$rs2)>;
 
-  def : PatGprGpr<!cast<Intrinsic>("int_riscv_pulp_sdot" # intrin # "p2"),
-                  !cast<RVInst>("PV_SDOT" # instr # "P_H")>;
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_sdot" # intrin # "p2") PulpV2:$rs1, PulpV2:$rs2, GPR:$rd),
+            (!cast<RVInst>("PV_SDOT" # instr # "P_H") GPR:$rd, PulpV2:$rs1, PulpV2:$rs2)>;
 
-  def : PatGprGpr<!cast<Intrinsic>("int_riscv_pulp_sdot" # intrin # "psc2"),
-                  !cast<RVInst>("PV_SDOT" # instr # "P_SC_H")>;
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_sdot" # intrin # "psc2") PulpV2:$rs1, GPR:$rs2, GPR:$rd),
+            (!cast<RVInst>("PV_SDOT" # instr # "P_SC_H") GPR:$rd, PulpV2:$rs1, GPR:$rs2)>;
 
-  def : PatGprGpr<!cast<Intrinsic>("int_riscv_pulp_sdot" # intrin # "p4"),
-                  !cast<RVInst>("PV_SDOT" # instr # "P_B")>;
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_sdot" # intrin # "p4") PulpV4:$rs1, PulpV4:$rs2, GPR:$rd),
+            (!cast<RVInst>("PV_SDOT" # instr # "P_B") GPR:$rd, PulpV4:$rs1, PulpV4:$rs2)>;
 
-  def : PatGprGpr<!cast<Intrinsic>("int_riscv_pulp_sdot" # intrin # "psc4"),
-                  !cast<RVInst>("PV_SDOT" # instr # "P_SC_B")>;
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_sdot" # intrin # "psc4") PulpV4:$rs1, GPR:$rs2, GPR:$rd),
+            (!cast<RVInst>("PV_SDOT" # instr # "P_SC_B") GPR:$rd, PulpV4:$rs1, GPR:$rs2)>;
 
 }
 
-//defm : DotproductBuiltin<"s",  "S">;
-//defm : DotproductBuiltin<"u",  "U">;
-//defm : DotproductBuiltin<"us", "US">;
+defm : DotproductBuiltin<"s",  "S">;
+defm : DotproductBuiltin<"u",  "U">;
+defm : DotproductBuiltin<"us", "US">;
 
-//def : PatGprGpr<int_riscv_pulp_muls, P_MULS>;
-//def : PatGprGpr<int_riscv_pulp_mulu, P_MULU>;
+def : PatGprGpr<int_riscv_pulp_muls, P_MULS>;
+def : PatGprGpr<int_riscv_pulp_mulu, P_MULU>;
 def : PatGprGpr<int_riscv_pulp_mulhhs, P_MULHHS>;
 def : PatGprGpr<int_riscv_pulp_mulhhu, P_MULHHU>;
 
@@ -2030,10 +1999,10 @@ multiclass MulMacBuiltin<string intrin, string instr> {
 
 }
 
-//defm : MulMacBuiltin<"s",   "S">;
-//defm : MulMacBuiltin<"u",   "U">;
-//defm : MulMacBuiltin<"hhs", "HHS">;
-//defm : MulMacBuiltin<"hhu", "HHU">;
+defm : MulMacBuiltin<"s",   "S">;
+defm : MulMacBuiltin<"u",   "U">;
+defm : MulMacBuiltin<"hhs", "HHS">;
+defm : MulMacBuiltin<"hhu", "HHU">;
 
 multiclass add_sub_N_RN_r<string intrin, string instr> {
 
@@ -2064,27 +2033,28 @@ defm : add_sub_N_RN_r<"addu", "ADDU">;
 defm : add_sub_N_RN_r<"sub",  "SUB">;
 defm : add_sub_N_RN_r<"subu", "SUBU">;
 
-/*
-def : PatGprGpr<int_riscv_pulp_pack2, PV_PACK_H>;
-def : Pat<(set GPR:$rd, (int_riscv_pulp_pack4 GPR:$rs1, GPR:$rs2, GPR:$rs3, GPR:$rs4)),
-          (PV_PACKLO_B (PV_PACKHI_B GPR:$rd, GPR:$rs4, GPR:$rs3), GPR:$rs2, GPR:$rs1)>;
-def : PatGprGpr<int_riscv_pulp_shuffleh, PV_SHUFFLE_H>;
-def : PatGprGpr<int_riscv_pulp_shuffleb, PV_SHUFFLE_B>;
-def : Pat<(int_riscv_pulp_pack4_lo GPR:$rd, GPR:$rs2, GPR:$rs1), (PV_PACKLO_B GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(int_riscv_pulp_pack4_hi GPR:$rd, GPR:$rs2, GPR:$rs1), (PV_PACKHI_B GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(int_riscv_pulp_pack4_lo GPR:$rs2, GPR:$rs1, GPR:$rd),
-          (PV_PACKLO_B GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(int_riscv_pulp_pack4_hi GPR:$rs2, GPR:$rs1, GPR:$rd),
-          (PV_PACKHI_B GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-// TODO shuffle4b & shuffle2b
-*/
+
+def : Pat<(int_riscv_pulp_pack2 GPR:$rs1, GPR:$rs2),
+          (PV_PACK_H GPR:$rs2, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_pack4 GPR:$rs1, GPR:$rs2, GPR:$rs3, GPR:$rs4),
+          (PV_PACKLO_B (PV_PACKHI_B_nowb GPR:$rs4, GPR:$rs3), GPR:$rs2, GPR:$rs1)>;
+def : PatV2V2<int_riscv_pulp_shuffleh, PV_SHUFFLE_H>;
+def : PatV4V4<int_riscv_pulp_shuffleb, PV_SHUFFLE_B>;
+def : Pat<(int_riscv_pulp_pack4_lo GPR:$rs2, GPR:$rs1, PulpV4:$rd),
+          (PV_PACKLO_B PulpV4:$rd, GPR:$rs2, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_pack4_hi GPR:$rs2, GPR:$rs1, PulpV4:$rd),
+          (PV_PACKHI_B PulpV4:$rd, GPR:$rs2, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_shuffle2h PulpV2:$rd, PulpV2:$rs1, PulpV2:$rs2),
+          (PV_SHUFFLE2_H PulpV2:$rd, PulpV2:$rs1, PulpV2:$rs2)>;
+def : Pat<(int_riscv_pulp_shuffle4b PulpV4:$rd, PulpV4:$rs1, PulpV4:$rs2),
+          (PV_SHUFFLE2_B PulpV4:$rd, PulpV4:$rs1, PulpV4:$rs2)>;
 
 def : Pat<(int_riscv_pulp_bclr GPR:$rs1, shiftedFlippedMask:$mask),
           (P_BCLR GPR:$rs1, (flippedMaskWidthMinus1 imm:$mask), (trailing1s imm:$mask))>;
 def : PatGprGpr<int_riscv_pulp_bclr_r, P_BCLRR>;
 
 def : Pat<(int_riscv_pulp_bset GPR:$rs1, shiftedMask:$mask),
-          (P_BCLR GPR:$rs1, (maskWidthMinus1 imm:$mask), (trailing0s imm:$mask))>;
+          (P_BSET GPR:$rs1, (maskWidthMinus1 imm:$mask), (trailing0s imm:$mask))>;
 def : PatGprGpr<int_riscv_pulp_bset_r, P_BSETR>;
 
 def : Pat<(int_riscv_pulp_bextract GPR:$rs1, uimm5:$size, uimm5:$shift),
@@ -2112,8 +2082,8 @@ def : PatGprGpr<int_riscv_pulp_clip_r, P_CLIPR>;
 
 
 def : Pat<(int_riscv_pulp_OffsetedRead GPR:$rs1, GPR:$rs2), (P_LW_rr GPR:$rs1, GPR:$rs2)>;
-//def : Pat<(int_riscv_pulp_OffsetedReadHalf GPR:$rs1, GPR:$rs2), (P_LH_rr GPR:$rs1, GPR:$rs2)>;
-//def : Pat<(int_riscv_pulp_OffsetedReadByte GPR:$rs1, GPR:$rs2), (P_LB_rr GPR:$rs1, GPR:$rs2)>;
+def : Pat<(int_riscv_pulp_OffsetedReadHalf GPR:$rs1, GPR:$rs2), (P_LH_rr GPR:$rs1, GPR:$rs2)>;
+def : Pat<(int_riscv_pulp_OffsetedReadByte GPR:$rs1, GPR:$rs2), (P_LB_rr GPR:$rs1, GPR:$rs2)>;
 
 def : Pat<(int_riscv_pulp_OffsetedWrite GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SW_rr GPR:$rs2, GPR:$rs1, GPR:$rs3)>;
 def : Pat<(int_riscv_pulp_OffsetedWriteHalf GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SH_rr GPR:$rs2, GPR:$rs1, GPR:$rs3)>;

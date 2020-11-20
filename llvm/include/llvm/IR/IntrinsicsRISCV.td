@@ -93,11 +93,11 @@ let TargetPrefix = "riscv" in {
   defm mac : PulpTernary32;
   defm msu : PulpTernary32;
 
-  defm macs : PulpIntrinsic<[llvm_i32_ty], [llvm_i16_ty, llvm_i16_ty, llvm_i32_ty], [IntrNoMem]>;
-  defm macu : PulpIntrinsic<[llvm_i32_ty], [llvm_i16_ty, llvm_i16_ty, llvm_i32_ty], [IntrNoMem]>;
+  defm macs : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
+  defm macu : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
 
-  defm machhs : PulpIntrinsic<[llvm_i32_ty], [llvm_i16_ty, llvm_i16_ty, llvm_i32_ty], [IntrNoMem]>;
-  defm machhu : PulpIntrinsic<[llvm_i32_ty], [llvm_i16_ty, llvm_i16_ty, llvm_i32_ty], [IntrNoMem]>;
+  defm machhs : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
+  defm machhu : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
 
   defm rotr : PulpBinary32;
 
@@ -114,6 +114,14 @@ let TargetPrefix = "riscv" in {
     defm "4" : PulpBinaryV4;
   }
 
+  multiclass PulpUnaryV2 : PulpIntrinsic<[llvm_v2i16_ty], [llvm_v2i16_ty], [IntrNoMem]>;
+  multiclass PulpUnaryV4 : PulpIntrinsic<[llvm_v4i8_ty], [llvm_v4i8_ty], [IntrNoMem]>;
+
+  multiclass PulpUnaryV {
+    defm "2" : PulpUnaryV2;
+    defm "4" : PulpUnaryV4;
+  }
+
   defm add  : PulpBinaryV;
   defm sub  : PulpBinaryV;
   defm avg  : PulpBinaryV;
@@ -128,8 +136,8 @@ let TargetPrefix = "riscv" in {
   defm srl  : PulpBinaryV;
   defm sra  : PulpBinaryV;
   defm sll  : PulpBinaryV;
-  defm abs  : PulpBinaryV;
-  defm neg  : PulpBinaryV;
+  defm abs  : PulpUnaryV;
+  defm neg  : PulpUnaryV;
 
   multiclass PulpDotp {
     defm p2   : PulpIntrinsic<[llvm_i32_ty], [llvm_v2i16_ty, llvm_v2i16_ty], [IntrNoMem]>;
@@ -146,18 +154,17 @@ let TargetPrefix = "riscv" in {
   defm dotu  : PulpDotp;
   defm dotus : PulpDotp;
 
-  multiclass PulpBinary16 : PulpIntrinsic<[llvm_i32_ty], [llvm_i16_ty, llvm_i16_ty], [IntrNoMem]>;
 
-  defm muls : PulpBinary16;
-  defm mulu : PulpBinary16;
+  defm muls   : PulpBinary32;
+  defm mulu   : PulpBinary32;
   defm mulhhs : PulpBinary32;
   defm mulhhu : PulpBinary32;
 
   multiclass mul_mac_N_RN {
-    defm mul # NAME # N   : PulpIntrinsic<[llvm_i32_ty], [llvm_i16_ty, llvm_i16_ty, llvm_i32_ty], [IntrNoMem]>;
-    defm mul # NAME # RN  : PulpIntrinsic<[llvm_i32_ty], [llvm_i16_ty, llvm_i16_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
-    defm mac # NAME # N   : PulpIntrinsic<[llvm_i32_ty], [llvm_i16_ty, llvm_i16_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
-    defm mac # NAME # RN  : PulpIntrinsic<[llvm_i32_ty], [llvm_i16_ty, llvm_i16_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
+    defm mul # NAME # N   : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
+    defm mul # NAME # RN  : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
+    defm mac # NAME # N   : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
+    defm mac # NAME # RN  : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
   }
 
   defm s   : mul_mac_N_RN;
@@ -179,12 +186,12 @@ let TargetPrefix = "riscv" in {
   defm sub  : N_RN_r;
   defm subu : N_RN_r;
 
-  defm pack2 : PulpIntrinsic<[llvm_v2i16_ty], [llvm_i16_ty, llvm_i16_ty], [IntrNoMem]>;
-  defm pack4 : PulpIntrinsic<[llvm_v4i8_ty], [llvm_i8_ty, llvm_i8_ty, llvm_i8_ty, llvm_i8_ty], [IntrNoMem]>;
+  defm pack2 : PulpIntrinsic<[llvm_v2i16_ty], [llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
+  defm pack4 : PulpIntrinsic<[llvm_v4i8_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
   defm shuffleh : PulpBinaryV2;
   defm shuffleb : PulpBinaryV4;
-  defm pack4_lo : PulpIntrinsic<[llvm_v4i8_ty], [llvm_i8_ty, llvm_i8_ty, llvm_v4i8_ty], [IntrNoMem]>;
-  defm pack4_hi : PulpIntrinsic<[llvm_v4i8_ty], [llvm_i8_ty, llvm_i8_ty, llvm_v4i8_ty], [IntrNoMem]>;
+  defm pack4_lo : PulpIntrinsic<[llvm_v4i8_ty], [llvm_i32_ty, llvm_i32_ty, llvm_v4i8_ty], [IntrNoMem]>;
+  defm pack4_hi : PulpIntrinsic<[llvm_v4i8_ty], [llvm_i32_ty, llvm_i32_ty, llvm_v4i8_ty], [IntrNoMem]>;
   defm shuffle4b : PulpIntrinsic<[llvm_v4i8_ty], [llvm_v4i8_ty, llvm_v4i8_ty, llvm_v4i8_ty], [IntrNoMem]>;
   defm shuffle2h : PulpIntrinsic<[llvm_v2i16_ty], [llvm_v2i16_ty, llvm_v2i16_ty, llvm_v2i16_ty], [IntrNoMem]>;
 
@@ -204,8 +211,8 @@ let TargetPrefix = "riscv" in {
   defm clipu_r : PulpBinary32;
 
   defm OffsetedRead : PulpIntrinsic<[llvm_i32_ty], [LLVMPointerType<llvm_i32_ty>, llvm_i32_ty], [IntrReadMem]>;
-  defm OffsetedReadHalf : PulpIntrinsic<[llvm_i16_ty], [LLVMPointerType<llvm_i16_ty>, llvm_i32_ty], [IntrReadMem]>;
-  defm OffsetedReadByte : PulpIntrinsic<[llvm_i8_ty], [LLVMPointerType<llvm_i8_ty>, llvm_i32_ty], [IntrReadMem]>;
+  defm OffsetedReadHalf : PulpIntrinsic<[llvm_i32_ty], [LLVMPointerType<llvm_i16_ty>, llvm_i32_ty], [IntrReadMem]>;
+  defm OffsetedReadByte : PulpIntrinsic<[llvm_i32_ty], [LLVMPointerType<llvm_i8_ty>, llvm_i32_ty], [IntrReadMem]>;
 
   defm OffsetedWrite : PulpIntrinsic<[], [llvm_i32_ty, LLVMPointerType<llvm_i32_ty>, llvm_i32_ty], [IntrWriteMem]>;
   defm OffsetedWriteHalf : PulpIntrinsic<[], [llvm_i32_ty, LLVMPointerType<llvm_i16_ty>, llvm_i32_ty], [IntrWriteMem]>;

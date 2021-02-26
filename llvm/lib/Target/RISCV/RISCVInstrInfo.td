@@ -209,6 +209,20 @@ def simm12 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isInt<12>(Imm);}]> {
   let OperandNamespace = "RISCVOp";
 }
 
+def uimm12 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<12>(Imm);}]> {
+  let ParserMatchClass = UImmAsmOperand<12>;
+  let EncoderMethod = "getImmOpValue";
+  let DecoderMethod = "decodeUImmOperand<12>";
+  let MCOperandPredicate = [{
+    int64_t Imm;
+    if (MCOp.evaluateAsConstantImm(Imm))
+      return isUInt<12>(Imm);
+    return MCOp.isBareSymbolRef();
+  }];
+  let OperandType = "OPERAND_UIMM12";
+  let OperandNamespace = "RISCVOp";
+}
+
 // A 13-bit signed immediate where the least significant bit is zero.
 def simm13_lsb0 : Operand<OtherVT> {
   let ParserMatchClass = SImmAsmOperand<13, "Lsb0">;
@@ -222,6 +236,37 @@ def simm13_lsb0 : Operand<OtherVT> {
     return MCOp.isBareSymbolRef();
   }];
   let OperandType = "OPERAND_PCREL";
+}
+
+// A 12-bit unsigned immediate which is at least 1. It is encoded in the
+// instruction by subtracting 1 from the actual value.
+def uimm12m1 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isInt<12>(Imm);}]> {
+  let ParserMatchClass = ImmAsmOperand<"U", 12, "M1">;
+  let EncoderMethod = "getImmOpValueMinus1";
+  let DecoderMethod = "decodeUImmMinus1Operand<12>";
+  let OperandType = "OPERAND_UIMM12M1";
+  let OperandNamespace = "RISCVOp";
+  let MCOperandPredicate = [{
+    int64_t Imm;
+    if (MCOp.evaluateAsConstantImm(Imm))
+      return isInt<12>(Imm) && Imm > 0;
+    return MCOp.isBareSymbolRef();
+  }];
+}
+
+// an unsigned 4bit immediate
+def uimm4 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<4>(Imm);}]> {
+  let ParserMatchClass = UImmAsmOperand<4>;
+  let EncoderMethod = "getImmOpValue";
+  let DecoderMethod = "decodeUImmOperand<4>";
+  let OperandType = "OPERAND_UIMM4";
+  let OperandNamespace = "RISCVOp";
+  let MCOperandPredicate = [{
+    int64_t Imm;
+    if (MCOp.evaluateAsConstantImm(Imm))
+      return isUInt<4>(Imm);
+    return MCOp.isBareSymbolRef();
+  }];
 }
 
 class UImm20Operand : Operand<XLenVT> {

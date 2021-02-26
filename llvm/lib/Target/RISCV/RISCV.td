@@ -420,6 +420,26 @@ def FeatureSaveRestore : SubtargetFeature<"save-restore", "EnableSaveRestore",
 
 def TuneSiFive7 : SubtargetFeature<"sifive7", "RISCVProcFamily", "SiFive7",
                                    "SiFive 7-Series processors">;
+def FeatureExtXfrep
+    : SubtargetFeature<"xfrep", "HasExtXfrep", "true",
+                       "'Xfrep' (Floating-Point Repetition)">;
+def HasExtXfrep : Predicate<"Subtarget->hasExtXfrep()">,
+                           AssemblerPredicate<(all_of FeatureExtXfrep),
+                           "'Xfrep' (Floating-Point Repetition)">;
+
+def FeatureExtXdma
+    : SubtargetFeature<"xdma", "HasExtXdma", "true",
+                       "'Xdma' (Asynchronous Data Movement)">;
+def HasExtXdma : Predicate<"Subtarget->hasExtXdma()">,
+                           AssemblerPredicate<(all_of FeatureExtXdma),
+                           "'Xdma' (Asynchronous Data Movement)">;
+
+def FeatureExtXssr
+    : SubtargetFeature<"xssr", "HasExtXssr", "true",
+                       "'Xssr' (Stream Semantic Registers)">;
+def HasExtXssr : Predicate<"Subtarget->hasExtXssr()">,
+                           AssemblerPredicate<(all_of FeatureExtXssr),
+                           "'Xssr' (Stream Semantic Registers)">;
 
 //===----------------------------------------------------------------------===//
 // Named operands for CSR instructions.
@@ -438,6 +458,10 @@ include "RISCVInstrInfo.td"
 include "RISCVRegisterBanks.td"
 include "RISCVSchedRocket.td"
 include "RISCVSchedSiFive7.td"
+include "RISCVSchedSnitch.td"
+include "RISCVInstrInfoXfrep.td"
+include "RISCVInstrInfoXdma.td"
+include "RISCVInstrInfoXssr.td"
 
 //===----------------------------------------------------------------------===//
 // RISC-V processors supported.
@@ -520,6 +544,14 @@ def : ProcessorModel<"sifive-u74", SiFive7Model, [Feature64Bit,
                                                   FeatureStdExtD,
                                                   FeatureStdExtC],
                      [TuneSiFive7]>;
+
+def : ProcessorModel<"snitch", SnitchModel, [FeatureStdExtM,
+                                             FeatureStdExtA,
+                                             FeatureStdExtF,
+                                             FeatureStdExtD,
+                                             FeatureExtXfrep,
+                                             FeatureExtXdma,
+                                             FeatureExtXssr]>;
 
 //===----------------------------------------------------------------------===//
 // Define the RISC-V target.

@@ -1070,6 +1070,9 @@ bool RISCVInstrInfo::verifyInstruction(const MachineInstr &MI,
         case RISCVOp::OPERAND_UIMM12:
           Ok = isUInt<12>(Imm);
           break;
+        case RISCVOp::OPERAND_UIMM12M1:
+          Ok = isUInt<12>(Imm) && (Imm != 0);
+          break;
         case RISCVOp::OPERAND_SIMM12:
           Ok = isInt<12>(Imm);
           break;

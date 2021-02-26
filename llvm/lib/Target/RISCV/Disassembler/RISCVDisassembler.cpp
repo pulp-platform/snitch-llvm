@@ -216,6 +216,12 @@ static DecodeStatus decodeUImmOperand(MCInst &Inst, uint64_t Imm,
 }
 
 template <unsigned N>
+static DecodeStatus decodeUImmMinus1Operand(MCInst &Inst, uint64_t Imm,
+                                            int64_t Address, const void *Decoder) {
+  return decodeUImmOperand<N>(Inst, Imm + 1, Address, Decoder);
+}
+
+template <unsigned N>
 static DecodeStatus decodeUImmNonZeroOperand(MCInst &Inst, uint64_t Imm,
                                              int64_t Address,
                                              const void *Decoder) {

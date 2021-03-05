@@ -21,8 +21,7 @@ let hasSideEffects = 1, mayLoad = 0, mayStore = 0 in {
     bits<5> rd;
     bits<7> funct7;
 
-    let Inst{31-25} = uimm12{11-5};
-    let Inst{24-20} = uimm12{4-0};
+    let Inst{31-20} = uimm12;
     let Inst{19-15} = 0b00000; // rs1 = 0
     let Inst{14-12} = funct3; 
     let Inst{11-7}  = rd;
@@ -35,8 +34,7 @@ let hasSideEffects = 1, mayLoad = 0, mayStore = 0 in {
     bits<5> rs1;
     bits<7> funct7;
 
-    let Inst{31-25} = uimm12{11-5};
-    let Inst{24-20} = uimm12{4-0};
+    let Inst{31-20} = uimm12;
     let Inst{19-15} = rs1;
     let Inst{14-12} = funct3; 
     let Inst{11-7}  = 0b00000; // rd = 0
@@ -64,4 +62,117 @@ let Predicates = [HasExtXssr] in {
   def SCFGWI : SSRInstImmWrite <0b010, "scfgwi">, Sched<[]>;
   def SCFGR  : SSRInstRegRead  <0b0000000, 0b001, "scfgr">,  Sched<[]>;
   def SCFGW  : SSRInstRegWrite <0b0000000, 0b010, "scfgw">,  Sched<[]>;
+} // Predicates = [HasExtXssr]
+
+
+//===----------------------------------------------------------------------===//
+// Pseudo Instructions
+//===----------------------------------------------------------------------===//
+
+class SPseudoSetup1D:
+      Pseudo<(outs),
+             (ins uimm5:$ssr, GPR:$rep, GPR:$bound, GPR:$stride, GPR:$ptr),[]> {
+  let mayLoad = 1;
+  let mayStore = 1;
+  let hasSideEffects = 1;
+  let usesCustomInserter = 0;
+}
+
+class SPseudoSetupRepetition:
+      Pseudo<(outs),
+             (ins uimm5:$ssr, GPR:$rep),[]> {
+  let mayLoad = 1;
+  let mayStore = 1;
+  let hasSideEffects = 1;
+  let usesCustomInserter = 0;
+}
+
+class SPseudoSetupBoundStride:
+      Pseudo<(outs),
+             (ins uimm5:$ssr, GPR:$bound, GPR:$stride),[]> {
+  let mayLoad = 1;
+  let mayStore = 1;
+  let hasSideEffects = 1;
+  let usesCustomInserter = 0;
+}
+
+class SPseudoPush:
+      Pseudo<(outs), (ins uimm5:$ssr, FPR64:$val),[]> {
+  let mayLoad = 1;
+  let mayStore = 1;
+  let hasSideEffects = 1;
+  let usesCustomInserter = 0;
+}
+
+class SPseudoPop:
+      Pseudo<(outs FPR64:$val), (ins uimm5:$ssr),[]> {
+  let mayLoad = 1;
+  let mayStore = 1;
+  let hasSideEffects = 1;
+  let usesCustomInserter = 0;
+}
+
+class SPseudoRW:
+      Pseudo<(outs), (ins uimm5:$ssr, uimm5:$dim, GPR:$ptr),[]> {
+  let mayLoad = 1;
+  let mayStore = 1;
+  let hasSideEffects = 1;
+  let usesCustomInserter = 0;
+}
+
+class SPseudoEnDis:
+      Pseudo<(outs), (ins),[]> {
+  let mayLoad = 1;
+  let mayStore = 1;
+  let hasSideEffects = 1;
+  let usesCustomInserter = 0;
+}
+
+let Predicates = [HasExtXssr] in {
+  def PseudoSSRSetup_1D_R : SPseudoSetup1D;
+  def PseudoSSRSetup_1D_W : SPseudoSetup1D;
+  def PseudoSSRPush  : SPseudoPush;
+  def PseudoSSRPop   : SPseudoPop;
+
+  foreach dim = [1, 2, 3, 4] in {
+    def PseudoSSRSetupBoundStride_#dim#D : SPseudoSetupBoundStride;
+  }
+
+  def PseudoSSREnable  : SPseudoEnDis;
+  def PseudoSSRDisable : SPseudoEnDis;
+  def PseudoSSRRead    : SPseudoRW;
+  def PseudoSSRWrite   : SPseudoRW;
+  def PseudoSSRSetupRepetition   : SPseudoSetupRepetition;
+
+  // pattern matching on intrinsic and resulting in pseudo instruction
+  def : Pat<(int_riscv_ssr_setup_1d_r timm:$ssr, GPR:$rep, GPR:$bound, GPR:$stride, GPR:$ptr),
+          (PseudoSSRSetup_1D_R timm:$ssr, GPR:$rep, GPR:$bound, GPR:$stride, GPR:$ptr)>;
+  def : Pat<(int_riscv_ssr_setup_1d_w timm:$ssr, GPR:$rep, GPR:$bound, GPR:$stride, GPR:$ptr),
+          (PseudoSSRSetup_1D_W timm:$ssr, GPR:$rep, GPR:$bound, GPR:$stride, GPR:$ptr)>;
+  
+  def : Pat<(int_riscv_ssr_setup_bound_stride_1d timm:$ssr, GPR:$bound, GPR:$stride),
+          (PseudoSSRSetupBoundStride_1D timm:$ssr, GPR:$bound, GPR:$stride)>;
+  def : Pat<(int_riscv_ssr_setup_bound_stride_2d timm:$ssr, GPR:$bound, GPR:$stride),
+          (PseudoSSRSetupBoundStride_2D timm:$ssr, GPR:$bound, GPR:$stride)>;
+  def : Pat<(int_riscv_ssr_setup_bound_stride_3d timm:$ssr, GPR:$bound, GPR:$stride),
+          (PseudoSSRSetupBoundStride_3D timm:$ssr, GPR:$bound, GPR:$stride)>;
+  def : Pat<(int_riscv_ssr_setup_bound_stride_4d timm:$ssr, GPR:$bound, GPR:$stride),
+          (PseudoSSRSetupBoundStride_4D timm:$ssr, GPR:$bound, GPR:$stride)>;
+
+  def : Pat<(int_riscv_ssr_read timm:$ssr, timm:$dim, GPR:$ptr),
+          (PseudoSSRRead timm:$ssr, timm:$dim, GPR:$ptr)>;
+  def : Pat<(int_riscv_ssr_write timm:$ssr, timm:$dim, GPR:$ptr),
+          (PseudoSSRWrite timm:$ssr, timm:$dim, GPR:$ptr)>;
+
+  def : Pat<(int_riscv_ssr_push timm:$ssr, FPR64:$val),
+          (PseudoSSRPush timm:$ssr, FPR64:$val)>;
+  def : Pat<(int_riscv_ssr_pop timm:$ssr),
+          (PseudoSSRPop timm:$ssr)>;
+
+  def : Pat<(int_riscv_ssr_setup_repetition timm:$ssr, GPR:$rep),
+          (PseudoSSRSetupRepetition timm:$ssr, GPR:$rep)>;
+
+  def : Pat<(int_riscv_ssr_enable), (PseudoSSREnable)>;
+  def : Pat<(int_riscv_ssr_disable), (PseudoSSRDisable)>;
+
 } // Predicates = [HasExtXssr]

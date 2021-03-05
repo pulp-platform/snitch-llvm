@@ -13,8 +13,10 @@
 #ifndef LLVM_CLANG_LIB_BASIC_TARGETS_RISCV_H
 #define LLVM_CLANG_LIB_BASIC_TARGETS_RISCV_H
 
+#include "clang/Basic/Builtins.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/TargetOptions.h"
+#include "clang/Basic/TargetBuiltins.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Support/Compiler.h"
 
@@ -23,6 +25,8 @@ namespace targets {
 
 // RISC-V Target
 class RISCVTargetInfo : public TargetInfo {
+  static const Builtin::Info BuiltinInfo[];
+
 protected:
   std::string ABI, CPU;
   bool HasM = false;
@@ -69,7 +73,7 @@ public:
   void getTargetDefines(const LangOptions &Opts,
                         MacroBuilder &Builder) const override;
 
-  ArrayRef<Builtin::Info> getTargetBuiltins() const override { return None; }
+  ArrayRef<Builtin::Info> getTargetBuiltins() const override;
 
   BuiltinVaListKind getBuiltinVaListKind() const override {
     return TargetInfo::VoidPtrBuiltinVaList;

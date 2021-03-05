@@ -67,5 +67,21 @@ TARGET_BUILTIN(__builtin_riscv_fsr_32, "LiLiLiLi", "nc", "experimental-zbt")
 TARGET_BUILTIN(__builtin_riscv_fsl_64, "WiWiWiWi", "nc", "experimental-zbt,64bit")
 TARGET_BUILTIN(__builtin_riscv_fsr_64, "WiWiWiWi", "nc", "experimental-zbt,64bit")
 
+// SSR extension
+TARGET_BUILTIN(__builtin_ssr_setup_1d_r, "vUiULiULiULiv*", "n", "xssr")
+TARGET_BUILTIN(__builtin_ssr_setup_1d_w, "vUiULiULiULiv*", "n", "xssr")
+TARGET_BUILTIN(__builtin_ssr_read, "vUiUiv*", "n", "xssr")
+TARGET_BUILTIN(__builtin_ssr_write, "vUiUiv*", "n", "xssr")
+TARGET_BUILTIN(__builtin_ssr_setup_bound_stride_1d, "vUiULiULi", "n", "xssr")
+TARGET_BUILTIN(__builtin_ssr_setup_bound_stride_2d, "vUiULiULi", "n", "xssr")
+TARGET_BUILTIN(__builtin_ssr_setup_bound_stride_3d, "vUiULiULi", "n", "xssr")
+TARGET_BUILTIN(__builtin_ssr_setup_bound_stride_4d, "vUiULiULi", "n", "xssr")
+TARGET_BUILTIN(__builtin_ssr_setup_repetition, "vUiULi", "n", "xssr")
+TARGET_BUILTIN(__builtin_ssr_push, "vUid", "n", "xssr")
+TARGET_BUILTIN(__builtin_ssr_pop, "dUi", "n", "xssr")
+TARGET_BUILTIN(__builtin_ssr_enable, "v", "n", "xssr")
+TARGET_BUILTIN(__builtin_ssr_disable, "v", "n", "xssr")
+
 #undef BUILTIN
 #undef TARGET_BUILTIN
+

@@ -61,6 +61,9 @@ private:
   uint64_t RVVPadding = 0;
   /// Size of stack frame to save callee saved registers
   unsigned CalleeSavedStackSize = 0;
+  /// Keep track of used and enabled SSR streamers in this function. If
+  /// any are used, its register is reserved. one-hot coded
+  unsigned UsedSSR = 0;
 
 public:
   RISCVMachineFunctionInfo(const MachineFunction &MF) {}
@@ -80,6 +83,9 @@ public:
 
   unsigned getLibCallStackSize() const { return LibCallStackSize; }
   void setLibCallStackSize(unsigned Size) { LibCallStackSize = Size; }
+
+  unsigned getUsedSSR() const { return UsedSSR; }
+  void setUsedSSR(unsigned SSR) { UsedSSR = SSR; }
 
   bool useSaveRestoreLibCalls(const MachineFunction &MF) const {
     // We cannot use fixed locations for the callee saved spill slots if the

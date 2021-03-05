@@ -77,6 +77,7 @@ RISCVRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
 BitVector RISCVRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   const RISCVFrameLowering *TFI = getFrameLowering(MF);
   BitVector Reserved(getNumRegs());
+  const auto *RVFI = MF.getInfo<RISCVMachineFunctionInfo>();
 
   // Mark any registers requested to be reserved as such
   for (size_t Reg = 0; Reg < getNumRegs(); Reg++) {
@@ -105,6 +106,12 @@ BitVector RISCVRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   // Floating point environment registers.
   markSuperRegs(Reserved, RISCV::FRM);
   markSuperRegs(Reserved, RISCV::FFLAGS);
+  
+  // Mark SSR floating point registers as reserved.
+  for (unsigned n = 0; n != 8; ++n) {
+    if(RVFI->getUsedSSR() & (1<<n))
+      markSuperRegs(Reserved, RISCV::F0_D + n);
+  }
 
   assert(checkAllSuperRegsMarked(Reserved));
   return Reserved;

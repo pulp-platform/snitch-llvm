@@ -1090,3 +1090,77 @@ let TargetPrefix = "riscv" in {
   }
 
 } // TargetPrefix = "riscv"
+
+
+//===----------------------------------------------------------------------===//
+// Xssr extension
+
+class RISCVSSRIntrinsic {
+}
+
+let TargetPrefix = "riscv" in {
+
+  def int_riscv_ssr_setup_1d_r
+      : GCCBuiltin<"__builtin_ssr_setup_1d_r">,
+        /* RetTypes, ParamTypes, Properties */
+        Intrinsic<[],
+                  [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty],
+                  [IntrHasSideEffects, ImmArg<ArgIndex<0>>]>,
+        RISCVSSRIntrinsic;
+  def int_riscv_ssr_setup_1d_w
+      : GCCBuiltin<"__builtin_ssr_setup_1d_w">,
+        /* RetTypes, ParamTypes, Properties */
+        Intrinsic<[],
+                  [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty],
+                  [IntrHasSideEffects, ImmArg<ArgIndex<0>>]>,
+        RISCVSSRIntrinsic;
+  def int_riscv_ssr_read
+      : GCCBuiltin<"__builtin_ssr_read">,
+        /* RetTypes, ParamTypes, Properties */
+        Intrinsic<[],
+                  [llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty],
+                  [IntrHasSideEffects, ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<1>>]>,
+        RISCVSSRIntrinsic;
+  def int_riscv_ssr_write
+      : GCCBuiltin<"__builtin_ssr_write">,
+        /* RetTypes, ParamTypes, Properties */
+        Intrinsic<[],
+                  [llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty],
+                  [IntrHasSideEffects, ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<1>>]>,
+        RISCVSSRIntrinsic;
+  def int_riscv_ssr_push
+      : GCCBuiltin<"__builtin_ssr_push">,
+        Intrinsic<[],
+                  [llvm_i32_ty, llvm_double_ty],
+                  [IntrHasSideEffects, ImmArg<ArgIndex<0>>]>,
+        RISCVSSRIntrinsic;
+  def int_riscv_ssr_pop
+      : GCCBuiltin<"__builtin_ssr_pop">,
+        Intrinsic<[llvm_double_ty],
+                  [llvm_i32_ty],
+                  [IntrHasSideEffects, ImmArg<ArgIndex<0>>]>,
+        RISCVSSRIntrinsic;
+  def int_riscv_ssr_enable
+      : GCCBuiltin<"__builtin_ssr_enable">,
+        Intrinsic<[], [], [IntrHasSideEffects]>,
+        RISCVSSRIntrinsic;
+  def int_riscv_ssr_disable
+      : GCCBuiltin<"__builtin_ssr_disable">,
+        Intrinsic<[], [], [IntrHasSideEffects]>,
+        RISCVSSRIntrinsic;
+  foreach dim = [1, 2, 3, 4] in {
+    def int_riscv_ssr_setup_bound_stride_#dim#d
+        : GCCBuiltin<"__builtin_ssr_setup_bound_stride_"#dim#"d">,
+          Intrinsic<[], 
+                    [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                    [IntrHasSideEffects, ImmArg<ArgIndex<0>>]>,
+          RISCVSSRIntrinsic;
+  }
+  def int_riscv_ssr_setup_repetition
+      : GCCBuiltin<"__builtin_ssr_setup_repetition">,
+        Intrinsic<[],
+                  [llvm_i32_ty, llvm_i32_ty],
+                  [IntrHasSideEffects, ImmArg<ArgIndex<0>>]>,
+        RISCVSSRIntrinsic;
+
+} // TargetPrefix = "riscv"

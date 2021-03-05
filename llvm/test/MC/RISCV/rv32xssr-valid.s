@@ -4,14 +4,22 @@
 # RUN:     | llvm-objdump -M no-aliases -d -r --mattr=xssr - \
 # RUN:     | FileCheck -check-prefixes=CHECK-DISASM %s
 
-# CHECK-ASM-AND-OBJ: scfgri t0, 2750
-# CHECK-ASM: encoding: [0xab,0x12,0xe0,0xab]
-# CHECK-DISASM: ab 12 e0 ab   scfgri  t0, 2750
-scfgri t0, 0b101010111110
-# CHECK-ASM-AND-OBJ: scfgwi t0, 2750
-# CHECK-ASM: encoding: [0x2b,0xa0,0xe2,0xab]
-# CHECK-DISASM: 2b a0 e2 ab   scfgwi  t0, 2750
-scfgwi t0, 0b101010111110
+# CHECK-ASM-AND-OBJ: scfgri t0, 0
+# CHECK-ASM: encoding: [0xab,0x12,0x00,0x00]
+# CHECK-DISASM: ab 12 00 00   scfgri  t0, 0
+scfgri t0, 0 | (0<<7)
+# CHECK-ASM-AND-OBJ: scfgwi t0, 640
+# CHECK-ASM: encoding: [0x2b,0xa0,0x02,0x28]
+# CHECK-DISASM: 2b a0 02 28   scfgwi  t0, 640
+scfgwi t0, 0 | (5<<7)
+# CHECK-ASM-AND-OBJ: scfgri t0, 1025
+# CHECK-ASM: encoding: [0xab,0x12,0x10,0x40]
+# CHECK-DISASM: ab 12 10 40   scfgri  t0, 1025
+scfgri t0, 1 | (8<<7)
+# CHECK-ASM-AND-OBJ: scfgwi t0, 1281
+# CHECK-ASM: encoding: [0x2b,0xa0,0x12,0x50]
+# CHECK-DISASM: 2b a0 12 50   scfgwi  t0, 1281
+scfgwi t0, 1 | (10<<7)
 # CHECK-ASM-AND-OBJ: scfgr t0, t1
 # CHECK-ASM: encoding: [0xab,0x92,0x60,0x00]
 # CHECK-DISASM: ab 92 60 00   scfgr  t0, t1

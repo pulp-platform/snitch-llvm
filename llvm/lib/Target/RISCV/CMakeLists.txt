@@ -24,6 +24,7 @@ add_llvm_target(RISCVCodeGen
   RISCVCleanupVSETVLI.cpp
   RISCVExpandAtomicPseudoInsts.cpp
   RISCVExpandPseudoInsts.cpp
+  RISCVExpandSSRInsts.cpp
   RISCVFrameLowering.cpp
   RISCVInstrInfo.cpp
   RISCVInstructionSelector.cpp

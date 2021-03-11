@@ -18,10 +18,13 @@
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Pass.h"
 
+#include <queue>
+#include <set>
+
 using namespace llvm;
 
 static cl::opt<signed> MaxLoopRangeImm(
-    "pulp-loop-range-immediate", cl::Hidden, cl::init(62),
+    "pulp-loop-range-immediate", cl::Hidden, cl::init(50),
     cl::desc("Restrict range of lp.setupi to N instructions."));
 
 static cl::opt<signed> MaxLoopRangeReg(
@@ -34,6 +37,44 @@ namespace llvm {
 }
 
 namespace {
+
+// TODO: This function is not needed for the latest LLVM versions, as MBB has
+//       had the splitAt() method added. This version is adapted from that
+//       method, from https://github.com/llvm/llvm-project/blob/
+//       d7c219a506ec9aabe7c5d36c0da55656af487b73/llvm/lib/CodeGen/
+//       MachineBasicBlock.cpp
+//       CAVEAT: The above function will not split, as the loop instruction is
+//               a terminator, in which case the above linked version would
+//               chicken out.
+MachineBasicBlock *splitMBBAt(MachineBasicBlock *OldMBB, MachineInstr &MI) {
+  MachineBasicBlock::iterator SplitPoint(&MI);
+
+  MachineFunction *MF = OldMBB->getParent();
+
+  LivePhysRegs LiveRegs;
+  // Make sure we add any physregs we define in the block as liveins to the
+  // new block.
+  MachineBasicBlock::iterator Prev(&MI);
+  LiveRegs.init(*MF->getSubtarget().getRegisterInfo());
+  LiveRegs.addLiveOuts(*OldMBB);
+  for (auto I = OldMBB->rbegin(), E = Prev.getReverse(); I != E; ++I)
+    LiveRegs.stepBackward(*I);
+
+  MachineBasicBlock *SplitBB =
+      MF->CreateMachineBasicBlock(OldMBB->getBasicBlock());
+
+  MF->insert(++MachineFunction::iterator(OldMBB), SplitBB);
+  SplitBB->splice(SplitBB->begin(), OldMBB, SplitPoint, OldMBB->end());
+
+  SplitBB->transferSuccessorsAndUpdatePHIs(OldMBB);
+  OldMBB->addSuccessor(SplitBB);
+
+  addLiveIns(*SplitBB, LiveRegs);
+
+  return SplitBB;
+}
+
+
   struct PULPFixupHwLoops : public MachineFunctionPass {
   public:
     static char ID;
@@ -120,6 +161,25 @@ bool PULPFixupHwLoops::runOnMachineFunction(MachineFunction &MF) {
   bool fixedLatch = fixupLoopLatch(MF);
   bool fixedInstr = fixupLoopInstrs(MF);
 
+  // TODO Move to own function
+  for (MachineBasicBlock &MBB : MF) {
+    unsigned instrs = 0;
+    for (MachineInstr &MI : MBB) {
+      instrs++;
+      // If this is a loop instruction that has not been moved to a dedicated
+      // block (for alignment of that block), then split and align it.
+      if (isHardwareLoop(MI) && instrs > 1) {
+        MachineBasicBlock *New = splitMBBAt(&MBB, MI);
+        if (New == &MBB) {
+          // Nothing changed
+          continue;
+        }
+        New->setAlignment(Align(4));
+        break;
+      }
+    }
+  }
+
   return fixedPreHd || fixedLatch || fixedInstr;
 }
 
@@ -154,10 +214,117 @@ bool PULPFixupHwLoops::fixupLoopPreheader(MachineFunction &MF) {
   return changed;
 }
 
+// Returns true if it is safe to remove uses of bumpReg. This is the case if it
+// is not used between setup and the end of lastBlock AND the first use of the
+// register after lastBlock is a write-only (no dependency on old value). The
+// instructions that operate on the bump register throughout the loop are
+// inserted into regUsers.
+bool fixupBump(MachineBasicBlock *lastBlock, MachineInstr *setup,
+               unsigned bumpReg, std::set<MachineInstr *> &regUsers) {
+
+  std::set<MachineBasicBlock *> visited;
+  std::set<MachineInstr *> tmpRegUsers;
+
+  // Track backwards to find all instruction uses. Goal is to ensure bumped
+  // register is not used within loop.
+  std::queue<MachineBasicBlock *> backtrackQ;
+  backtrackQ.push(lastBlock);
+  while (!backtrackQ.empty()) {
+    // Get next from queue.
+    MachineBasicBlock *MBB = backtrackQ.front();
+    backtrackQ.pop();
+    if (visited.count(MBB) > 0) {
+      continue;
+    }
+    visited.insert(MBB);
+
+    // Loop backwards through block, recording any users of the bump register.
+    // If we reach the top of the loop (setup), we will stop our search.
+    bool foundSetup = false;
+    for (auto I = MBB->instr_rbegin(), E = MBB->instr_rend(); I != E; I++) {
+      MachineInstr *MII = &(*I);
+      if (MII == setup) {
+        foundSetup = true;
+        break;
+      }
+      for (unsigned i = 0; i < MII->getNumOperands(); i++) {
+        MachineOperand &MOp = MII->getOperand(i);
+        if (MOp.isReg()) {
+          if (MOp.getReg() == bumpReg) {
+            tmpRegUsers.insert(MII);
+          }
+        }
+      }
+    }
+
+    // Enqueue its predecessors.
+    if (!foundSetup) {
+      for (MachineBasicBlock *Pred : MBB->predecessors()) {
+        backtrackQ.push(Pred);
+      }
+    }
+  }
+
+  // Track forwards, bfs, to check that the first use of the instruction is
+  // always a write. Backloops are prevented, as the loop blocks are already in
+  // the visited set.
+  std::queue<MachineBasicBlock *> fwdQ;
+  for (MachineBasicBlock *Succ : lastBlock->successors()) {
+    fwdQ.push(Succ);
+  }
+  visited.insert(lastBlock);
+  bool alwaysWrite = true;
+  while (!fwdQ.empty()) {
+    MachineBasicBlock *MBB = fwdQ.front();
+    fwdQ.pop();
+    if (visited.count(MBB) > 0) {
+      continue;
+    }
+    visited.insert(MBB);
+
+    // Check for uses
+    bool found = false;
+    for (MachineInstr &MI : *MBB) {
+      // If this is a read of the register, and we have not yet encountered a
+      // write, then it is not safe to remove this register.
+      alwaysWrite &= !MI.readsRegister(bumpReg);
+      if (MI.modifiesRegister(bumpReg, nullptr)) {
+        // We do not need to continue searching, the old value is killed here.
+        found = true;
+        break;
+      }
+    }
+
+    // If we didn't find the first use, continue to next block(s). Quit early
+    // if we already know that we don't always write.
+    if (!found && alwaysWrite) {
+      for (MachineBasicBlock *Succ : MBB->successors()) {
+        fwdQ.push(Succ);
+      }
+    }
+  }
+
+  // If we don't always see an overwrite of the register value before the next
+  // read after the hardware loop, then it is not safe to remove the bump
+  // instruction: Return false.
+  // TODO: If we can calculate the end value and assign it to the register after
+  //       the loop, then we can just insert that load-immediate and continue.
+  if (!alwaysWrite) {
+    return false;
+  }
+
+  // Get all the users of the bump registers to the referenced set, and then
+  // return true.
+  regUsers.insert(tmpRegUsers.begin(), tmpRegUsers.end());
+  return true;
+
+}
+
 bool PULPFixupHwLoops::fixupLoopLatch(MachineFunction &MF) {
 
   bool changedNow = false;
   bool changedOverall = false;
+  std::set<MachineInstr *> toRemove;
 
   // Look at each loop instruction in turn, removing the branching instructions
   // at the end of them. The outer do...while loop and the breaks ensure that we
@@ -215,7 +382,55 @@ bool PULPFixupHwLoops::fixupLoopLatch(MachineFunction &MF) {
                 LastI->getOpcode() == RISCV::BLT ||
                 LastI->getOpcode() == RISCV::BGE ||
                 LastI->getOpcode() == RISCV::BLTU ||
-                LastI->getOpcode() == RISCV::BGEU) {
+                LastI->getOpcode() == RISCV::BGEU ||
+                LastI->getOpcode() == RISCV::P_BNEIMM ||
+                LastI->getOpcode() == RISCV::P_BEQIMM) {
+              // Check if it is safe to remove the bump instruction, in which
+              // case the instructions to remove are placed in regUsers.
+              for (unsigned i = 0; i < LastI->getNumOperands(); i++) {
+                MachineOperand &MO = LastI->getOperand(i);
+                if (MO.isReg()) {
+                  std::set<MachineInstr *> regUsers;
+                  if (fixupBump(LastMBB, &MI, MO.getReg(), regUsers)) {
+                    // Remove the LastI from regUsers, since this instruction is
+                    // handled separately.
+                    if (regUsers.count(&(*LastI)) > 0) {
+                      regUsers.erase(&(*LastI));
+                    }
+                    // If only the bump instruction remains, then it is safe to
+                    // remove it. Caveat: With the current implementation we
+                    // need to make sure that we are not violating the minimum
+                    // length for HW loops.
+                    if (regUsers.size() == 1) {
+                      MachineInstr *Cand = (*regUsers.begin());
+                      if (Cand->getOpcode() == RISCV::ADD ||
+                          Cand->getOpcode() == RISCV::ADDI ||
+                          Cand->getOpcode() == RISCV::SUB) {
+                        if (Cand->getOperand(0).isReg() &&
+                            Cand->getOperand(1).isReg() &&
+                            Cand->getOperand(0).getReg()
+                            == Cand->getOperand(1).getReg()) {
+                          if (Cand->getParent()->size() <= 2) {
+                            // If this is part of the two last (potentially)
+                            // mandatory (hw loops require length of at least 2)
+                            // instructions in the block, it would require much
+                            // more work to remove it. Either because this is
+                            // the instruction that marks the end of the HW
+                            // loop, or because the length would change such
+                            // that we need to insert more nops.
+                            // FIXME: The bump fixup should be done at an
+                            //        earlier stage such that we do not have to
+                            //        worry about it during this phase of the
+                            //        fixup.
+                          } else {
+                            toRemove.insert(Cand);
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
               // Delete one and change/add an uncond. branch to out of the loop.
               MachineBasicBlock *BranchTarget = LastI->getOperand(2).getMBB();
               LastI = LastMBB->erase(LastI);
@@ -255,6 +470,10 @@ bool PULPFixupHwLoops::fixupLoopLatch(MachineFunction &MF) {
     }
 
   } while (changedNow == true);
+
+  for (MachineInstr *MI : toRemove) {
+    MI->eraseFromParent();
+  }
 
   return changedOverall;
 }

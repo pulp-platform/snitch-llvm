@@ -9824,6 +9824,18 @@ def note_neon_vector_initializer_non_portable_q : Note<
   "constants">;
 def err_systemz_invalid_tabort_code : Error<
   "invalid transaction abort code">;
+def err_riscv_pulp_builtin_bextract_range : Error<
+  "size and offset arguments must be such that size + offset <= 32">;
+def err_riscv_pulp_builtin_negpow2 : Error<
+  "argument should be a negative power of 2">;
+def err_riscv_pulp_builtin_pow2complement : Error<
+  "argument should be a power of 2 minus 1">;
+def err_riscv_pulp_builtin_shiftedmask : Error<
+  "argument should be a shifted bit mask (a non-empty sequence of ones with "
+  "the remainder zero)">;
+def err_riscv_pulp_builtin_negshiftedmask : Error<
+  "argument should be a negated shifted bit mask (negation of a non-empty "
+  "sequence of ones with the remainder zero)">;
 def err_64_bit_builtin_32_bit_tgt : Error<
   "this builtin is only available on 64-bit targets">;
 def err_32_bit_builtin_64_bit_tgt : Error<

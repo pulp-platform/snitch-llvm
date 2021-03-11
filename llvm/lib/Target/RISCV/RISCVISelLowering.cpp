@@ -11055,7 +11055,7 @@ bool RISCVTargetLowering::allowsMisalignedMemoryAccesses(
     return false;
 
   EVT ElemVT = VT.getVectorElementType();
-  if (Alignment >= ElemVT.getStoreSize()) {
+  if (Alignment >= ElemVT.getStoreSize() || Subtarget.hasPULPExtV2()) {
     if (Fast)
       *Fast = true;
     return true;
@@ -11279,19 +11279,6 @@ RISCVTargetLowering::getRegisterByName(const char *RegName, LLT VT,
     report_fatal_error(Twine("Trying to obtain non-reserved register \"" +
                              StringRef(RegName) + "\"."));
   return Reg;
-}
-
-bool RISCVTargetLowering::allowsMisalignedMemoryAccesses(
-       EVT VT, unsigned AddrSpace = 0, unsigned Align = 1,
-       MachineMemOperand::Flags Flags = MachineMemOperand::MONone,
-       bool *Fast = nullptr) const {
-  if(Subtarget.hasPULPExtV2()) {
-    if (Fast) {
-      *Fast = false;
-    }
-    return true;
-  }
-  return false;
 }
 
 namespace llvm {

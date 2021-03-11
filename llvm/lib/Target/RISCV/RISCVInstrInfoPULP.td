@@ -1409,12 +1409,7 @@ def : Pat<(ushiftRound (macu GPR:$rd, GPR:$rs1, GPR:$rs2), uimm5:$Is3),
           (P_MACURN GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
 def : Pat<(ushiftRound (machhu GPR:$rd, GPR:$rs1, GPR:$rs2), uimm5:$Is3),
           (P_MACHHURN GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-
-
 }
-
-
-
 
 // Patterns for vectorial ALU operations
 class PatV2V2<SDPatternOperator OpNode, RVInst Inst>
@@ -1645,10 +1640,6 @@ def : Pat<(dotsp_sc_b PulpV4:$rs1, (sext_inreg GPR:$rs2, i8)),
 def : Pat<(dotsp_sc_b PulpV4:$rs1, simm6:$sci),
           (PV_DOTSP_SCI_B PulpV4:$rs1, simm6:$sci)>;
 
-
-
-
-
 def : Pat<(add GPR:$rd, (dotup_h PulpV2:$rs1, PulpV2:$rs2)),
           (PV_SDOTUP_H GPR:$rd, PulpV2:$rs1, PulpV2:$rs2)>;
 
@@ -1666,7 +1657,6 @@ def : Pat<(add GPR:$rd, (dotup_sc_b PulpV4:$rs1, (and GPR:$rs2, 255))),
 
 def : Pat<(add GPR:$rd, (dotup_sc_b PulpV4:$rs1, uimm6:$sci)),
           (PV_SDOTUP_SCI_B GPR:$rd, PulpV4:$rs1, uimm6:$sci)>;
-
 
 def : Pat<(add GPR:$rd, (dotusp_h PulpV2:$rs1, PulpV2:$rs2)),
           (PV_SDOTUSP_H GPR:$rd, PulpV2:$rs1, PulpV2:$rs2)>;
@@ -1686,7 +1676,6 @@ def : Pat<(add GPR:$rd, (dotup_sc_b PulpV4:$rs1, (sext_inreg GPR:$rs2, i8))),
 def : Pat<(add GPR:$rd, (dotup_sc_b PulpV4:$rs1, simm6:$sci)),
           (PV_SDOTUSP_SCI_B GPR:$rd, PulpV4:$rs1, simm6:$sci)>;
 
-
 def : Pat<(add GPR:$rd, (dotsp_h PulpV2:$rs1, PulpV2:$rs2)),
           (PV_SDOTSP_H GPR:$rd, PulpV2:$rs1, PulpV2:$rs2)>;
 
@@ -1704,8 +1693,6 @@ def : Pat<(add GPR:$rd, (dotsp_sc_b PulpV4:$rs1, (sext_inreg GPR:$rs2, i8))),
 
 def : Pat<(add GPR:$rd, (dotsp_sc_b PulpV4:$rs1, simm6:$sci)),
           (PV_SDOTSP_SCI_B GPR:$rd, PulpV4:$rs1, simm6:$sci)>;
-
-
 
 def : Pat<(v2i16 (build_vector (i32 (vector_extract PulpV2:$rs1, GPR:$index0)),
                                (i32 (vector_extract PulpV2:$rs1, GPR:$index1)))),
@@ -1727,8 +1714,6 @@ def : Pat<(v4i8 (build_vector GPR:$rs1, GPR:$rs2, GPR:$rs3, GPR:$rs4)),
 def : Pat<(v2i16 (splat_vector GPR:$rs1)), (PV_PACK_H GPR:$rs1, GPR:$rs1)>;
 def : Pat<(v4i8 (splat_vector GPR:$rs1)), (PV_ADD_SC_B X0, GPR:$rs1)>;
 
-
-
 defm : GeneralSVectorPattern<seteq, "CMPEQ">;
 defm : GeneralSVectorPattern<setne, "CMPNE">;
 defm : GeneralSVectorPattern<setgt, "CMPGT">;
@@ -1740,14 +1725,10 @@ defm : GeneralUVectorPattern<setuge, "CMPGEU">;
 defm : GeneralUVectorPattern<setult, "CMPLTU">;
 defm : GeneralUVectorPattern<setule, "CMPLEU">;
 
-
-
-
 def : Pat<(v2i16 (bitconvert GPR:$rs1)), (v2i16 PulpV2:$rs1)>;
 def : Pat<(v4i8 (bitconvert GPR:$rs1)), (v4i8 PulpV4:$rs1)>;
 def : Pat<(i32 (bitconvert PulpV2:$rs1)), (i32 GPR:$rs1)>;
 def : Pat<(i32 (bitconvert PulpV4:$rs1)), (i32 GPR:$rs1)>;
-
 
 //===----------------------------------------------------------------------===//
 // Pseudo-instructions and codegen patterns
@@ -1865,63 +1846,61 @@ def : PatGprGpr<int_riscv_pulp_mulu, P_MULU>;
 def : PatGprGpr<int_riscv_pulp_mulhhs, P_MULHHS>;
 def : PatGprGpr<int_riscv_pulp_mulhhu, P_MULHHU>;
 
-multiclass MulMacBuiltin<string intrin, string instr> {
-
-    def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mul" # intrin # "N")
-                    GPR:$rs1, GPR:$rs2, uimm5:$shift),
-              (!cast<RVInst>("P_MUL" # instr # "N")
-                    GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
-
-    def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mul" # intrin # "RN")
-                    GPR:$rs1, GPR:$rs2, uimm5:$shift, imm),
-              (!cast<RVInst>("P_MUL" # instr # "RN")
-                    GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
-
-    def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mac" # intrin # "N")
-                    GPR:$rs1, GPR:$rs2, GPR:$rd, uimm5:$shift),
-              (!cast<RVInst>("P_MAC" # instr # "N")
-                    GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
-
-    def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mac" # intrin # "RN")
-                    GPR:$rs1, GPR:$rs2, GPR:$rd, uimm5:$shift, imm),
-              (!cast<RVInst>("P_MAC" # instr # "RN")
-                    GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
-
+multiclass int_mul_mac_N_RN<string intrin, string instr> {
+  // mul<op>N: mul op with normalization factor as immediate
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mul" # intrin # "N")
+              GPR:$rs1, GPR:$rs2, uimm5:$shift),
+            (!cast<RVInst>("P_MUL" # instr # "N")
+              GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
+  // mul<op>RN: mul op with normalization and rounding factors as immediates
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mul" # intrin # "RN")
+              GPR:$rs1, GPR:$rs2, uimm5:$shift, imm),
+            (!cast<RVInst>("P_MUL" # instr # "RN")
+              GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
+  // mac<op>N: mac op with normalization factor as immediate
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mac" # intrin # "N")
+              GPR:$rs1, GPR:$rs2, GPR:$rd, uimm5:$shift),
+            (!cast<RVInst>("P_MAC" # instr # "N")
+              GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
+  // mac<op>RN: mac op with normalization and rounding factors as immediates
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mac" # intrin # "RN")
+              GPR:$rs1, GPR:$rs2, GPR:$rd, uimm5:$shift, imm),
+            (!cast<RVInst>("P_MAC" # instr # "RN")
+              GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
 }
 
-defm : MulMacBuiltin<"s",   "S">;
-defm : MulMacBuiltin<"u",   "U">;
-defm : MulMacBuiltin<"hhs", "HHS">;
-defm : MulMacBuiltin<"hhu", "HHU">;
+defm : int_mul_mac_N_RN<"s",   "S">;
+defm : int_mul_mac_N_RN<"u",   "U">;
+defm : int_mul_mac_N_RN<"hhs", "HHS">;
+defm : int_mul_mac_N_RN<"hhu", "HHU">;
 
-multiclass add_sub_N_RN_r<string intrin, string instr> {
-
-      def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "N")
-                      GPR:$rs1, GPR:$rs2, uimm5:$shift),
-                (!cast<RVInst>("P_" # instr # "N")
-                      GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
-
-      def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "N_r")
-                      GPR:$rs1, GPR:$rs2, uimm5:$shift),
-                (!cast<RVInst>("P_" # instr # "NR")
-                      GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
-
-      def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "RN")
-                      GPR:$rs1, GPR:$rs2, uimm5:$shift, imm),
-                (!cast<RVInst>("P_" # instr # "RN")
-                      GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
-
-      def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "RN_r")
-                      GPR:$rs1, GPR:$rs2, uimm5:$shift),
-                (!cast<RVInst>("P_" # instr # "RNR")
-                      GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
-
+multiclass int_N_RN_r<string intrin, string instr> {
+  // <op>RN: op with normalization and round factors as immediates
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "N")
+              GPR:$rs1, GPR:$rs2, uimm5:$shift),
+            (!cast<RVInst>("P_" # instr # "N")
+              GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
+  // <op>N_r: op with normalization factor
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "N_r")
+              GPR:$rd, GPR:$rs1, GPR:$rs2),
+            (!cast<RVInst>("P_" # instr # "NR")
+              GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+  // <op>RN: op with normalization and round factors as immediates
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "RN")
+              GPR:$rs1, GPR:$rs2, uimm5:$shift, imm),
+            (!cast<RVInst>("P_" # instr # "RN")
+              GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
+  // <op>N: op with normalization factor as immediate
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "RN_r")
+              GPR:$rd, GPR:$rs1, GPR:$rs2),
+            (!cast<RVInst>("P_" # instr # "RNR")
+              GPR:$rd, GPR:$rs1, GPR:$rs2)>;
 }
 
-defm : add_sub_N_RN_r<"add",  "ADD">;
-defm : add_sub_N_RN_r<"addu", "ADDU">;
-defm : add_sub_N_RN_r<"sub",  "SUB">;
-defm : add_sub_N_RN_r<"subu", "SUBU">;
+defm : int_N_RN_r<"add",  "ADD">;
+defm : int_N_RN_r<"addu", "ADDU">;
+defm : int_N_RN_r<"sub",  "SUB">;
+defm : int_N_RN_r<"subu", "SUBU">;
 
 
 def : Pat<(int_riscv_pulp_pack2 GPR:$rs1, GPR:$rs2),
@@ -1968,33 +1947,43 @@ def : PatGprGpr<int_riscv_pulp_clip_r, P_CLIPR>;
 
 def : Pat<(int_riscv_pulp_clipu GPR:$rs1, 0, powerOf2Minus1:$upperBound),
           (P_CLIPU GPR:$rs1, (trailing1sPlus1 imm:$upperBound))>;
-def : PatGprGpr<int_riscv_pulp_clip_r, P_CLIPR>;
+def : PatGprGpr<int_riscv_pulp_clipu_r, P_CLIPUR>;
 
 
 def : Pat<(int_riscv_pulp_OffsetedRead GPR:$rs1, GPR:$rs2), (PULP_LW_REG_PI GPR:$rs1, GPR:$rs2)>;
 def : Pat<(int_riscv_pulp_OffsetedReadHalf GPR:$rs1, GPR:$rs2), (PULP_LH_REG_PI GPR:$rs1, GPR:$rs2)>;
 def : Pat<(int_riscv_pulp_OffsetedReadByte GPR:$rs1, GPR:$rs2), (PULP_LB_REG_PI GPR:$rs1, GPR:$rs2)>;
 
-def : Pat<(int_riscv_pulp_OffsetedWrite GPR:$rs2, GPR:$rs1, GPR:$rs3), (PULP_SW_REG_PI GPR:$rs2, GPR:$rs3, GPR:$rs1)>;
-def : Pat<(int_riscv_pulp_OffsetedWriteHalf GPR:$rs2, GPR:$rs1, GPR:$rs3), (PULP_SH_REG_PI GPR:$rs2, GPR:$rs3, GPR:$rs1)>;
-def : Pat<(int_riscv_pulp_OffsetedWriteByte GPR:$rs2, GPR:$rs1, GPR:$rs3), (PULP_SB_REG_PI GPR:$rs2, GPR:$rs3, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_OffsetedWrite GPR:$rd, GPR:$rs1, GPR:$rs3), (PULP_SW_REG_PI GPR:$rd, GPR:$rs3, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_OffsetedWriteHalf GPR:$rd, GPR:$rs1, GPR:$rs3), (PULP_SH_REG_PI GPR:$rd, GPR:$rs3, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_OffsetedWriteByte GPR:$rd, GPR:$rs1, GPR:$rs3), (PULP_SB_REG_PI GPR:$rd, GPR:$rs3, GPR:$rs1)>;
 
 
 def : Pat<(int_riscv_pulp_read_base_off GPR:$rs1, GPR:$rs2), (PULP_LW_REG_PI GPR:$rs1, GPR:$rs2)>;
-def : Pat<(int_riscv_pulp_write_base_off GPR:$rs2, GPR:$rs1, GPR:$rs3), (PULP_SW_REG_PI GPR:$rs2, GPR:$rs3, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_write_base_off GPR:$rd, GPR:$rs1, GPR:$rs3), (PULP_SW_REG_PI GPR:$rd, GPR:$rs3, GPR:$rs1)>;
 
-def : Pat<(int_riscv_pulp_spr_read_vol uimm12:$imm12), (CSRRS csr_sysreg:$imm12, X0)>;
-def : Pat<(int_riscv_pulp_spr_read uimm12:$imm12), (CSRRS csr_sysreg:$imm12, X0)>;
+// CSR intrinsic patterns have been changed:
+// (CSRRS csr_sysreg:$imm12, X0) -> (CSRRS uimm12:$imm12, X0)
+// The former leads to a correct MachineInstruction selection but
+// breaks the RISCV ASM printer trying to deal with the selected MCInst.
+// TODO: make the following patterns work with the csr_sysreg class
+def : Pat<(int_riscv_pulp_spr_read_vol uimm12:$imm12), (CSRRS uimm12:$imm12, X0)>;
+def : Pat<(int_riscv_pulp_spr_read uimm12:$imm12), (CSRRS uimm12:$imm12, X0)>;
+def : Pat<(int_riscv_pulp_spr_write uimm12:$imm12, GPR:$rd), (CSRRW uimm12:$imm12, GPR:$rd)>;
+def : Pat<(int_riscv_pulp_spr_bit_set uimm12:$imm12, GPR:$rd), (CSRRS uimm12:$imm12, GPR:$rd)>;
+def : Pat<(int_riscv_pulp_spr_bit_clr uimm12:$imm12, GPR:$rd), (CSRRC uimm12:$imm12, GPR:$rd)>;
+def : Pat<(int_riscv_pulp_read_then_spr_write uimm12:$imm12, GPR:$rs1), (CSRRW uimm12:$imm12, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_read_then_spr_bit_set uimm12:$imm12, GPR:$rs1), (CSRRS uimm12:$imm12, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_read_then_spr_bit_clr uimm12:$imm12, GPR:$rs1), (CSRRC uimm12:$imm12, GPR:$rs1)>;
 
-def : Pat<(int_riscv_pulp_spr_write uimm12:$imm12, GPR:$rs1), (CSRRW csr_sysreg:$imm12, GPR:$rs1)>;
-def : Pat<(int_riscv_pulp_spr_bit_set uimm12:$imm12, GPR:$rs1), (CSRRS csr_sysreg:$imm12, GPR:$rs1)>;
-def : Pat<(int_riscv_pulp_spr_bit_clr uimm12:$imm12, GPR:$rs1), (CSRRC csr_sysreg:$imm12, GPR:$rs1)>;
-
-def : Pat<(int_riscv_pulp_read_then_spr_write uimm12:$imm12, GPR:$rs1), (CSRRW csr_sysreg:$imm12, GPR:$rs1)>;
-def : Pat<(int_riscv_pulp_read_then_spr_bit_set uimm12:$imm12, GPR:$rs1), (CSRRS csr_sysreg:$imm12, GPR:$rs1)>;
-def : Pat<(int_riscv_pulp_read_then_spr_bit_clr uimm12:$imm12, GPR:$rs1), (CSRRC csr_sysreg:$imm12, GPR:$rs1)>;
-
+// TODO the *_v versions should have side effects
 def : Pat<(int_riscv_pulp_read_base_off_v GPR:$rs1, GPR:$rs2), (PULP_LW_REG_PI GPR:$rs1, GPR:$rs2)>;
-def : Pat<(int_riscv_pulp_write_base_off_v GPR:$rs2, GPR:$rs1, GPR:$rs3), (PULP_SW_REG_PI GPR:$rs2, GPR:$rs3, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_write_base_off_v GPR:$rd, GPR:$rs1, GPR:$rs3), (PULP_SW_REG_PI GPR:$rd, GPR:$rs3, GPR:$rs1)>;
 
+def : Pat<(int_riscv_pulp_CoreId), (ANDI (CSRRS MHARTID.Encoding, X0), 0b1111)>;
+def : Pat<(int_riscv_pulp_ClusterId), (SRLI (ANDI (CSRRS MHARTID.Encoding, X0), 0b11111100000), 5)>;
+def : Pat<(int_riscv_pulp_IsFc), (SRLI (ANDI (CSRRS MHARTID.Encoding, X0), 0b10000000000), 10)>;
+// Symbols below must be provided by the platform, no CSR involved
+// Note: HERO has not fabric controller
+def : Pat<(int_riscv_pulp_HasFc), (ANDI X0, 0)>;
 }

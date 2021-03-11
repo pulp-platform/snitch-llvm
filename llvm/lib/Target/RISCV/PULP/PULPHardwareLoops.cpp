@@ -479,6 +479,12 @@ PULPHardwareLoops::getComparisonKind(unsigned CondOpc,
   case RISCV::BGEU:
     Cmp = Comparison::GEs;
     break;
+  case RISCV::P_BNEIMM:
+    Cmp = Comparison::NE;
+    break;
+  case RISCV::P_BEQIMM:
+    Cmp = Comparison::EQ;
+    break;
   default:
     return (Comparison::Kind)0;
   }
@@ -833,7 +839,15 @@ CountValue *PULPHardwareLoops::computeCount(MachineLoop *Loop,
         SubIB.addReg(End->getReg(), 0, End->getSubReg())
           .addReg(Start->getReg(), 0, Start->getSubReg());
       } else {
-        SubIB.addImm(EndV)
+        MachineBasicBlock::iterator ThisInsertPos = InsertPos;
+        ThisInsertPos--;
+
+        unsigned ImmToRegReg = MRI->createVirtualRegister(IntRC);
+        MachineInstrBuilder ImmToReg = BuildMI(*PH, ThisInsertPos, DL,
+                                               TII->get(RISCV::ADDI),
+                                               ImmToRegReg);
+        ImmToReg.addReg(RISCV::X0).addImm(EndV);
+        SubIB.addReg(ImmToReg->getOperand(0).getReg())
           .addReg(Start->getReg(), 0, Start->getSubReg());
       }
       DistR = SubR;

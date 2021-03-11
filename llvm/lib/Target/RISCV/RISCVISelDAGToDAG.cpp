@@ -1655,6 +1655,7 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
 
     ReplaceNode(Node, Load);
     return;
+  }
   case ISD::LOAD: {
     LoadSDNode *Load = cast<LoadSDNode>(Node);
     if (Load->getAddressingMode() == ISD::UNINDEXED)
@@ -1679,22 +1680,23 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
 
 
     switch (Load->getMemoryVT().getSimpleVT().SimpleTy) {
+      default: break;
       case MVT::i8:
-        if      ( simm12 &&  signExtend) Opcode = RISCV::P_LB_ri_PostIncrement;
-        else if ( simm12 && !signExtend) Opcode = RISCV::P_LBU_ri_PostIncrement;
-        else if (!simm12 &&  signExtend) Opcode = RISCV::P_LB_rr_PostIncrement;
-        else                             Opcode = RISCV::P_LBU_rr_PostIncrement;
+        if      ( simm12 &&  signExtend) Opcode = RISCV::PULP_LB_IMM_PI;
+        else if ( simm12 && !signExtend) Opcode = RISCV::PULP_LBU_IMM_PI;
+        else if (!simm12 &&  signExtend) Opcode = RISCV::PULP_LB_REG_PI;
+        else                             Opcode = RISCV::PULP_LBU_REG_PI;
         break;
       case MVT::i16:
-        if      ( simm12 &&  signExtend) Opcode = RISCV::P_LH_ri_PostIncrement;
-        else if ( simm12 && !signExtend) Opcode = RISCV::P_LHU_ri_PostIncrement;
-        else if (!simm12 &&  signExtend) Opcode = RISCV::P_LH_rr_PostIncrement;
-        else                             Opcode = RISCV::P_LHU_rr_PostIncrement;
+        if      ( simm12 &&  signExtend) Opcode = RISCV::PULP_LH_IMM_PI;
+        else if ( simm12 && !signExtend) Opcode = RISCV::PULP_LHU_IMM_PI;
+        else if (!simm12 &&  signExtend) Opcode = RISCV::PULP_LH_REG_PI;
+        else                             Opcode = RISCV::PULP_LHU_REG_PI;
         break;
       case MVT::i32:
-        if (simm12) Opcode = RISCV::P_LW_ri_PostIncrement;
-        else        Opcode = RISCV::P_LW_rr_PostIncrement;
-      default: break;
+        if (simm12) Opcode = RISCV::PULP_LW_IMM_PI;
+        else        Opcode = RISCV::PULP_LW_REG_PI;
+        break;
     }
 
     if (!Opcode) break;
@@ -1742,10 +1744,9 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
       imm |= (Shuffle->getMaskElt(1) & 3) << 8;
       imm |=  Shuffle->getMaskElt(0) & 3;
     }
-    SDValue Imm = SDValue(selectImm(CurDAG, DL, imm, MVT::i32), 0);
+    SDValue Imm = SDValue(selectImm(CurDAG, DL, VT, imm, *Subtarget), 0);
     ReplaceNode(Node, CurDAG->getMachineNode(Opcode, DL, VT, Vec0, Vec1, Imm));
     return;
-  }
   }
   }
 

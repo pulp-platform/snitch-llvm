@@ -1978,7 +1978,7 @@ def : PatGprGpr<int_riscv_pulp_clip_r, P_CLIPR>;
 
 def : Pat<(int_riscv_pulp_clipu GPR:$rs1, 0, powerOf2Minus1:$upperBound),
           (P_CLIPU GPR:$rs1, (trailing1sPlus1 imm:$upperBound))>;
-def : PatGprGpr<int_riscv_pulp_clip_r, P_CLIPR>;
+def : PatGprGpr<int_riscv_pulp_clipu_r, P_CLIPUR>;
 
 
 def : Pat<(int_riscv_pulp_OffsetedRead GPR:$rs1, GPR:$rs2), (PULP_LW_REG_PI GPR:$rs1, GPR:$rs2)>;

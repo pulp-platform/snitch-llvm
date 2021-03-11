@@ -237,9 +237,9 @@ TARGET_BUILTIN(__builtin_pulp_clip, "iiIiIi", "nc", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_clip_r, "iii", "nc", "xpulpv")
 
 TARGET_BUILTIN(__builtin_pulp_clipu, "iiIiIi", "nc", "xpulpv")
-TARGET_BUILTIN(__builtin_pulp_clipu_r, "iii", "nc", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_clipu_r, "Uiii", "nc", "xpulpv")
 
-// TODO TARGET_BUILTIN(__builtin_pulp_event_unit_read, "ii*i", "n", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_event_unit_read, "Uii*Ui", "n", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_OffsetedRead, "ii*i", "n", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_OffsetedReadHalf, "ss*i", "n", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_OffsetedReadByte, "cc*i", "n", "xpulpv")

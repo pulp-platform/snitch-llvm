@@ -211,8 +211,8 @@ let TargetPrefix = "riscv" in {
   defm clipu_r : PulpBinary32;
 
   defm OffsetedRead : PulpIntrinsic<[llvm_i32_ty], [LLVMPointerType<llvm_i32_ty>, llvm_i32_ty], [IntrReadMem]>;
-  defm OffsetedReadHalf : PulpIntrinsic<[llvm_i32_ty], [LLVMPointerType<llvm_i16_ty>, llvm_i32_ty], [IntrReadMem]>;
-  defm OffsetedReadByte : PulpIntrinsic<[llvm_i32_ty], [LLVMPointerType<llvm_i8_ty>, llvm_i32_ty], [IntrReadMem]>;
+  defm OffsetedReadHalf : PulpIntrinsic<[llvm_i16_ty], [LLVMPointerType<llvm_i16_ty>, llvm_i32_ty], [IntrReadMem]>;
+  defm OffsetedReadByte : PulpIntrinsic<[llvm_i8_ty], [LLVMPointerType<llvm_i8_ty>, llvm_i32_ty], [IntrReadMem]>;
 
   defm OffsetedWrite : PulpIntrinsic<[], [llvm_i32_ty, LLVMPointerType<llvm_i32_ty>, llvm_i32_ty], [IntrWriteMem]>;
   defm OffsetedWriteHalf : PulpIntrinsic<[], [llvm_i32_ty, LLVMPointerType<llvm_i16_ty>, llvm_i32_ty], [IntrWriteMem]>;

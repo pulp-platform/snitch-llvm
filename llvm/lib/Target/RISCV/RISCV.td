@@ -239,6 +239,13 @@ def HasExtXssr : Predicate<"Subtarget->hasExtXssr()">,
                            AssemblerPredicate<(all_of FeatureExtXssr),
                            "'Xssr' (Stream Semantic Registers)">;
 
+def FeatureExtXmempool
+    : SubtargetFeature<"xmempool", "HasExtXmempool", "true",
+                       "'Xmempool' (MemPool System)">;
+def HasExtXmempool : Predicate<"Subtarget->hasExtXmempool()">,
+                           AssemblerPredicate<(all_of FeatureExtXmempool),
+                           "'Xmempool' (MemPool System)">;
+
 //===----------------------------------------------------------------------===//
 // Named operands for CSR instructions.
 //===----------------------------------------------------------------------===//
@@ -270,7 +277,8 @@ def : ProcessorModel<"generic-rv32", NoSchedModel, []>;
 def : ProcessorModel<"generic-rv64", NoSchedModel, [Feature64Bit]>;
 
 def : ProcessorModel<"mempool-rv32", MempoolModel, [FeatureStdExtM,
-                                                    FeatureStdExtA]>;
+                                                    FeatureStdExtA,
+                                                    FeatureExtXmempool]>;
 
 def : ProcessorModel<"rocket-rv32", RocketModel, []>;
 def : ProcessorModel<"rocket-rv64", RocketModel, [Feature64Bit]>;

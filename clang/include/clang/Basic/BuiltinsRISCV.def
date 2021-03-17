@@ -268,7 +268,7 @@ TARGET_BUILTIN(__builtin_pulp_read_then_spr_write, "iii", "n", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_read_then_spr_bit_set, "iii", "n", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_read_then_spr_bit_clr, "iii", "n", "xpulpv")
 
-TARGET_BUILTIN(__builtin_pulp_write_base_off_v, "viii", "n", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_write_base_off_v, "vii*i", "n", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_read_base_off_v, "iii", "n", "xpulpv")
 
 // TODO TARGET_BUILTIN(__builtin_pulp_pulp_omp_barrier, "v", "n", "xpulpv")

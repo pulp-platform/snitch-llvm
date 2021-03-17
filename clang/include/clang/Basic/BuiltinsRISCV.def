@@ -255,7 +255,7 @@ TARGET_BUILTIN(__builtin_pulp_ClusterId, "i", "n", "xpulpv")
 // TODO TARGET_BUILTIN(__builtin_pulp_HasFc, "i", "n", "xpulpv")
 
 TARGET_BUILTIN(__builtin_pulp_read_base_off, "ii*i", "n", "xpulpv")
-TARGET_BUILTIN(__builtin_pulp_write_base_off, "vi*ii", "n", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_write_base_off, "vii*i", "n", "xpulpv")
 
 TARGET_BUILTIN(__builtin_pulp_spr_read_vol, "ii", "n", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_spr_read, "ii", "n", "xpulpv")

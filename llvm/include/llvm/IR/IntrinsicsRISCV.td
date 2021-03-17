@@ -222,7 +222,7 @@ let TargetPrefix = "riscv" in {
   defm ClusterId : PulpIntrinsic<[llvm_i32_ty], [], []>;
 
   defm read_base_off : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty], [IntrReadMem]>;
-  defm write_base_off : PulpIntrinsic<[], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrWriteMem]>;
+  defm write_base_off : PulpIntrinsic<[], [llvm_i32_ty, LLVMPointerType<llvm_i32_ty>, llvm_i32_ty], [IntrWriteMem]>;
 
   defm spr_read_vol : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty], [IntrNoMem, IntrHasSideEffects]>;
   defm spr_read : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty], [IntrNoMem, IntrHasSideEffects]>;

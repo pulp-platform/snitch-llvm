@@ -1164,3 +1164,46 @@ let TargetPrefix = "riscv" in {
         RISCVSSRIntrinsic;
 
 } // TargetPrefix = "riscv"
+
+
+
+//===----------------------------------------------------------------------===//
+// Xsdma extension
+
+class RISCVSDMAIntrinsic {
+}
+
+let TargetPrefix = "riscv" in {
+  def int_riscv_sdma_start_oned
+      : GCCBuiltin<"__builtin_sdma_start_oned">,
+        Intrinsic<[llvm_i32_ty],
+                  [llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
+                  [IntrHasSideEffects]>,
+        RISCVSDMAIntrinsic;
+  // split 64 into 32 hi/low for src/dst addresses which can be inserted during
+  // DAG legalization
+  def int_riscv_sdma_start_oned_legal
+      : Intrinsic<[llvm_i32_ty],
+                  [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                  [IntrHasSideEffects]>,
+        RISCVSDMAIntrinsic;
+
+  def int_riscv_sdma_start_twod
+      : GCCBuiltin<"__builtin_sdma_start_twod">,
+        Intrinsic<[llvm_i32_ty],
+                  [llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                  [IntrHasSideEffects]>,
+        RISCVSDMAIntrinsic;
+  def int_riscv_sdma_start_twod_legal
+      : Intrinsic<[llvm_i32_ty],
+                  [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                  [IntrHasSideEffects]>,
+        RISCVSDMAIntrinsic;
+  def int_riscv_sdma_stat
+      : GCCBuiltin<"__builtin_sdma_stat">,
+        Intrinsic<[llvm_i32_ty], [llvm_i32_ty], [IntrHasSideEffects]>,
+        RISCVSDMAIntrinsic;
+  def int_riscv_sdma_wait_for_idle
+      : GCCBuiltin<"__builtin_sdma_wait_for_idle">,
+        Intrinsic<[], [], [IntrHasSideEffects]>, RISCVSDMAIntrinsic;
+} // TargetPrefix = "riscv"

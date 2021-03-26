@@ -462,6 +462,10 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
     }
   }
 
+  if (Subtarget.hasExtXdma()) {
+    setOperationAction(ISD::INTRINSIC_W_CHAIN, MVT::i64, Custom);
+  }
+
   // Function alignments.
   const Align FunctionAlignment(Subtarget.hasStdExtC() ? 2 : 4);
   setMinFunctionAlignment(FunctionAlignment);
@@ -1441,6 +1445,7 @@ SDValue RISCVTargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
   unsigned IntNo = cast<ConstantSDNode>(Op.getOperand(1))->getZExtValue();
   SDLoc DL(Op);
 
+
   if (Subtarget.hasStdExtV()) {
     // Some RVV intrinsics may claim that they want an integer operand to be
     // extended.
@@ -1473,6 +1478,70 @@ SDValue RISCVTargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
   switch (IntNo) {
   default:
     return SDValue(); // Don't custom lower most intrinsics.
+  case Intrinsic::riscv_sdma_start_twod:
+  case Intrinsic::riscv_sdma_start_oned: {
+    bool isTwod = IntNo == Intrinsic::riscv_sdma_start_twod;
+
+    EVT VT1 = Op.getOperand(2).getValueType();
+    EVT VT2 = Op.getOperand(3).getValueType();
+    assert(VT1 == MVT::i64 && VT2 == MVT::i64 && "Lower riscv_sdma_start_ expects an i64");
+
+    //HiLo split of src/dst address using the EXTRACT_ELEMENT node
+    EVT HalfVT = VT1.getHalfSizedIntegerVT(*DAG.getContext());
+    SDValue One = DAG.getConstant(1, DL, HalfVT);
+    SDValue Zero = DAG.getConstant(0, DL, HalfVT);
+    // first operand
+    SDValue LHS = Op.getOperand(2);
+    SDValue LHS_Lo = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, LHS, Zero);
+    SDValue LHS_Hi = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, LHS, One);
+    // second operand
+    SDValue RHS = Op.getOperand(3);
+    SDValue RHS_Lo = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, RHS, Zero);
+    SDValue RHS_Hi = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, RHS, One);
+
+    // build new intrinsic: first create operand list
+    SmallVector<SDValue, 8> OpsV; 
+      // chain
+    OpsV.push_back(Op.getOperand(0));
+      // intrinsic ID
+    if(isTwod)
+      OpsV.push_back(DAG.getConstant(Intrinsic::riscv_sdma_start_twod_legal, DL, MVT::i32));
+    else
+      OpsV.push_back(DAG.getConstant(Intrinsic::riscv_sdma_start_oned_legal, DL, MVT::i32));
+      // unpacked src and dst addresses
+    OpsV.push_back(LHS_Hi);
+    OpsV.push_back(LHS_Lo);
+    OpsV.push_back(RHS_Hi);
+    OpsV.push_back(RHS_Lo);
+    // original size
+    OpsV.push_back(Op.getOperand(4));
+    if(isTwod) {
+      // source, destination stride and nreps
+      OpsV.push_back(Op.getOperand(5));
+      OpsV.push_back(Op.getOperand(6));
+      OpsV.push_back(Op.getOperand(7));
+    }
+    // original cfg 
+    OpsV.push_back(Op.getOperand(isTwod ? 8:5));
+    ArrayRef<SDValue> Ops(OpsV);
+
+    // build result types: i32 and Chain
+    ArrayRef<EVT> ResultTys({MVT::i32, MVT::Other});
+
+    // create new node
+    SDValue res = DAG.getNode(ISD::INTRINSIC_W_CHAIN, DL, ResultTys, Ops);
+
+    LLVM_DEBUG(LHS_Lo.dump());
+    LLVM_DEBUG(LHS_Hi.dump());
+    LLVM_DEBUG(RHS_Lo.dump());
+    LLVM_DEBUG(RHS_Hi.dump());
+    LLVM_DEBUG(dbgs() << "#operands: " << Op.getNumOperands() << '\n');
+    LLVM_DEBUG(dbgs() << "getValueType: " << (unsigned)Op.getValueType().getSimpleVT().SimpleTy << '\n');
+    LLVM_DEBUG(dbgs() << "# in  values: " << Op.getNode()->getNumValues() << '\n');
+    LLVM_DEBUG(dbgs() << "# res values: " << res.getNode()->getNumValues() << '\n');
+
+    return res;
+  }
   case Intrinsic::riscv_vleff: {
     SDLoc DL(Op);
     SDVTList VTs = DAG.getVTList(Op.getValueType(), MVT::Other, MVT::Glue);

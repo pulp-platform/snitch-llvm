@@ -52,6 +52,9 @@ void initializeRISCVCleanupVSETVLIPass(PassRegistry &);
 FunctionPass *createRISCVExpandSSRPass();
 void initializeRISCVExpandSSRPass(PassRegistry &);
 
+FunctionPass *createRISCVExpandSDMAPass();
+void initializeRISCVExpandSDMAPass(PassRegistry &);
+
 InstructionSelector *createRISCVInstructionSelector(const RISCVTargetMachine &,
                                                     RISCVSubtarget &,
                                                     RISCVRegisterBankInfo &);

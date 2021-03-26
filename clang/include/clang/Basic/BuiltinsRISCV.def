@@ -39,7 +39,19 @@ SSR_BUILTIN(pop, "dUi", "n", "xssr")
 SSR_BUILTIN(enable, "v", "n", "xssr")
 SSR_BUILTIN(disable, "v", "n", "xssr")
 
+// SDMA builtins
+
+#if defined(TARGET_BUILTIN) && !defined(SDMA_BUILTIN)
+#   define SDMA_BUILTIN(ID, TYPE, ATTRS, FEATURE) TARGET_BUILTIN(__builtin_sdma_##ID, TYPE, ATTRS, FEATURE)
+#endif
+
+SDMA_BUILTIN(start_oned, "UiULLiULLiUiUi", "n", "xdma")
+SDMA_BUILTIN(start_twod, "UiULLiULLiUiUiUiUiUi", "n", "xdma")
+SDMA_BUILTIN(stat, "UiUi", "n", "xdma")
+SDMA_BUILTIN(wait_for_idle, "v", "n", "xdma")
+
 #undef BUILTIN
 #undef TARGET_BUILTIN
 #undef SSR_BUILTIN
+#undef SDMA_BUILTIN
 

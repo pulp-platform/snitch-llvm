@@ -44,6 +44,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   initializeRISCVMergeBaseOffsetOptPass(*PR);
   initializeRISCVSExtWRemovalPass(*PR);
   initializeRISCVExpandSSRPass(*PR);
+  initializeRISCVExpandSDMAPass(*PR);
   initializeRISCVExpandPseudoPass(*PR);
   initializeRISCVInsertVSETVLIPass(*PR);
 }
@@ -211,6 +212,7 @@ void RISCVPassConfig::addMachineSSAOptimization() {
 
 void RISCVPassConfig::addPreRegAlloc() {
   addPass(createRISCVExpandSSRPass());
+  addPass(createRISCVExpandSDMAPass());
   if (TM->getOptLevel() != CodeGenOpt::None)
     addPass(createRISCVMergeBaseOffsetOptPass());
   addPass(createRISCVInsertVSETVLIPass());

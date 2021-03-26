@@ -82,6 +82,12 @@ TARGET_BUILTIN(__builtin_ssr_pop, "dUi", "n", "xssr")
 TARGET_BUILTIN(__builtin_ssr_enable, "v", "n", "xssr")
 TARGET_BUILTIN(__builtin_ssr_disable, "v", "n", "xssr")
 
+// SDMA extension
+TARGET_BUILTIN(__builtin_sdma_start_oned, "UiULLiULLiUiUi", "n", "xdma")
+TARGET_BUILTIN(__builtin_sdma_start_twod, "UiULLiULLiUiUiUiUiUi", "n", "xdma")
+TARGET_BUILTIN(__builtin_sdma_stat, "UiUi", "n", "xdma")
+TARGET_BUILTIN(__builtin_sdma_wait_for_idle, "v", "n", "xdma")
+
 #undef BUILTIN
 #undef TARGET_BUILTIN
 

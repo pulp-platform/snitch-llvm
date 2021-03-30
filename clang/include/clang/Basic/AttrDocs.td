@@ -3396,6 +3396,14 @@ for details.
   }];
 }
 
+def FrepDocs : Documentation {
+  let Category = DocCatStmt;
+  let Heading = "#pragma frep";
+  let Content = [{
+The ``#pragma frep`` directive allows add metadata in the IR.
+  }];
+}
+
 def UnrollHintDocs : Documentation {
   let Category = DocCatStmt;
   let Heading = "#pragma unroll, #pragma nounroll";

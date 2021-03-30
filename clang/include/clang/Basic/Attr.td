@@ -3618,6 +3618,25 @@ def LoopHint : Attr {
   let HasCustomParsing = 1;
 }
 
+def Frep : Attr {
+  let Spellings = [Pragma<"", "frep">];
+  let Args = [EnumArgument<"Option", "OptionType",
+                          ["infer"],
+                          ["Infer"]>];
+  let AdditionalMembers = [{
+  static const char *getOptionName(int Option) {
+    switch(Option) {
+    case Infer: return "infer";
+    }
+    llvm_unreachable("Unhandled Frep option.");
+  }
+    void printPrettyPragma(raw_ostream &OS, const PrintingPolicy &Policy) const {
+      return;
+    }
+  }];
+  let Documentation = [FrepDocs];
+}
+
 def CapturedRecord : InheritableAttr {
   // This attribute has no spellings as it is only ever created implicitly.
   let Spellings = [];

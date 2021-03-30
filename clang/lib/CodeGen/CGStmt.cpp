@@ -32,6 +32,7 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/MDBuilder.h"
 #include "llvm/Support/SaveAndRestore.h"
+#include "llvm/IR/IntrinsicsRISCV.h"
 
 using namespace clang;
 using namespace CodeGen;
@@ -53,6 +54,11 @@ void CodeGenFunction::EmitStopPoint(const Stmt *S) {
 void CodeGenFunction::EmitStmt(const Stmt *S, ArrayRef<const Attr *> Attrs) {
   assert(S && "Null statement?");
   PGO.setCurrentStmt(S);
+
+  if (Attrs.size() > 0) {
+    if (Attrs[0]->getKind() == attr::Frep)
+      addFrepMetadata(Builder.GetInsertBlock(), Attrs);
+  }
 
   // These statements have their own debug info handling.
   if (EmitSimpleStmt(S, Attrs))
@@ -564,6 +570,30 @@ void CodeGenFunction::EmitBranch(llvm::BasicBlock *Target) {
   }
 
   Builder.ClearInsertionPoint();
+}
+
+void CodeGenFunction::addFrepMetadata(llvm::BasicBlock *block, ArrayRef<const Attr *> FrepAttrs) {
+  using namespace llvm;
+  assert(FrepAttrs[0]->getKind() == attr::Frep && "Expected attribute attr::Frep");
+
+  const FrepAttr *attr = (const FrepAttr*)FrepAttrs[0];
+  ASTContext& AC = CGM.getContext();
+  BasicBlock::iterator it_start = block->getFirstInsertionPt();
+
+  // build the metadata string
+  std::string metadata_string;
+  if (attr->getOption() == FrepAttr::Infer) {
+      metadata_string = "frep.infer";
+  }
+
+  // build intrinsic that hints the backend to do frep inference
+  Builder.CreateIntrinsic(Intrinsic::riscv_frep_infer, {}, {});
+
+  // create metadata node and attach it to the insert point
+  // LLVMContext& C = it_start->getContext();
+  // std::string result = metadata_string;
+  // MDNode* N = MDNode::get(C, MDString::get(C, result));
+  // it_start->setMetadata("frep", N);
 }
 
 void CodeGenFunction::EmitBlockAfterUses(llvm::BasicBlock *block) {

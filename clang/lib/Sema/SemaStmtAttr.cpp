@@ -173,6 +173,33 @@ static Attr *handleLoopHintAttr(Sema &S, Stmt *St, const ParsedAttr &A,
   return LoopHintAttr::CreateImplicit(S.Context, Option, State, ValueExpr, A);
 }
 
+static Attr *handleFrepAttr(Sema &S, Stmt *St, const ParsedAttr &A,
+                                SourceRange) {
+  IdentifierLoc *PragmaNameLoc = A.getArgAsIdent(0);
+  IdentifierLoc *OptionLoc = A.getArgAsIdent(1);
+  bool PragmaInfer = (OptionLoc->Ident->getName() == "infer");
+  FrepAttr::OptionType Option = FrepAttr::Infer;
+
+  StringRef PragmaName = PragmaNameLoc->Ident->getName();
+
+  if (St->getStmtClass() != Stmt::ForStmtClass) {
+    std::string Pragma = "#pragma " + std::string(PragmaName);
+    S.Diag(St->getBeginLoc(), diag::err_pragma_loop_precedes_nonloop) << Pragma;
+    return nullptr;
+  }
+
+  // printf("bail\n");
+  // return nullptr;
+
+  if (PragmaInfer) {
+    Option = FrepAttr::Infer;
+  } else {
+    printf("Error, no loop\n");
+  }
+  return FrepAttr::CreateImplicit(S.Context, Option, A.getRange());
+}
+
+
 namespace {
 class CallExprFinder : public ConstEvaluatedExprVisitor<CallExprFinder> {
   bool FoundCallExpr = false;
@@ -412,6 +439,8 @@ static Attr *ProcessStmtAttribute(Sema &S, Stmt *St, const ParsedAttr &A,
     return handleFallThroughAttr(S, St, A, Range);
   case ParsedAttr::AT_LoopHint:
     return handleLoopHintAttr(S, St, A, Range);
+  case ParsedAttr::AT_Frep:
+    return handleFrepAttr(S, St, A, Range);
   case ParsedAttr::AT_OpenCLUnrollHint:
     return handleOpenCLUnrollHint(S, St, A, Range);
   case ParsedAttr::AT_Suppress:

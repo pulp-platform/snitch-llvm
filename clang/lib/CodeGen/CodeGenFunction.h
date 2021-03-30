@@ -2457,6 +2457,9 @@ public:
   /// code.
   void EmitBranch(llvm::BasicBlock *Block);
 
+  /// Add metadata for frep loops
+  void addFrepMetadata(llvm::BasicBlock *block, ArrayRef<const Attr *> FrepAttrs);
+
   /// HaveInsertPoint - True if an insertion point is defined. If not, this
   /// indicates that the current code being emitted is unreachable.
   bool HaveInsertPoint() const {

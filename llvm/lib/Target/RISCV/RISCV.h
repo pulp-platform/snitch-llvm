@@ -61,6 +61,9 @@ void initializeRISCVExpandSSRPass(PassRegistry &);
 FunctionPass *createRISCVExpandSDMAPass();
 void initializeRISCVExpandSDMAPass(PassRegistry &);
 
+FunctionPass *createSNITCHFrepLoopsPass();
+void initializeSNITCHFrepLoopsPass(PassRegistry &);
+
 InstructionSelector *createRISCVInstructionSelector(const RISCVTargetMachine &,
                                                     RISCVSubtarget &,
                                                     RISCVRegisterBankInfo &);

@@ -15,6 +15,7 @@
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Parse/LoopHint.h"
+#include "clang/Parse/FrepHint.h"
 #include "clang/Parse/ParseDiagnostic.h"
 #include "clang/Parse/Parser.h"
 #include "clang/Parse/RAIIObjectsForParser.h"
@@ -183,6 +184,12 @@ struct PragmaCommentHandler : public PragmaHandler {
 
 private:
   Sema &Actions;
+};
+
+struct PragmaFrepHandler : public PragmaHandler {
+  PragmaFrepHandler() : PragmaHandler("frep") {}
+  void HandlePragma(Preprocessor &PP, PragmaIntroducer Introducer,
+                    Token &FirstToken) override;
 };
 
 struct PragmaDetectMismatchHandler : public PragmaHandler {
@@ -355,6 +362,9 @@ void Parser::initializePragmaHandlers() {
     PP.AddPragmaHandler(MSCommentHandler.get());
   }
 
+  FrepHandler = std::make_unique<PragmaFrepHandler>();
+  PP.AddPragmaHandler(FrepHandler.get());
+
   FloatControlHandler = std::make_unique<PragmaFloatControlHandler>(Actions);
   PP.AddPragmaHandler(FloatControlHandler.get());
   if (getLangOpts().MicrosoftExt) {
@@ -457,6 +467,9 @@ void Parser::resetPragmaHandlers() {
     PP.RemovePragmaHandler(MSCommentHandler.get());
     MSCommentHandler.reset();
   }
+
+  PP.RemovePragmaHandler(FrepHandler.get());
+  FrepHandler.reset();
 
   PP.RemovePragmaHandler("clang", PCSectionHandler.get());
   PCSectionHandler.reset();
@@ -1285,6 +1298,118 @@ bool Parser::HandlePragmaLoopHint(LoopHint &Hint) {
                            Info->Toks.back().getLocation());
   return true;
 }
+
+namespace {
+struct PragmaFrepInfo {
+  Token PragmaName;
+  Token Option;
+  ArrayRef<Token> Toks;
+};
+} // end anonymous namespace
+
+static bool ParseFrepValue(Preprocessor &PP, Token &Tok, Token PragmaName,
+                    Token Option, PragmaFrepInfo &Info) {
+  SmallVector<Token, 1> ValueList;
+  while (Tok.isNot(tok::eod)) {
+    ValueList.push_back(Tok);
+    PP.Lex(Tok);
+  }
+  Token EOFTok;
+  EOFTok.startToken();
+  EOFTok.setKind(tok::eof);
+  EOFTok.setLocation(Tok.getLocation());
+  ValueList.push_back(EOFTok); // Terminates expression for parsing.
+
+  Info.Toks = llvm::makeArrayRef(ValueList).copy(PP.getPreprocessorAllocator());
+  Info.Option = Option;
+  Info.PragmaName = PragmaName;
+  return true;
+}
+
+void PragmaFrepHandler::HandlePragma(Preprocessor &PP,
+                                      PragmaIntroducer Introducer,
+                                      Token &Tok) {
+  Token PragmaName = Tok;
+  SmallVector<Token, 1> TokenList;
+  PP.Lex(Tok);
+  if (Tok.isNot(tok::identifier)) {
+    printf("Error, not a identifier token for the option of pragma frep\n");
+    return;
+  }
+
+  Token Option = Tok;
+  IdentifierInfo *OptionInfo = Tok.getIdentifierInfo();
+  bool OptionValid = llvm::StringSwitch<bool>(OptionInfo->getName())
+                           .Case("infer", true)
+                           .Default(false);
+  if (!OptionValid) {
+    printf("Error, option not recognized for pragma frep\n");
+    return;
+  }
+  PP.Lex(Tok);
+
+  auto *Info = new (PP.getPreprocessorAllocator()) PragmaFrepInfo;
+  if (!ParseFrepValue(PP, Tok, PragmaName, Option, *Info))
+    return;
+
+  Token QualityTok;
+  QualityTok.startToken();
+  QualityTok.setKind(tok::annot_pragma_frep);
+  QualityTok.setLocation(PragmaName.getLocation());
+  QualityTok.setAnnotationEndLoc(PragmaName.getLocation());
+  QualityTok.setAnnotationValue(static_cast<void *>(Info));
+  TokenList.push_back(QualityTok);
+
+  if (Tok.isNot(tok::eod)) {
+    printf("Error, extra tokens at the end of pragma frep\n");
+    PP.Diag(Tok.getLocation(), diag::warn_pragma_extra_tokens_at_eol)
+        << "frep pragma";
+    return;
+  }
+  auto TokenArray = std::make_unique<Token[]>(TokenList.size());
+  std::copy(TokenList.begin(), TokenList.end(), TokenArray.get());
+  PP.EnterTokenStream(std::move(TokenArray), TokenList.size(),
+                      /*DisableMacroExpansion=*/false, /*IsReinject=*/false);
+}
+
+bool Parser::HandlePragmaFrep(FrepHint &Hint) {
+  assert(Tok.is(tok::annot_pragma_frep));
+  PragmaFrepInfo *Info =
+      static_cast<PragmaFrepInfo *>(Tok.getAnnotationValue());
+
+  IdentifierInfo *PragmaNameInfo = Info->PragmaName.getIdentifierInfo();
+  Hint.PragmaNameLoc = IdentifierLoc::create(
+      Actions.Context, Info->PragmaName.getLocation(), PragmaNameInfo);
+
+  IdentifierInfo *OptionInfo = Info->Option.getIdentifierInfo();
+  Hint.OptionLoc = IdentifierLoc::create(
+      Actions.Context, Info->Option.getLocation(), OptionInfo);
+
+  bool OptionInfer = OptionInfo->isStr("infer");
+
+  llvm::ArrayRef<Token> Toks = Info->Toks;
+  PP.EnterTokenStream(Toks, /*DisableMacroExpansion=*/false, /*IsReinject=*/false);
+
+  ConsumeAnnotationToken();
+
+  if (OptionInfer) {
+    // pass
+  } else {
+    printf("No loop as option parameters\n");
+  }
+    // Tokens following an error in an ill-formed constant expression will
+    // remain in the token stream and must be removed.
+  if (Tok.isNot(tok::eof)) {
+    printf("Not EOF\n");
+    while (Tok.isNot(tok::eof))
+      ConsumeAnyToken();
+  }
+  ConsumeToken(); // Consume the constant expression eof terminator.
+  Hint.Range = SourceRange(Info->PragmaName.getLocation(),
+                           Info->Toks.back().getLocation());
+  return true;
+}
+
 
 namespace {
 struct PragmaAttributeInfo {

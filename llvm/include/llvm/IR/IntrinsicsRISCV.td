@@ -1207,3 +1207,11 @@ let TargetPrefix = "riscv" in {
       : GCCBuiltin<"__builtin_sdma_wait_for_idle">,
         Intrinsic<[], [], [IntrHasSideEffects]>, RISCVSDMAIntrinsic;
 } // TargetPrefix = "riscv"
+
+//===----------------------------------------------------------------------===//
+// Xfrep extension
+
+let TargetPrefix = "riscv" in {
+  def int_riscv_frep_infer : Intrinsic<[], [], []>;
+} // TargetPrefix = "riscv"
+

@@ -41,3 +41,12 @@ let mayStore = 0 in {
                 (ins GPR:$rs1, uimm12m1:$num_inst, uimm3:$stagger_max, uimm4:$stagger_mask),
                           "frep.i", "$rs1, $num_inst, ${stagger_max}, ${stagger_mask}">, Sched<[]>;
 }
+
+//===----------------------------------------------------------------------===//
+// Pseudo Instructions
+//===----------------------------------------------------------------------===//
+
+let Predicates = [HasExtXfrep] in {
+  def PseudoFrepInfer : Pseudo<(outs), (ins),[]>;
+  def : Pat<(int_riscv_frep_infer), (PseudoFrepInfer)>;
+}

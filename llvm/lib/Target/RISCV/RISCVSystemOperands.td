@@ -186,7 +186,7 @@ def : SysReg<"satp", 0x180>;
 def : SysReg<"mvendorid", 0xF11>;
 def : SysReg<"marchid", 0xF12>;
 def : SysReg<"mimpid", 0xF13>;
-def : SysReg<"mhartid", 0xF14>;
+def MHARTID : SysReg<"mhartid", 0xF14>;
 
 //===-----------------------------
 // Machine Trap Setup

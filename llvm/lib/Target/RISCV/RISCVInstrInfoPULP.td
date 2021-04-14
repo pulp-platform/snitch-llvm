@@ -2004,7 +2004,13 @@ def : Pat<(int_riscv_pulp_read_then_spr_write uimm12:$imm12, GPR:$rs1), (CSRRW c
 def : Pat<(int_riscv_pulp_read_then_spr_bit_set uimm12:$imm12, GPR:$rs1), (CSRRS csr_sysreg:$imm12, GPR:$rs1)>;
 def : Pat<(int_riscv_pulp_read_then_spr_bit_clr uimm12:$imm12, GPR:$rs1), (CSRRC csr_sysreg:$imm12, GPR:$rs1)>;
 
+// TODO the *_v versions should have side effects
 def : Pat<(int_riscv_pulp_read_base_off_v GPR:$rs1, GPR:$rs2), (PULP_LW_REG_PI GPR:$rs1, GPR:$rs2)>;
 def : Pat<(int_riscv_pulp_write_base_off_v GPR:$rs2, GPR:$rs1, GPR:$rs3), (PULP_SW_REG_PI GPR:$rs2, GPR:$rs3, GPR:$rs1)>;
 
+def : Pat<(int_riscv_pulp_CoreCount), (CSRRS MHARTID.Encoding, X0)>;
+def : Pat<(int_riscv_pulp_CoreId), (CSRRS MHARTID.Encoding, X0)>;
+def : Pat<(int_riscv_pulp_ClusterId), (CSRRS MHARTID.Encoding, X0)>;
+def : Pat<(int_riscv_pulp_IsFc), (CSRRS MHARTID.Encoding, X0)>;
+def : Pat<(int_riscv_pulp_HasFc), (CSRRS MHARTID.Encoding, X0)>;
 }

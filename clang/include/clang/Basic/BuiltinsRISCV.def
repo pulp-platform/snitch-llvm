@@ -125,7 +125,7 @@ TARGET_BUILTIN(__builtin_pulp_sra4, "V4cV4cV4c", "nc", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_sll2, "V2sV2sV2s", "nc", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_sll4, "V4cV4cV4c", "nc", "xpulpv")
 
-TARGET_BUILTIN(__builtin_pulp_abs2, "V2sV2s", "nc", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_abs2, "UV2sV2s", "nc", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_abs4, "V4cV4c", "nc", "xpulpv")
 
 TARGET_BUILTIN(__builtin_pulp_neg2, "V2sV2s", "nc", "xpulpv")
@@ -221,7 +221,7 @@ TARGET_BUILTIN(__builtin_pulp_shuffle2h, "V2sV2sV2sV2s", "nc", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_bclr, "iiIi", "nc", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_bclr_r, "iii", "nc", "xpulpv")
 
-TARGET_BUILTIN(__builtin_pulp_bset, "iiIi", "nc", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_bset, "iiUIi", "nc", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_bset_r, "iii", "nc", "xpulpv")
 
 TARGET_BUILTIN(__builtin_pulp_bextract, "iiIiIi", "nc", "xpulpv")
@@ -231,7 +231,7 @@ TARGET_BUILTIN(__builtin_pulp_bextractu, "iiIiIi", "nc", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_bextractu_r, "iii", "nc", "xpulpv")
 
 TARGET_BUILTIN(__builtin_pulp_binsert, "iiIiiIiIi", "nc", "xpulpv")
-TARGET_BUILTIN(__builtin_pulp_binsert_r, "iiii", "nc", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_binsert_r, "iiiUiUi", "nc", "xpulpv")
 
 TARGET_BUILTIN(__builtin_pulp_clip, "iiIiIi", "nc", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_clip_r, "iii", "nc", "xpulpv")
@@ -248,17 +248,19 @@ TARGET_BUILTIN(__builtin_pulp_OffsetedWrite, "vii*1i", "n", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_OffsetedWriteHalf, "vis*1i", "n", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_OffsetedWriteByte, "vic*1i", "n", "xpulpv")
 
-// TODO TARGET_BUILTIN(__builtin_pulp_CoreCount, "i", "n", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_CoreCount, "i", "n", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_CoreId, "i", "n", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_ClusterId, "i", "n", "xpulpv")
-// TODO TARGET_BUILTIN(__builtin_pulp_IsFc, "i", "n", "xpulpv")
-// TODO TARGET_BUILTIN(__builtin_pulp_HasFc, "i", "n", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_IsFc, "i", "n", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_HasFc, "i", "n", "xpulpv")
 
 TARGET_BUILTIN(__builtin_pulp_read_base_off, "ii*1i", "n", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_write_base_off, "vii*1i", "n", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_read_base_off_v, "ii*1i", "n", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_write_base_off_v, "vii*1i", "n", "xpulpv")
 
 TARGET_BUILTIN(__builtin_pulp_spr_read_vol, "ii", "n", "xpulpv")
-TARGET_BUILTIN(__builtin_pulp_spr_read, "ii", "n", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_spr_read, "iIi", "n", "xpulpv")
 
 TARGET_BUILTIN(__builtin_pulp_spr_write, "vii", "n", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_spr_bit_set, "vii", "n", "xpulpv")
@@ -267,9 +269,6 @@ TARGET_BUILTIN(__builtin_pulp_spr_bit_clr, "vii", "n", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_read_then_spr_write, "iii", "n", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_read_then_spr_bit_set, "iii", "n", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_read_then_spr_bit_clr, "iii", "n", "xpulpv")
-
-TARGET_BUILTIN(__builtin_pulp_write_base_off_v, "vii*1i", "n", "xpulpv")
-TARGET_BUILTIN(__builtin_pulp_read_base_off_v, "iii", "n", "xpulpv")
 
 // TODO TARGET_BUILTIN(__builtin_pulp_pulp_omp_barrier, "v", "n", "xpulpv")
 // TODO TARGET_BUILTIN(__builtin_pulp_pulp_omp_critical_start, "v", "n", "xpulpv")

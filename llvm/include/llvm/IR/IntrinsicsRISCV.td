@@ -210,35 +210,37 @@ let TargetPrefix = "riscv" in {
   defm clipu : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
   defm clipu_r : PulpBinary32;
 
-  defm OffsetedRead : PulpIntrinsic<[llvm_i32_ty], [LLVMPointerType<llvm_i32_ty>, llvm_i32_ty], [IntrReadMem]>;
-  defm OffsetedReadHalf : PulpIntrinsic<[llvm_i16_ty], [LLVMPointerType<llvm_i16_ty>, llvm_i32_ty], [IntrReadMem]>;
-  defm OffsetedReadByte : PulpIntrinsic<[llvm_i8_ty], [LLVMPointerType<llvm_i8_ty>, llvm_i32_ty], [IntrReadMem]>;
+  defm OffsetedRead : PulpIntrinsic<[llvm_i32_ty], [LLVMQualPointerType<llvm_i32_ty, 1>, llvm_i32_ty], [IntrReadMem]>;
+  defm OffsetedReadHalf : PulpIntrinsic<[llvm_i16_ty], [LLVMQualPointerType<llvm_i16_ty, 1>, llvm_i32_ty], [IntrReadMem]>;
+  defm OffsetedReadByte : PulpIntrinsic<[llvm_i8_ty], [LLVMQualPointerType<llvm_i8_ty, 1>, llvm_i32_ty], [IntrReadMem]>;
 
-  defm OffsetedWrite : PulpIntrinsic<[], [llvm_i32_ty, LLVMPointerType<llvm_i32_ty>, llvm_i32_ty], [IntrWriteMem]>;
-  defm OffsetedWriteHalf : PulpIntrinsic<[], [llvm_i32_ty, LLVMPointerType<llvm_i16_ty>, llvm_i32_ty], [IntrWriteMem]>;
-  defm OffsetedWriteByte : PulpIntrinsic<[], [llvm_i32_ty, LLVMPointerType<llvm_i8_ty>, llvm_i32_ty], [IntrWriteMem]>;
+  defm OffsetedWrite : PulpIntrinsic<[], [llvm_i32_ty, LLVMQualPointerType<llvm_i32_ty, 1>, llvm_i32_ty], [IntrWriteMem]>;
+  defm OffsetedWriteHalf : PulpIntrinsic<[], [llvm_i32_ty, LLVMQualPointerType<llvm_i16_ty, 1>, llvm_i32_ty], [IntrWriteMem]>;
+  defm OffsetedWriteByte : PulpIntrinsic<[], [llvm_i32_ty, LLVMQualPointerType<llvm_i8_ty, 1>, llvm_i32_ty], [IntrWriteMem]>;
 
-  defm CoreId : PulpIntrinsic<[llvm_i32_ty], [], []>;
-  defm ClusterId : PulpIntrinsic<[llvm_i32_ty], [], []>;
+  defm read_base_off : PulpIntrinsic<[llvm_i32_ty], [LLVMQualPointerType<llvm_i32_ty, 1>, llvm_i32_ty], [IntrReadMem, ReadOnly<0>]>;
+  defm write_base_off : PulpIntrinsic<[], [llvm_i32_ty, LLVMQualPointerType<llvm_i32_ty, 1>, llvm_i32_ty], [IntrWriteMem, WriteOnly<1>]>;
+  // TODO the *_v versions should have side effects
+  defm read_base_off_v : PulpIntrinsic<[llvm_i32_ty], [LLVMQualPointerType<llvm_i32_ty, 1>, llvm_i32_ty], [IntrReadMem, ReadOnly<0> /*, IntrHasSideEffects*/]>;
+  defm write_base_off_v : PulpIntrinsic<[], [llvm_i32_ty, LLVMQualPointerType<llvm_i32_ty, 1>, llvm_i32_ty], [IntrWriteMem, WriteOnly<1> /*, IntrHasSideEffects*/]>;
 
-  defm read_base_off : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty], [IntrReadMem]>;
-  defm write_base_off : PulpIntrinsic<[], [llvm_i32_ty, LLVMPointerType<llvm_i32_ty>, llvm_i32_ty], [IntrWriteMem]>;
+  defm spr_read_vol : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty], [IntrNoMem, IntrHasSideEffects, ImmArg<0>]>;
+  // TODO does spr_read really have side effects?
+  defm spr_read : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty], [IntrNoMem, IntrHasSideEffects, ImmArg<0>]>;
 
-  defm spr_read_vol : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty], [IntrNoMem, IntrHasSideEffects]>;
-  defm spr_read : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty], [IntrNoMem, IntrHasSideEffects]>;
-
-  defm spr_write : PulpIntrinsic<[], [llvm_i32_ty, llvm_i32_ty], [IntrNoMem, IntrHasSideEffects]>;
-  defm spr_bit_set : PulpIntrinsic<[], [llvm_i32_ty, llvm_i32_ty], [IntrNoMem, IntrHasSideEffects]>;
-  defm spr_bit_clr : PulpIntrinsic<[], [llvm_i32_ty, llvm_i32_ty], [IntrNoMem, IntrHasSideEffects]>;
+  defm spr_write : PulpIntrinsic<[], [llvm_i32_ty, llvm_i32_ty], [IntrNoMem, IntrHasSideEffects, ImmArg<0>]>;
+  defm spr_bit_set : PulpIntrinsic<[], [llvm_i32_ty, llvm_i32_ty], [IntrNoMem, IntrHasSideEffects, ImmArg<0>, ImmArg<1>]>;
+  defm spr_bit_clr : PulpIntrinsic<[], [llvm_i32_ty, llvm_i32_ty], [IntrNoMem, IntrHasSideEffects, ImmArg<0>, ImmArg<1>]>;
 
   defm read_then_spr_write : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty], [IntrNoMem, IntrHasSideEffects]>;
   defm read_then_spr_bit_set : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty], [IntrNoMem, IntrHasSideEffects]>;
   defm read_then_spr_bit_clr : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty], [IntrNoMem, IntrHasSideEffects]>;
 
-
-  defm read_base_off_v : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty], [IntrReadMem]>;
-  defm write_base_off_v : PulpIntrinsic<[], [llvm_i32_ty, LLVMPointerType<llvm_i32_ty>, llvm_i32_ty], [IntrWriteMem]>;
-
+  defm CoreCount : PulpIntrinsic<[llvm_i32_ty], [], [IntrNoMem]>;
+  defm CoreId : PulpIntrinsic<[llvm_i32_ty], [], [IntrNoMem]>;
+  defm ClusterId : PulpIntrinsic<[llvm_i32_ty], [], [IntrNoMem]>;
+  defm IsFc : PulpIntrinsic<[llvm_i32_ty], [], [IntrNoMem]>;
+  defm HasFc : PulpIntrinsic<[llvm_i32_ty], [], [IntrNoMem]>;
 
 } // TargetPrefix = "riscv"
 

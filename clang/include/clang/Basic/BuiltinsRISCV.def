@@ -230,8 +230,8 @@ TARGET_BUILTIN(__builtin_pulp_bextract_r, "iii", "nc", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_bextractu, "iiIiIi", "nc", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_bextractu_r, "iii", "nc", "xpulpv")
 
-TARGET_BUILTIN(__builtin_pulp_binsert, "iiIiiIiIi", "nc", "xpulpv")
-TARGET_BUILTIN(__builtin_pulp_binsert_r, "iiiUiUi", "nc", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_binsert, "iiUIiiUIiUi", "nc", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_binsert_r, "iiiUi", "nc", "xpulpv")
 
 TARGET_BUILTIN(__builtin_pulp_clip, "iiIiIi", "nc", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_clip_r, "iii", "nc", "xpulpv")

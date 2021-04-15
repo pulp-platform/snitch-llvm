@@ -211,8 +211,12 @@ let TargetPrefix = "riscv" in {
   defm bextract_r : PulpBinary32;
   defm bextractu : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
   defm bextractu_r : PulpBinary32;
-  defm binsert : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
-  defm binsert_r : PulpTernary32;
+  defm binsert : PulpIntrinsic<[llvm_i32_ty],
+                               [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                               [IntrNoMem, ImmArg<1>, ImmArg<3>]>;
+  defm binsert_r : PulpIntrinsic<[llvm_i32_ty],
+                                 [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                                 [IntrNoMem]>;
   defm clip : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
   defm clip_r : PulpBinary32;
   defm clipu : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;

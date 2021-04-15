@@ -93,11 +93,11 @@ let TargetPrefix = "riscv" in {
   defm mac : PulpTernary32;
   defm msu : PulpTernary32;
 
-  defm macs : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
-  defm macu : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
+  defm macs : PulpTernary32;
+  defm macu : PulpTernary32;
 
-  defm machhs : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
-  defm machhu : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
+  defm machhs : PulpTernary32;
+  defm machhu : PulpTernary32;
 
   defm rotr : PulpBinary32;
 
@@ -163,8 +163,12 @@ let TargetPrefix = "riscv" in {
   multiclass mul_mac_N_RN {
     defm mul # NAME # N   : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
     defm mul # NAME # RN  : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
-    defm mac # NAME # N   : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
-    defm mac # NAME # RN  : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
+    defm mac # NAME # N   : PulpIntrinsic<[llvm_i32_ty],
+                                          [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                                          [IntrNoMem, ImmArg<3>]>;
+    defm mac # NAME # RN  : PulpIntrinsic<[llvm_i32_ty],
+                                          [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                                          [IntrNoMem, ImmArg<3>, ImmArg<4>]>;
   }
 
   defm s   : mul_mac_N_RN;

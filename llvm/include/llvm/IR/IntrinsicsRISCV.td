@@ -161,8 +161,12 @@ let TargetPrefix = "riscv" in {
   defm mulhhu : PulpBinary32;
 
   multiclass mul_mac_N_RN {
-    defm mul # NAME # N   : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
-    defm mul # NAME # RN  : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
+    defm mul # NAME # N   : PulpIntrinsic<[llvm_i32_ty],
+                                          [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                                          [IntrNoMem, ImmArg<2>]>;
+    defm mul # NAME # RN  : PulpIntrinsic<[llvm_i32_ty],
+                                          [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                                          [IntrNoMem, ImmArg<2>, ImmArg<3>]>;
     defm mac # NAME # N   : PulpIntrinsic<[llvm_i32_ty],
                                           [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
                                           [IntrNoMem, ImmArg<3>]>;

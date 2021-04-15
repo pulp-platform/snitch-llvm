@@ -227,8 +227,8 @@ let TargetPrefix = "riscv" in {
   defm OffsetedReadByte : PulpIntrinsic<[llvm_i8_ty], [LLVMQualPointerType<llvm_i8_ty, 1>, llvm_i32_ty], [IntrReadMem]>;
 
   defm OffsetedWrite : PulpIntrinsic<[], [llvm_i32_ty, LLVMQualPointerType<llvm_i32_ty, 1>, llvm_i32_ty], [IntrWriteMem]>;
-  defm OffsetedWriteHalf : PulpIntrinsic<[], [llvm_i32_ty, LLVMQualPointerType<llvm_i16_ty, 1>, llvm_i32_ty], [IntrWriteMem]>;
-  defm OffsetedWriteByte : PulpIntrinsic<[], [llvm_i32_ty, LLVMQualPointerType<llvm_i8_ty, 1>, llvm_i32_ty], [IntrWriteMem]>;
+  defm OffsetedWriteHalf : PulpIntrinsic<[], [llvm_i16_ty, LLVMQualPointerType<llvm_i16_ty, 1>, llvm_i32_ty], [IntrWriteMem]>;
+  defm OffsetedWriteByte : PulpIntrinsic<[], [llvm_i8_ty, LLVMQualPointerType<llvm_i8_ty, 1>, llvm_i32_ty], [IntrWriteMem]>;
 
   defm read_base_off : PulpIntrinsic<[llvm_i32_ty], [LLVMQualPointerType<llvm_i32_ty, 1>, llvm_i32_ty], [IntrReadMem, ReadOnly<0>]>;
   defm write_base_off : PulpIntrinsic<[], [llvm_i32_ty, LLVMQualPointerType<llvm_i32_ty, 1>, llvm_i32_ty], [IntrWriteMem, WriteOnly<1>]>;

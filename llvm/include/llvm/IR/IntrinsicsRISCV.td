@@ -224,17 +224,14 @@ let TargetPrefix = "riscv" in {
   defm read_base_off_v : PulpIntrinsic<[llvm_i32_ty], [LLVMQualPointerType<llvm_i32_ty, 1>, llvm_i32_ty], [IntrReadMem, ReadOnly<0> /*, IntrHasSideEffects*/]>;
   defm write_base_off_v : PulpIntrinsic<[], [llvm_i32_ty, LLVMQualPointerType<llvm_i32_ty, 1>, llvm_i32_ty], [IntrWriteMem, WriteOnly<1> /*, IntrHasSideEffects*/]>;
 
+  defm spr_read : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty], [IntrNoMem, ImmArg<0>]>;
   defm spr_read_vol : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty], [IntrNoMem, IntrHasSideEffects, ImmArg<0>]>;
-  // TODO does spr_read really have side effects?
-  defm spr_read : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty], [IntrNoMem, IntrHasSideEffects, ImmArg<0>]>;
-
   defm spr_write : PulpIntrinsic<[], [llvm_i32_ty, llvm_i32_ty], [IntrNoMem, IntrHasSideEffects, ImmArg<0>]>;
   defm spr_bit_set : PulpIntrinsic<[], [llvm_i32_ty, llvm_i32_ty], [IntrNoMem, IntrHasSideEffects, ImmArg<0>, ImmArg<1>]>;
   defm spr_bit_clr : PulpIntrinsic<[], [llvm_i32_ty, llvm_i32_ty], [IntrNoMem, IntrHasSideEffects, ImmArg<0>, ImmArg<1>]>;
-
-  defm read_then_spr_write : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty], [IntrNoMem, IntrHasSideEffects]>;
-  defm read_then_spr_bit_set : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty], [IntrNoMem, IntrHasSideEffects]>;
-  defm read_then_spr_bit_clr : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty], [IntrNoMem, IntrHasSideEffects]>;
+  defm read_then_spr_write : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty], [IntrNoMem, IntrHasSideEffects, ImmArg<0>]>;
+  defm read_then_spr_bit_set : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty], [IntrNoMem, IntrHasSideEffects, ImmArg<0>, ImmArg<1>]>;
+  defm read_then_spr_bit_clr : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty], [IntrNoMem, IntrHasSideEffects, ImmArg<0>, ImmArg<1>]>;
 
   defm CoreCount : PulpIntrinsic<[llvm_i32_ty], [], [IntrNoMem]>;
   defm CoreId : PulpIntrinsic<[llvm_i32_ty], [], [IntrNoMem]>;

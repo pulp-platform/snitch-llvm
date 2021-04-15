@@ -1993,16 +1993,19 @@ def : Pat<(int_riscv_pulp_OffsetedWriteByte GPR:$rs2, GPR:$rs1, GPR:$rs3), (PULP
 def : Pat<(int_riscv_pulp_read_base_off GPR:$rs1, GPR:$rs2), (PULP_LW_REG_PI GPR:$rs1, GPR:$rs2)>;
 def : Pat<(int_riscv_pulp_write_base_off GPR:$rs2, GPR:$rs1, GPR:$rs3), (PULP_SW_REG_PI GPR:$rs2, GPR:$rs3, GPR:$rs1)>;
 
-def : Pat<(int_riscv_pulp_spr_read_vol uimm12:$imm12), (CSRRS csr_sysreg:$imm12, X0)>;
-def : Pat<(int_riscv_pulp_spr_read uimm12:$imm12), (CSRRS csr_sysreg:$imm12, X0)>;
-
-def : Pat<(int_riscv_pulp_spr_write uimm12:$imm12, GPR:$rs1), (CSRRW csr_sysreg:$imm12, GPR:$rs1)>;
-def : Pat<(int_riscv_pulp_spr_bit_set uimm12:$imm12, GPR:$rs1), (CSRRS csr_sysreg:$imm12, GPR:$rs1)>;
-def : Pat<(int_riscv_pulp_spr_bit_clr uimm12:$imm12, GPR:$rs1), (CSRRC csr_sysreg:$imm12, GPR:$rs1)>;
-
-def : Pat<(int_riscv_pulp_read_then_spr_write uimm12:$imm12, GPR:$rs1), (CSRRW csr_sysreg:$imm12, GPR:$rs1)>;
-def : Pat<(int_riscv_pulp_read_then_spr_bit_set uimm12:$imm12, GPR:$rs1), (CSRRS csr_sysreg:$imm12, GPR:$rs1)>;
-def : Pat<(int_riscv_pulp_read_then_spr_bit_clr uimm12:$imm12, GPR:$rs1), (CSRRC csr_sysreg:$imm12, GPR:$rs1)>;
+// CSR intrinsic patterns have been changed:
+// (CSRRS csr_sysreg:$imm12, X0) -> (CSRRS uimm12:$imm12, X0)
+// The former leads to a correct MachineInstruction selection but
+// breaks the RISCV ASM printer trying to deal with the selected MCInst.
+// TODO: make the following patterns work with the csr_sysreg class
+def : Pat<(int_riscv_pulp_spr_read_vol uimm12:$imm12), (CSRRS uimm12:$imm12, X0)>;
+def : Pat<(int_riscv_pulp_spr_read uimm12:$imm12), (CSRRS uimm12:$imm12, X0)>;
+def : Pat<(int_riscv_pulp_spr_write uimm12:$imm12, GPR:$rs1), (CSRRW uimm12:$imm12, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_spr_bit_set uimm12:$imm12, GPR:$rs1), (CSRRS uimm12:$imm12, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_spr_bit_clr uimm12:$imm12, GPR:$rs1), (CSRRC uimm12:$imm12, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_read_then_spr_write uimm12:$imm12, GPR:$rs1), (CSRRW uimm12:$imm12, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_read_then_spr_bit_set uimm12:$imm12, GPR:$rs1), (CSRRS uimm12:$imm12, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_read_then_spr_bit_clr uimm12:$imm12, GPR:$rs1), (CSRRC uimm12:$imm12, GPR:$rs1)>;
 
 // TODO the *_v versions should have side effects
 def : Pat<(int_riscv_pulp_read_base_off_v GPR:$rs1, GPR:$rs2), (PULP_LW_REG_PI GPR:$rs1, GPR:$rs2)>;

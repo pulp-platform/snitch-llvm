@@ -259,16 +259,14 @@ TARGET_BUILTIN(__builtin_pulp_write_base_off, "vii*1i", "n", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_read_base_off_v, "ii*1i", "n", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_write_base_off_v, "vii*1i", "n", "xpulpv")
 
-TARGET_BUILTIN(__builtin_pulp_spr_read_vol, "ii", "n", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_spr_read, "iIi", "n", "xpulpv")
-
-TARGET_BUILTIN(__builtin_pulp_spr_write, "vii", "n", "xpulpv")
-TARGET_BUILTIN(__builtin_pulp_spr_bit_set, "vii", "n", "xpulpv")
-TARGET_BUILTIN(__builtin_pulp_spr_bit_clr, "vii", "n", "xpulpv")
-
-TARGET_BUILTIN(__builtin_pulp_read_then_spr_write, "iii", "n", "xpulpv")
-TARGET_BUILTIN(__builtin_pulp_read_then_spr_bit_set, "iii", "n", "xpulpv")
-TARGET_BUILTIN(__builtin_pulp_read_then_spr_bit_clr, "iii", "n", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_spr_read_vol, "iIi", "n", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_spr_write, "vIii", "n", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_spr_bit_clr, "vIiIi", "n", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_spr_bit_set, "vIiIi", "n", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_read_then_spr_bit_clr, "iIiIi", "n", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_read_then_spr_bit_set, "iIiIi", "n", "xpulpv")
+TARGET_BUILTIN(__builtin_pulp_read_then_spr_write, "iIii", "n", "xpulpv")
 
 // TODO TARGET_BUILTIN(__builtin_pulp_pulp_omp_barrier, "v", "n", "xpulpv")
 // TODO TARGET_BUILTIN(__builtin_pulp_pulp_omp_critical_start, "v", "n", "xpulpv")

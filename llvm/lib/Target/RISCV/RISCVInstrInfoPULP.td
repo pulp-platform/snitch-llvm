@@ -2012,8 +2012,8 @@ def : Pat<(int_riscv_pulp_read_base_off_v GPR:$rs1, GPR:$rs2), (PULP_LW_REG_PI G
 def : Pat<(int_riscv_pulp_write_base_off_v GPR:$rs2, GPR:$rs1, GPR:$rs3), (PULP_SW_REG_PI GPR:$rs2, GPR:$rs3, GPR:$rs1)>;
 
 def : Pat<(int_riscv_pulp_CoreCount), (CSRRS MHARTID.Encoding, X0)>;
-def : Pat<(int_riscv_pulp_CoreId), (CSRRS MHARTID.Encoding, X0)>;
-def : Pat<(int_riscv_pulp_ClusterId), (CSRRS MHARTID.Encoding, X0)>;
+def : Pat<(int_riscv_pulp_CoreId), (ANDI (CSRRS MHARTID.Encoding, X0), 0b1111)>;
+def : Pat<(int_riscv_pulp_ClusterId), (ANDI (CSRRS MHARTID.Encoding, X0), 0b11111100000)>;
 def : Pat<(int_riscv_pulp_IsFc), (CSRRS MHARTID.Encoding, X0)>;
 def : Pat<(int_riscv_pulp_HasFc), (CSRRS MHARTID.Encoding, X0)>;
 }

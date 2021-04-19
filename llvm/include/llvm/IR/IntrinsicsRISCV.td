@@ -217,9 +217,9 @@ let TargetPrefix = "riscv" in {
   defm binsert_r : PulpIntrinsic<[llvm_i32_ty],
                                  [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
                                  [IntrNoMem]>;
-  defm clip : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
+  defm clip : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem, ImmArg<1>, ImmArg<2>]>;
   defm clip_r : PulpBinary32;
-  defm clipu : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
+  defm clipu : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem, ImmArg<1>, ImmArg<2>]>;
   defm clipu_r : PulpBinary32;
 
   defm OffsetedRead : PulpIntrinsic<[llvm_i32_ty], [LLVMQualPointerType<llvm_i32_ty, 1>, llvm_i32_ty], [IntrReadMem]>;
@@ -1281,7 +1281,7 @@ let TargetPrefix = "riscv" in {
 def int_riscv_pulp_event_unit_read
     : GCCBuiltin<"__builtin_pulp_event_unit_read">,
       Intrinsic<[llvm_i32_ty],
-                [llvm_ptr_ty, llvm_i32_ty],
+                [LLVMQualPointerType<llvm_i32_ty, 1>, llvm_i32_ty],
                 []>;
 
 def int_riscv_pulp_bitinsert

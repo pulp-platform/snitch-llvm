@@ -65,11 +65,6 @@ let TargetPrefix = "riscv" in {
   // @llvm.riscv.masked.cmpxchg.{i32,i64}.<p>(...)
   defm int_riscv_masked_cmpxchg : MaskedAtomicRMWFiveArgIntrinsics;
 
-
-
-
-
-  // Pulp specific intrinsics
   multiclass PulpIntrinsic<list<LLVMType> ret_types,
                            list<LLVMType> param_types,
                            list<IntrinsicProperty> intr_properties> {
@@ -1282,7 +1277,7 @@ def int_riscv_pulp_event_unit_read
     : GCCBuiltin<"__builtin_pulp_event_unit_read">,
       Intrinsic<[llvm_i32_ty],
                 [LLVMQualPointerType<llvm_i32_ty, 1>, llvm_i32_ty],
-                []>;
+                [IntrHasSideEffects]>;
 
 def int_riscv_pulp_bitinsert
     : GCCBuiltin<"__builtin_bitinsert">, // NOTE: GCC has no pulp here

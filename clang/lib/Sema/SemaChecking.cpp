@@ -3455,9 +3455,19 @@ bool Sema::CheckSystemZBuiltinFunctionCall(unsigned BuiltinID,
 
 bool Sema::CheckRISCVBuiltinFunctionCall(unsigned BuiltinID,
                                          CallExpr *TheCall) {
+  auto ArgValue = [&](int ArgNum) -> int {
+    llvm::APSInt Result;
+    if (SemaBuiltinConstantArg(TheCall, ArgNum, Result)) {
+      llvm_unreachable("pulp intrinsic call expects a constant argument");
+    }
+    // Arg value is going to be passed to SemaBuiltinConstantArgRange
+    // that takes int args, let's narrow it here...
+    return static_cast<int>(Result.getSExtValue());
+  };
+  // Indicates if this instruction has an immediate rounding factor.
+  bool HasRounding = false;
   // For intrinsics which take an immediate value as part of the instruction,
   // range check them here.
-  bool hasRoundingFactor = false;
   switch (BuiltinID) {
   default: return false;
   // Check rounding factor: must be an immediate equal to 2^(n-1)
@@ -3473,9 +3483,7 @@ bool Sema::CheckRISCVBuiltinFunctionCall(unsigned BuiltinID,
   case RISCV::BI__builtin_pulp_mulsRN:
   case RISCV::BI__builtin_pulp_muluRN:
   case RISCV::BI__builtin_pulp_subRN:
-  case RISCV::BI__builtin_pulp_subuRN:
-    hasRoundingFactor = true;
-    LLVM_FALLTHROUGH;
+  case RISCV::BI__builtin_pulp_subuRN: HasRounding = true; LLVM_FALLTHROUGH;
   // Check normalization factor: must be an immediate in range [0..31]
   case RISCV::BI__builtin_pulp_addN:
   case RISCV::BI__builtin_pulp_adduN:
@@ -3490,21 +3498,25 @@ bool Sema::CheckRISCVBuiltinFunctionCall(unsigned BuiltinID,
   case RISCV::BI__builtin_pulp_subN:
   case RISCV::BI__builtin_pulp_subuN:
     if (SemaBuiltinConstantArgRange(TheCall, 2, 0, 31))
-      return false;
-    if (hasRoundingFactor) {
-      // We have a rounding factor to check against the actual
-      // constant value of the normalization factor:
-      llvm::APSInt Result;
-      if (SemaBuiltinConstantArg(TheCall, 2, Result)) {
-        // We already checked the normalization factor
-        llvm_unreachable(
-            "pulp intrinsic call expects a constant normalization factor");
-      }
-      auto norm = Result.getSExtValue();
+      return true;
+    if (HasRounding) {
+      auto norm = ArgValue(2);
       auto round = 1u << (norm >= 1 ? norm - 1 : 0);
-      if (SemaBuiltinConstantArgRange(TheCall, 3, round, round))
-        return false;
+      return SemaBuiltinConstantArgRange(TheCall, 3, round, round);
     }
+    break;
+  // Bit extraction: size + offset <= 32
+  case RISCV::BI__builtin_pulp_bextract:
+  case RISCV::BI__builtin_pulp_bextractu:
+    if (SemaBuiltinConstantArgRange(TheCall, 1, 0, 32))
+        return true;
+    auto size = ArgValue(1);
+    if (SemaBuiltinConstantArgRange(TheCall, 2, 0, 32))
+        return true;
+    auto offset = ArgValue(2);
+    if(size + offset > 32)
+      return Diag(TheCall->getBeginLoc(),
+                  diag::err_riscv_pulp_builtin_bextract_range);
   }
   return false;
 }

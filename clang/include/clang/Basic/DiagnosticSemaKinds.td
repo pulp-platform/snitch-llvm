@@ -9553,6 +9553,8 @@ def note_neon_vector_initializer_non_portable_q : Note<
   "constants">;
 def err_systemz_invalid_tabort_code : Error<
   "invalid transaction abort code">;
+def err_riscv_pulp_builtin_bextract_range : Error<
+  "size and offset arguments must be such that size + offset <= 32">;
 def err_64_bit_builtin_32_bit_tgt : Error<
   "this builtin is only available on 64-bit targets">;
 def err_32_bit_builtin_64_bit_tgt : Error<

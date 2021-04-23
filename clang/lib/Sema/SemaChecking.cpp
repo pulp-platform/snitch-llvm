@@ -1427,6 +1427,9 @@ bool Sema::CheckTSBuiltinFunctionCall(const TargetInfo &TI, unsigned BuiltinID,
   case llvm::Triple::ppc64:
   case llvm::Triple::ppc64le:
     return CheckPPCBuiltinFunctionCall(TI, BuiltinID, TheCall);
+  case llvm::Triple::riscv32:
+  case llvm::Triple::riscv64:
+    return CheckRISCVBuiltinFunctionCall(BuiltinID, TheCall);
   case llvm::Triple::amdgcn:
     return CheckAMDGCNBuiltinFunctionCall(BuiltinID, TheCall);
   }
@@ -3448,6 +3451,62 @@ bool Sema::CheckSystemZBuiltinFunctionCall(unsigned BuiltinID,
   case SystemZ::BI__builtin_s390_vsrd: i = 2; l = 0; u = 7; break;
   }
   return SemaBuiltinConstantArgRange(TheCall, i, l, u);
+}
+
+bool Sema::CheckRISCVBuiltinFunctionCall(unsigned BuiltinID,
+                                         CallExpr *TheCall) {
+  // For intrinsics which take an immediate value as part of the instruction,
+  // range check them here.
+  bool hasRoundingFactor = false;
+  switch (BuiltinID) {
+  default: return false;
+  // Check rounding factor: must be an immediate equal to 2^(n-1)
+  // where n is the normalization factor
+  case RISCV::BI__builtin_pulp_addRN:
+  case RISCV::BI__builtin_pulp_adduRN:
+  case RISCV::BI__builtin_pulp_machhsRN:
+  case RISCV::BI__builtin_pulp_machhuRN:
+  case RISCV::BI__builtin_pulp_macsRN:
+  case RISCV::BI__builtin_pulp_macuRN:
+  case RISCV::BI__builtin_pulp_mulhhsRN:
+  case RISCV::BI__builtin_pulp_mulhhuRN:
+  case RISCV::BI__builtin_pulp_mulsRN:
+  case RISCV::BI__builtin_pulp_muluRN:
+  case RISCV::BI__builtin_pulp_subRN:
+  case RISCV::BI__builtin_pulp_subuRN:
+    hasRoundingFactor = true;
+    LLVM_FALLTHROUGH;
+  // Check normalization factor: must be an immediate in range [0..31]
+  case RISCV::BI__builtin_pulp_addN:
+  case RISCV::BI__builtin_pulp_adduN:
+  case RISCV::BI__builtin_pulp_machhsN:
+  case RISCV::BI__builtin_pulp_machhuN:
+  case RISCV::BI__builtin_pulp_macsN:
+  case RISCV::BI__builtin_pulp_macuN:
+  case RISCV::BI__builtin_pulp_mulhhsN:
+  case RISCV::BI__builtin_pulp_mulhhuN:
+  case RISCV::BI__builtin_pulp_mulsN:
+  case RISCV::BI__builtin_pulp_muluN:
+  case RISCV::BI__builtin_pulp_subN:
+  case RISCV::BI__builtin_pulp_subuN:
+    if (SemaBuiltinConstantArgRange(TheCall, 2, 0, 31))
+      return false;
+    if (hasRoundingFactor) {
+      // We have a rounding factor to check against the actual
+      // constant value of the normalization factor:
+      llvm::APSInt Result;
+      if (SemaBuiltinConstantArg(TheCall, 2, Result)) {
+        // We already checked the normalization factor
+        llvm_unreachable(
+            "pulp intrinsic call expects a constant normalization factor");
+      }
+      auto norm = Result.getSExtValue();
+      auto round = 1u << (norm >= 1 ? norm - 1 : 0);
+      if (SemaBuiltinConstantArgRange(TheCall, 3, round, round))
+        return false;
+    }
+  }
+  return false;
 }
 
 /// SemaBuiltinCpuSupports - Handle __builtin_cpu_supports(char *).

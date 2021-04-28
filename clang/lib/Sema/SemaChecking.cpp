@@ -3464,59 +3464,63 @@ bool Sema::CheckRISCVBuiltinFunctionCall(unsigned BuiltinID,
     // that takes int args, let's narrow it here...
     return static_cast<int>(Result.getSExtValue());
   };
-  // Indicates if this instruction has an immediate rounding factor.
-  bool HasRounding = false;
+  // Indicate, if present, the position of well-known immediate arguments.
+  Optional<int> RoundArgNum;
+  Optional<int> NormArgNum;
   // For intrinsics which take an immediate value as part of the instruction,
   // range check them here.
   switch (BuiltinID) {
   default: return false;
-  // Check rounding factor: must be an immediate equal to 2^(n-1)
-  // where n is the normalization factor
   case RISCV::BI__builtin_pulp_addRN:
   case RISCV::BI__builtin_pulp_adduRN:
-  case RISCV::BI__builtin_pulp_machhsRN:
-  case RISCV::BI__builtin_pulp_machhuRN:
-  case RISCV::BI__builtin_pulp_macsRN:
-  case RISCV::BI__builtin_pulp_macuRN:
+  case RISCV::BI__builtin_pulp_subRN:
+  case RISCV::BI__builtin_pulp_subuRN:
   case RISCV::BI__builtin_pulp_mulhhsRN:
   case RISCV::BI__builtin_pulp_mulhhuRN:
   case RISCV::BI__builtin_pulp_mulsRN:
-  case RISCV::BI__builtin_pulp_muluRN:
-  case RISCV::BI__builtin_pulp_subRN:
-  case RISCV::BI__builtin_pulp_subuRN: HasRounding = true; LLVM_FALLTHROUGH;
-  // Check normalization factor: must be an immediate in range [0..31]
+  case RISCV::BI__builtin_pulp_muluRN: NormArgNum = 2; RoundArgNum = 3; break;
   case RISCV::BI__builtin_pulp_addN:
   case RISCV::BI__builtin_pulp_adduN:
+  case RISCV::BI__builtin_pulp_subN:
+  case RISCV::BI__builtin_pulp_subuN:
+  case RISCV::BI__builtin_pulp_mulsN:
+  case RISCV::BI__builtin_pulp_muluN:
+  case RISCV::BI__builtin_pulp_mulhhsN:
+  case RISCV::BI__builtin_pulp_mulhhuN: NormArgNum = 2; break;
+  case RISCV::BI__builtin_pulp_machhsRN:
+  case RISCV::BI__builtin_pulp_machhuRN:
+  case RISCV::BI__builtin_pulp_macsRN:
+  case RISCV::BI__builtin_pulp_macuRN: NormArgNum = 3; RoundArgNum = 4; break;
   case RISCV::BI__builtin_pulp_machhsN:
   case RISCV::BI__builtin_pulp_machhuN:
   case RISCV::BI__builtin_pulp_macsN:
-  case RISCV::BI__builtin_pulp_macuN:
-  case RISCV::BI__builtin_pulp_mulhhsN:
-  case RISCV::BI__builtin_pulp_mulhhuN:
-  case RISCV::BI__builtin_pulp_mulsN:
-  case RISCV::BI__builtin_pulp_muluN:
-  case RISCV::BI__builtin_pulp_subN:
-  case RISCV::BI__builtin_pulp_subuN:
-    if (SemaBuiltinConstantArgRange(TheCall, 2, 0, 31))
-      return true;
-    if (HasRounding) {
-      auto norm = ArgValue(2);
-      auto round = 1u << (norm >= 1 ? norm - 1 : 0);
-      return SemaBuiltinConstantArgRange(TheCall, 3, round, round);
-    }
-    break;
+  case RISCV::BI__builtin_pulp_macuN: NormArgNum = 3; break;
   // Bit extraction: size + offset <= 32
   case RISCV::BI__builtin_pulp_bextract:
   case RISCV::BI__builtin_pulp_bextractu:
     if (SemaBuiltinConstantArgRange(TheCall, 1, 0, 32))
-        return true;
+      return true;
     auto size = ArgValue(1);
     if (SemaBuiltinConstantArgRange(TheCall, 2, 0, 32))
-        return true;
+      return true;
     auto offset = ArgValue(2);
-    if(size + offset > 32)
+    if (size + offset > 32)
       return Diag(TheCall->getBeginLoc(),
                   diag::err_riscv_pulp_builtin_bextract_range);
+  }
+
+  if (NormArgNum) {
+    // Check normalization factor: must be an immediate in range [0..31]
+    if (SemaBuiltinConstantArgRange(TheCall, *NormArgNum, 0, 31))
+      return true;
+    if (RoundArgNum) {
+      auto norm = ArgValue(*RoundArgNum);
+      auto round = 1u << (norm >= 1 ? norm - 1 : 0);
+      // Check rounding factor: must be an immediate equal to 2^(n-1)
+      // where n is the normalization factor
+      if(SemaBuiltinConstantArgRange(TheCall, *RoundArgNum, round, round))
+        return true;
+    }
   }
   return false;
 }

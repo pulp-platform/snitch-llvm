@@ -1875,63 +1875,61 @@ def : PatGprGpr<int_riscv_pulp_mulu, P_MULU>;
 def : PatGprGpr<int_riscv_pulp_mulhhs, P_MULHHS>;
 def : PatGprGpr<int_riscv_pulp_mulhhu, P_MULHHU>;
 
-multiclass MulMacBuiltin<string intrin, string instr> {
-
-    def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mul" # intrin # "N")
-                    GPR:$rs1, GPR:$rs2, uimm5:$shift),
-              (!cast<RVInst>("P_MUL" # instr # "N")
-                    GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
-
-    def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mul" # intrin # "RN")
-                    GPR:$rs1, GPR:$rs2, uimm5:$shift, imm),
-              (!cast<RVInst>("P_MUL" # instr # "RN")
-                    GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
-
-    def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mac" # intrin # "N")
-                    GPR:$rs1, GPR:$rs2, GPR:$rd, uimm5:$shift),
-              (!cast<RVInst>("P_MAC" # instr # "N")
-                    GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
-
-    def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mac" # intrin # "RN")
-                    GPR:$rs1, GPR:$rs2, GPR:$rd, uimm5:$shift, imm),
-              (!cast<RVInst>("P_MAC" # instr # "RN")
-                    GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
-
+multiclass int_mul_mac_N_RN<string intrin, string instr> {
+  // mul<op>N: mul op with normalization factor as immediate
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mul" # intrin # "N")
+              GPR:$rs1, GPR:$rs2, uimm5:$shift),
+            (!cast<RVInst>("P_MUL" # instr # "N")
+              GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
+  // mul<op>RN: mul op with normalization and rounding factors as immediates
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mul" # intrin # "RN")
+              GPR:$rs1, GPR:$rs2, uimm5:$shift, imm),
+            (!cast<RVInst>("P_MUL" # instr # "RN")
+              GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
+  // mac<op>N: mac op with normalization factor as immediate
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mac" # intrin # "N")
+              GPR:$rs1, GPR:$rs2, GPR:$rd, uimm5:$shift),
+            (!cast<RVInst>("P_MAC" # instr # "N")
+              GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
+  // mac<op>RN: mac op with normalization and rounding factors as immediates
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mac" # intrin # "RN")
+              GPR:$rs1, GPR:$rs2, GPR:$rd, uimm5:$shift, imm),
+            (!cast<RVInst>("P_MAC" # instr # "RN")
+              GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
 }
 
-defm : MulMacBuiltin<"s",   "S">;
-defm : MulMacBuiltin<"u",   "U">;
-defm : MulMacBuiltin<"hhs", "HHS">;
-defm : MulMacBuiltin<"hhu", "HHU">;
+defm : int_mul_mac_N_RN<"s",   "S">;
+defm : int_mul_mac_N_RN<"u",   "U">;
+defm : int_mul_mac_N_RN<"hhs", "HHS">;
+defm : int_mul_mac_N_RN<"hhu", "HHU">;
 
-multiclass add_sub_N_RN_r<string intrin, string instr> {
-
-      def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "N")
-                      GPR:$rs1, GPR:$rs2, uimm5:$shift),
-                (!cast<RVInst>("P_" # instr # "N")
-                      GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
-
-      def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "N_r")
-                      GPR:$rs1, GPR:$rs2, uimm5:$shift),
-                (!cast<RVInst>("P_" # instr # "NR")
-                      GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
-
-      def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "RN")
-                      GPR:$rs1, GPR:$rs2, uimm5:$shift, imm),
-                (!cast<RVInst>("P_" # instr # "RN")
-                      GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
-
-      def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "RN_r")
-                      GPR:$rs1, GPR:$rs2, uimm5:$shift),
-                (!cast<RVInst>("P_" # instr # "RNR")
-                      GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
-
+multiclass int_N_RN_r<string intrin, string instr> {
+  // <op>RN: op with normalization and round factors as immediates
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "N")
+              GPR:$rs1, GPR:$rs2, uimm5:$shift),
+            (!cast<RVInst>("P_" # instr # "N")
+              GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
+  // <op>N_r: op with normalization factor
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "N_r")
+              GPR:$rd, GPR:$rs1, GPR:$rs2),
+            (!cast<RVInst>("P_" # instr # "NR")
+              GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+  // <op>RN: op with normalization and round factors as immediates
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "RN")
+              GPR:$rs1, GPR:$rs2, uimm5:$shift, imm),
+            (!cast<RVInst>("P_" # instr # "RN")
+              GPR:$rs1, GPR:$rs2, uimm5:$shift)>;
+  // <op>N: op with normalization factor as immediate
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "RN_r")
+              GPR:$rd, GPR:$rs1, GPR:$rs2),
+            (!cast<RVInst>("P_" # instr # "RNR")
+              GPR:$rd, GPR:$rs1, GPR:$rs2)>;
 }
 
-defm : add_sub_N_RN_r<"add",  "ADD">;
-defm : add_sub_N_RN_r<"addu", "ADDU">;
-defm : add_sub_N_RN_r<"sub",  "SUB">;
-defm : add_sub_N_RN_r<"subu", "SUBU">;
+defm : int_N_RN_r<"add",  "ADD">;
+defm : int_N_RN_r<"addu", "ADDU">;
+defm : int_N_RN_r<"sub",  "SUB">;
+defm : int_N_RN_r<"subu", "SUBU">;
 
 
 def : Pat<(int_riscv_pulp_pack2 GPR:$rs1, GPR:$rs2),

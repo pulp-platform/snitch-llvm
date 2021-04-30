@@ -175,13 +175,23 @@ let TargetPrefix = "riscv" in {
   defm hhs : mul_mac_N_RN;
   defm hhu : mul_mac_N_RN;
 
-
-
   multiclass N_RN_r {
-    defm N    : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
-    defm N_r  : PulpTernary32;
-    defm RN   : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
-    defm RN_r : PulpTernary32;
+    // <op>N: op with normalization factor as immediate
+    defm N    : PulpIntrinsic<[llvm_i32_ty],
+                              [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                              [IntrNoMem, ImmArg<2>]>;
+    // <op>N_r: op with normalization factor
+    defm N_r  : PulpIntrinsic<[llvm_i32_ty],
+                              [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                              [IntrNoMem]>;
+    // <op>RN: op with normalization and round factors as immediates
+    defm RN   : PulpIntrinsic<[llvm_i32_ty],
+                              [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                              [IntrNoMem, ImmArg<2>, ImmArg<3>]>;
+    // <op>RN: op with normalization and round factors as immediates
+    defm RN_r : PulpIntrinsic<[llvm_i32_ty],
+                              [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                              [IntrNoMem]>;
   }
 
   defm add  : N_RN_r;

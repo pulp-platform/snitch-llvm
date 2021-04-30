@@ -3501,7 +3501,10 @@ bool Sema::CheckRISCVBuiltinFunctionCall(unsigned BuiltinID,
   case RISCV::BI__builtin_pulp_macuN: NormArgNum = 3; break;
   case RISCV::BI__builtin_pulp_bset: MaskArgNum = 1; break;
   case RISCV::BI__builtin_pulp_bclr: NegMaskArgNum = 1; break;
-  case RISCV::BI__builtin_pulp_binsert: NegMaskArgNum = 1; MaskArgNum = 3; break;
+  case RISCV::BI__builtin_pulp_binsert: NegMaskArgNum = 1; MaskArgNum = 3;
+    if (SemaBuiltinConstantArgRange(TheCall, 4, 0, 31))
+      return true;
+    break;
   case RISCV::BI__builtin_pulp_clip: NegPow2ArgNum = 1; Pow2ComplArgNum = 2; break;
   case RISCV::BI__builtin_pulp_clipu: Pow2ComplArgNum = 2;
     if (SemaBuiltinConstantArgRange(TheCall, 1, 0, 0))

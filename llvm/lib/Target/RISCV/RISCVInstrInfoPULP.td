@@ -1419,12 +1419,7 @@ def : Pat<(ushiftRound (macu GPR:$rd, GPR:$rs1, GPR:$rs2), uimm5:$Is3),
           (P_MACURN GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
 def : Pat<(ushiftRound (machhu GPR:$rd, GPR:$rs1, GPR:$rs2), uimm5:$Is3),
           (P_MACHHURN GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-
-
 }
-
-
-
 
 // Patterns for vectorial ALU operations
 class PatV2V2<SDPatternOperator OpNode, RVInst Inst>
@@ -1655,10 +1650,6 @@ def : Pat<(dotsp_sc_b PulpV4:$rs1, (sext_inreg GPR:$rs2, i8)),
 def : Pat<(dotsp_sc_b PulpV4:$rs1, simm6:$sci),
           (PV_DOTSP_SCI_B PulpV4:$rs1, simm6:$sci)>;
 
-
-
-
-
 def : Pat<(add GPR:$rd, (dotup_h PulpV2:$rs1, PulpV2:$rs2)),
           (PV_SDOTUP_H GPR:$rd, PulpV2:$rs1, PulpV2:$rs2)>;
 
@@ -1676,7 +1667,6 @@ def : Pat<(add GPR:$rd, (dotup_sc_b PulpV4:$rs1, (and GPR:$rs2, 255))),
 
 def : Pat<(add GPR:$rd, (dotup_sc_b PulpV4:$rs1, uimm6:$sci)),
           (PV_SDOTUP_SCI_B GPR:$rd, PulpV4:$rs1, uimm6:$sci)>;
-
 
 def : Pat<(add GPR:$rd, (dotusp_h PulpV2:$rs1, PulpV2:$rs2)),
           (PV_SDOTUSP_H GPR:$rd, PulpV2:$rs1, PulpV2:$rs2)>;
@@ -1696,7 +1686,6 @@ def : Pat<(add GPR:$rd, (dotup_sc_b PulpV4:$rs1, (sext_inreg GPR:$rs2, i8))),
 def : Pat<(add GPR:$rd, (dotup_sc_b PulpV4:$rs1, simm6:$sci)),
           (PV_SDOTUSP_SCI_B GPR:$rd, PulpV4:$rs1, simm6:$sci)>;
 
-
 def : Pat<(add GPR:$rd, (dotsp_h PulpV2:$rs1, PulpV2:$rs2)),
           (PV_SDOTSP_H GPR:$rd, PulpV2:$rs1, PulpV2:$rs2)>;
 
@@ -1714,8 +1703,6 @@ def : Pat<(add GPR:$rd, (dotsp_sc_b PulpV4:$rs1, (sext_inreg GPR:$rs2, i8))),
 
 def : Pat<(add GPR:$rd, (dotsp_sc_b PulpV4:$rs1, simm6:$sci)),
           (PV_SDOTSP_SCI_B GPR:$rd, PulpV4:$rs1, simm6:$sci)>;
-
-
 
 def : Pat<(v2i16 (build_vector (i32 (vector_extract PulpV2:$rs1, GPR:$index0)),
                                (i32 (vector_extract PulpV2:$rs1, GPR:$index1)))),
@@ -1737,8 +1724,6 @@ def : Pat<(v4i8 (build_vector GPR:$rs1, GPR:$rs2, GPR:$rs3, GPR:$rs4)),
 def : Pat<(v2i16 (splat_vector GPR:$rs1)), (PV_PACK_H GPR:$rs1, GPR:$rs1)>;
 def : Pat<(v4i8 (splat_vector GPR:$rs1)), (PV_ADD_SC_B X0, GPR:$rs1)>;
 
-
-
 defm : GeneralSVectorPattern<seteq, "CMPEQ">;
 defm : GeneralSVectorPattern<setne, "CMPNE">;
 defm : GeneralSVectorPattern<setgt, "CMPGT">;
@@ -1750,14 +1735,10 @@ defm : GeneralUVectorPattern<setuge, "CMPGEU">;
 defm : GeneralUVectorPattern<setult, "CMPLTU">;
 defm : GeneralUVectorPattern<setule, "CMPLEU">;
 
-
-
-
 def : Pat<(v2i16 (bitconvert GPR:$rs1)), (v2i16 PulpV2:$rs1)>;
 def : Pat<(v4i8 (bitconvert GPR:$rs1)), (v4i8 PulpV4:$rs1)>;
 def : Pat<(i32 (bitconvert PulpV2:$rs1)), (i32 GPR:$rs1)>;
 def : Pat<(i32 (bitconvert PulpV4:$rs1)), (i32 GPR:$rs1)>;
-
 
 //===----------------------------------------------------------------------===//
 // Pseudo-instructions and codegen patterns
@@ -2009,9 +1990,10 @@ def : Pat<(int_riscv_pulp_read_then_spr_bit_clr uimm12:$imm12, GPR:$rs1), (CSRRC
 def : Pat<(int_riscv_pulp_read_base_off_v GPR:$rs1, GPR:$rs2), (PULP_LW_REG_PI GPR:$rs1, GPR:$rs2)>;
 def : Pat<(int_riscv_pulp_write_base_off_v GPR:$rs2, GPR:$rs1, GPR:$rs3), (PULP_SW_REG_PI GPR:$rs2, GPR:$rs3, GPR:$rs1)>;
 
-def : Pat<(int_riscv_pulp_CoreCount), (CSRRS MHARTID.Encoding, X0)>;
 def : Pat<(int_riscv_pulp_CoreId), (ANDI (CSRRS MHARTID.Encoding, X0), 0b1111)>;
-def : Pat<(int_riscv_pulp_ClusterId), (ANDI (CSRRS MHARTID.Encoding, X0), 0b11111100000)>;
-def : Pat<(int_riscv_pulp_IsFc), (CSRRS MHARTID.Encoding, X0)>;
+def : Pat<(int_riscv_pulp_ClusterId), (SRLI (ANDI (CSRRS MHARTID.Encoding, X0), 0b11111100000), 5)>;
+def : Pat<(int_riscv_pulp_IsFc), (SRLI (ANDI (CSRRS MHARTID.Encoding, X0), 0b10000000000), 10)>;
+// FIXME: symbols below must be provided by the platform
+def : Pat<(int_riscv_pulp_CoreCount), (CSRRS MHARTID.Encoding, X0)>;
 def : Pat<(int_riscv_pulp_HasFc), (CSRRS MHARTID.Encoding, X0)>;
 }

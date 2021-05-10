@@ -325,7 +325,6 @@ let TargetPrefix = "riscv" in {
       : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
                       [IntrNoMem, IntrHasSideEffects, ImmArg<0>, ImmArg<1>]>;
 
-  defm CoreCount : PulpIntrinsic<[llvm_i32_ty], [], [IntrNoMem]>;
   defm CoreId : PulpIntrinsic<[llvm_i32_ty], [], [IntrNoMem]>;
   defm ClusterId : PulpIntrinsic<[llvm_i32_ty], [], [IntrNoMem]>;
   defm IsFc : PulpIntrinsic<[llvm_i32_ty], [], [IntrNoMem]>;

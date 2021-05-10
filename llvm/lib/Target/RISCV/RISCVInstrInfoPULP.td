@@ -1996,6 +1996,4 @@ def : Pat<(int_riscv_pulp_IsFc), (SRLI (ANDI (CSRRS MHARTID.Encoding, X0), 0b100
 // Symbols below must be provided by the platform, no CSR involved
 // Note: HERO has not fabric controller
 def : Pat<(int_riscv_pulp_HasFc), (ANDI X0, 0)>;
-// FIXME: should be read from a specific address provided by the linker
-def : Pat<(int_riscv_pulp_CoreCount), (CSRRS MHARTID.Encoding, X0)>;
 }

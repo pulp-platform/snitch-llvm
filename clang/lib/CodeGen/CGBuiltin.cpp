@@ -15505,11 +15505,21 @@ Value *CodeGenFunction::EmitAMDGPUBuiltinExpr(unsigned BuiltinID,
 }
 
 Value *CodeGenFunction::EmitRISCVBuiltinExpr(unsigned BuiltinID,
-                                                   const CallExpr *E) {
-  // FIXME: Stub implementation, current builtins are solely intrinsics
+                                             const CallExpr *E) {
   switch (BuiltinID) {
   default:
     return nullptr;
+  // PULP platform queries resolve to plain loads of global
+  // external symbols provided by the linker:
+  case RISCV::BI__builtin_pulp_CoreCount:
+    llvm::StringRef Name = "__rt_nb_pe";
+    llvm::Module *M = &CGM.getModule();
+    M->getOrInsertGlobal(Name, Builder.getInt32Ty());
+    llvm::GlobalVariable *V = M->getNamedGlobal(Name);
+    V->setLinkage(llvm::GlobalValue::ExternalLinkage);
+    V->setAlignment(4);
+    return Builder.CreateLoad(
+        Address(V, CharUnits::fromQuantity(V->getAlignment())));
   }
 }
 

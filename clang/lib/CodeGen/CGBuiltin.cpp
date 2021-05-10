@@ -15509,17 +15509,16 @@ Value *CodeGenFunction::EmitRISCVBuiltinExpr(unsigned BuiltinID,
   switch (BuiltinID) {
   default:
     return nullptr;
-  // PULP platform queries resolve to plain loads of global
-  // external symbols provided by the linker:
+  // PULP platform queries: they resolve to returning specific
+  // external symbol's address
   case RISCV::BI__builtin_pulp_CoreCount:
     llvm::StringRef Name = "__rt_nb_pe";
     llvm::Module *M = &CGM.getModule();
-    M->getOrInsertGlobal(Name, Builder.getInt32Ty());
+    M->getOrInsertGlobal(Name, Int8Ty);
     llvm::GlobalVariable *V = M->getNamedGlobal(Name);
     V->setLinkage(llvm::GlobalValue::ExternalLinkage);
-    V->setAlignment(4);
-    return Builder.CreateLoad(
-        Address(V, CharUnits::fromQuantity(V->getAlignment())));
+    V->setDSOLocal(true);
+    return Builder.CreatePtrToInt(V, Int32Ty);
   }
 }
 

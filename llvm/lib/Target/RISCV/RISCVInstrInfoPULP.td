@@ -1993,7 +1993,9 @@ def : Pat<(int_riscv_pulp_write_base_off_v GPR:$rs2, GPR:$rs1, GPR:$rs3), (PULP_
 def : Pat<(int_riscv_pulp_CoreId), (ANDI (CSRRS MHARTID.Encoding, X0), 0b1111)>;
 def : Pat<(int_riscv_pulp_ClusterId), (SRLI (ANDI (CSRRS MHARTID.Encoding, X0), 0b11111100000), 5)>;
 def : Pat<(int_riscv_pulp_IsFc), (SRLI (ANDI (CSRRS MHARTID.Encoding, X0), 0b10000000000), 10)>;
-// FIXME: symbols below must be provided by the platform
+// Symbols below must be provided by the platform, no CSR involved
+// Note: HERO has not fabric controller
+def : Pat<(int_riscv_pulp_HasFc), (ANDI X0, 0)>;
+// FIXME: should be read from a specific address provided by the linker
 def : Pat<(int_riscv_pulp_CoreCount), (CSRRS MHARTID.Encoding, X0)>;
-def : Pat<(int_riscv_pulp_HasFc), (CSRRS MHARTID.Encoding, X0)>;
 }

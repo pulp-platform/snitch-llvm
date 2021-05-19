@@ -1,11 +1,17 @@
 //====-- SNITCHFrepLoops.cpp - Identify and generate freppable loops ----====//
 //
+// Copyright 2021 ETH Zurich, University of Bologna.
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
+// This pass identifies loops where we can generate the Snitch FPU hardware
+// floating point repetition instruction (frep).  The hardware loop can perform 
+// floating point instruction repetition with zero-cycle overhead
+//
+//  This file is based on the lib/Target/Hexagon/HexagonHardwareLoops.cpp file.
 //===----------------------------------------------------------------------===//
 
 

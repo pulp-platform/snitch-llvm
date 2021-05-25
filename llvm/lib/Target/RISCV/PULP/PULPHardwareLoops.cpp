@@ -479,6 +479,12 @@ PULPHardwareLoops::getComparisonKind(unsigned CondOpc,
   case RISCV::BGEU:
     Cmp = Comparison::GEs;
     break;
+  case RISCV::P_BNEIMM:
+    Cmp = Comparison::NE;
+    break;
+  case RISCV::P_BEQIMM:
+    Cmp = Comparison::EQ;
+    break;
   default:
     return (Comparison::Kind)0;
   }

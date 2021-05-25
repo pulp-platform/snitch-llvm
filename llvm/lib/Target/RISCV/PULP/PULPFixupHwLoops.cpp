@@ -215,7 +215,9 @@ bool PULPFixupHwLoops::fixupLoopLatch(MachineFunction &MF) {
                 LastI->getOpcode() == RISCV::BLT ||
                 LastI->getOpcode() == RISCV::BGE ||
                 LastI->getOpcode() == RISCV::BLTU ||
-                LastI->getOpcode() == RISCV::BGEU) {
+                LastI->getOpcode() == RISCV::BGEU ||
+                LastI->getOpcode() == RISCV::P_BNEIMM ||
+                LastI->getOpcode() == RISCV::P_BEQIMM) {
               // Delete one and change/add an uncond. branch to out of the loop.
               MachineBasicBlock *BranchTarget = LastI->getOperand(2).getMBB();
               LastI = LastMBB->erase(LastI);

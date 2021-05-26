@@ -158,6 +158,7 @@ bool PULPFixupHwLoops::fixupLoopLatch(MachineFunction &MF) {
 
   bool changedNow = false;
   bool changedOverall = false;
+  std::set<MachineInstr *> toRemove;
 
   // Look at each loop instruction in turn, removing the branching instructions
   // at the end of them. The outer do...while loop and the breaks ensure that we
@@ -218,6 +219,56 @@ bool PULPFixupHwLoops::fixupLoopLatch(MachineFunction &MF) {
                 LastI->getOpcode() == RISCV::BGEU ||
                 LastI->getOpcode() == RISCV::P_BNEIMM ||
                 LastI->getOpcode() == RISCV::P_BEQIMM) {
+              // Delete the bump instruction
+              for (unsigned i = 0; i < LastI->getNumOperands(); i++) {
+                MachineOperand &MO = LastI->getOperand(i);
+                if (MO.isReg()) {
+                  std::set<MachineInstr *> regUsers;
+                  for (MachineInstr &MI : *LastMBB) {
+                    if (&MI == &*LastI) {
+                      continue;
+                    }
+                    for (unsigned i = 0; i < MI.getNumOperands(); i++) {
+                      MachineOperand &MOp = MI.getOperand(i);
+                      if (MOp.isReg()) {
+                        if (MO.getReg() == MOp.getReg()) {
+                          regUsers.insert(&MI);
+                        }
+                      }
+                    }
+                  }
+                  if (regUsers.size() == 1) {
+                    MachineInstr *Cand = (*regUsers.begin());
+                    if (Cand->getOpcode() == RISCV::ADD ||
+                        Cand->getOpcode() == RISCV::ADDI ||
+                        Cand->getOpcode() == RISCV::SUB) {
+                      if (Cand->getOperand(0).isReg() &&
+                          Cand->getOperand(1).isReg() &&
+                          Cand->getOperand(0).getReg()
+                          == Cand->getOperand(1).getReg()) {
+                        if (Cand->getParent()->size() <= 2) {
+                          // If this is part of the two last (potentially)
+                          // mandatory (hw loops require length of at least 2)
+                          // instructions in the block, it would require much
+                          // more work to remove it. Either because this is the
+                          // instruction that marks the end of the HW loop, or
+                          // because the length would change such that we need
+                          // to insert more nops.
+                          // FIXME: The bump fixup should be done at an earlier
+                          //        stage such that we do not have to worry
+                          //        about it during this phase of the fixup.
+                        } else {
+                          // FIXME: This may break if the register is not
+                          //        re-written before the first use after the
+                          //        loop, as the post-loop value of the
+                          //        register will have changed.
+                          toRemove.insert(Cand);
+                        }
+                      }
+                    }
+                  }
+                }
+              }
               // Delete one and change/add an uncond. branch to out of the loop.
               MachineBasicBlock *BranchTarget = LastI->getOperand(2).getMBB();
               LastI = LastMBB->erase(LastI);
@@ -257,6 +308,11 @@ bool PULPFixupHwLoops::fixupLoopLatch(MachineFunction &MF) {
     }
 
   } while (changedNow == true);
+
+  for (MachineInstr *MI : toRemove) {
+    MI->getParent()->dump();
+    MI->eraseFromParent();
+  }
 
   return changedOverall;
 }

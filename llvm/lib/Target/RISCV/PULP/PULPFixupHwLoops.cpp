@@ -23,7 +23,7 @@
 using namespace llvm;
 
 static cl::opt<signed> MaxLoopRangeImm(
-    "pulp-loop-range-immediate", cl::Hidden, cl::init(62),
+    "pulp-loop-range-immediate", cl::Hidden, cl::init(50),
     cl::desc("Restrict range of lp.setupi to N instructions."));
 
 static cl::opt<signed> MaxLoopRangeReg(
@@ -36,6 +36,44 @@ namespace llvm {
 }
 
 namespace {
+
+// TODO: This function is not needed for the latest LLVM versions, as MBB has
+//       had the splitAt() method added. This version is adapted from that
+//       method, from https://github.com/llvm/llvm-project/blob/
+//       d7c219a506ec9aabe7c5d36c0da55656af487b73/llvm/lib/CodeGen/
+//       MachineBasicBlock.cpp
+//       CAVEAT: The above function will not split, as the loop instruction is
+//               a terminator, in which case the above linked version would
+//               chicken out.
+MachineBasicBlock *splitMBBAt(MachineBasicBlock *OldMBB, MachineInstr &MI) {
+  MachineBasicBlock::iterator SplitPoint(&MI);
+
+  MachineFunction *MF = OldMBB->getParent();
+
+  LivePhysRegs LiveRegs;
+  // Make sure we add any physregs we define in the block as liveins to the
+  // new block.
+  MachineBasicBlock::iterator Prev(&MI);
+  LiveRegs.init(*MF->getSubtarget().getRegisterInfo());
+  LiveRegs.addLiveOuts(*OldMBB);
+  for (auto I = OldMBB->rbegin(), E = Prev.getReverse(); I != E; ++I)
+    LiveRegs.stepBackward(*I);
+
+  MachineBasicBlock *SplitBB =
+      MF->CreateMachineBasicBlock(OldMBB->getBasicBlock());
+
+  MF->insert(++MachineFunction::iterator(OldMBB), SplitBB);
+  SplitBB->splice(SplitBB->begin(), OldMBB, SplitPoint, OldMBB->end());
+
+  SplitBB->transferSuccessorsAndUpdatePHIs(OldMBB);
+  OldMBB->addSuccessor(SplitBB);
+
+  addLiveIns(*SplitBB, LiveRegs);
+
+  return SplitBB;
+}
+
+
   struct PULPFixupHwLoops : public MachineFunctionPass {
   public:
     static char ID;
@@ -121,6 +159,23 @@ bool PULPFixupHwLoops::runOnMachineFunction(MachineFunction &MF) {
   bool fixedPreHd = fixupLoopPreheader(MF);
   bool fixedLatch = fixupLoopLatch(MF);
   bool fixedInstr = fixupLoopInstrs(MF);
+
+  // TODO Move to own function
+  for (MachineBasicBlock &MBB : MF) {
+    for (MachineInstr &MI : MBB) {
+      // If this is a loop instruction that has not been moved to a dedicated
+      // block (for alignment of that block), then split and align it.
+      if (isHardwareLoop(MI) && MBB.size() > 1) {
+        MachineBasicBlock *New = splitMBBAt(&MBB, MI);
+        if (New == &MBB) {
+          // Nothing changed
+          continue;
+        }
+        New->setAlignment(4);
+        break;
+      }
+    }
+  }
 
   return fixedPreHd || fixedLatch || fixedInstr;
 }

@@ -162,10 +162,12 @@ bool PULPFixupHwLoops::runOnMachineFunction(MachineFunction &MF) {
 
   // TODO Move to own function
   for (MachineBasicBlock &MBB : MF) {
+    unsigned instrs = 0;
     for (MachineInstr &MI : MBB) {
+      instrs++;
       // If this is a loop instruction that has not been moved to a dedicated
       // block (for alignment of that block), then split and align it.
-      if (isHardwareLoop(MI) && MBB.size() > 1) {
+      if (isHardwareLoop(MI) && instrs > 1) {
         MachineBasicBlock *New = splitMBBAt(&MBB, MI);
         if (New == &MBB) {
           // Nothing changed

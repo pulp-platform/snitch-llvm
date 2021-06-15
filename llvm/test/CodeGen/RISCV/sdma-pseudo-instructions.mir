@@ -1,0 +1,59 @@
+# RUN: llc -x mir -mcpu=snitch -run-pass=riscv-expand-sdma < %s \
+# RUN: | FileCheck -check-prefix=RV32-SDMA %s
+
+--- |
+  define i32 @outline_0(i32 %a, i32 %b) { ret i32 0 }
+  define i32 @outline_1(i32 %a, i32 %b) { ret i32 0 }
+  define i32 @outline_2(i32 %a, i32 %b) { ret i32 0 }
+  define i32 @outline_3(i32 %a, i32 %b) { ret i32 0 }
+...
+---
+name:            outline_0
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $x5, $x6, $x7, $x28, $x29, $x30
+    ; RV32-SDMA: %1:gpr = ANDI $x30, -3
+    ; RV32-SDMA-NEXT: DMSRC $x6, $x5
+    ; RV32-SDMA-NEXT: DMDST $x28, $x7
+    ; RV32-SDMA-NEXT: %0:gpr = DMCPY $x29, killed %1
+    /* sp_hi, sp_lo, dp_hi, dp_lo, size, cfg */
+    %0:gpr = PseudoSDMAOned $x5, $x6, $x7, $x28, $x29, $x30
+...
+---
+name:            outline_1
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $x5, $x6, $x7, $x28, $x29, $x30, $x10, $x11, $x12
+    ; RV32-SDMA: %1:gpr = ORI $x12, 2
+    ; RV32-SDMA-NEXT: DMSRC $x6, $x5
+    ; RV32-SDMA-NEXT: DMDST $x28, $x7
+    ; RV32-SDMA-NEXT: DMSTR $x30, $x10
+    ; RV32-SDMA-NEXT: DMREP $x11
+    ; RV32-SDMA-NEXT: %0:gpr = DMCPY $x29, killed %1
+    /* sp_hi, sp_lo, dp_hi, dp_lo, size, sstrd, dstrd, nreps, cfg */
+    %0:gpr = PseudoSDMATwod $x5, $x6, $x7, $x28, $x29, $x30,$x10, $x11, $x12
+    PseudoRET
+...
+---
+name:            outline_2
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $x5
+    ; RV32-SDMA: %0:gpr = DMSTAT $x5
+    %0:gpr = PseudoSDMAStat $x5
+    PseudoRET
+...
+---
+name:            outline_3
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $x5
+    ; RV32-SDMA: bb.1:
+    ; RV32-SDMA: %0:gpr = DMSTATI 2
+    ; RV32-SDMA-NEXT: BNE killed %0, $x0, %bb.1
+    PseudoSDMAWaitForIdle
+...

@@ -1488,19 +1488,17 @@ SDValue RISCVTargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
 
     //HiLo split of src/dst address using the EXTRACT_ELEMENT node
     EVT HalfVT = VT1.getHalfSizedIntegerVT(*DAG.getContext());
-    SDValue One = DAG.getConstant(1, DL, HalfVT);
-    SDValue Zero = DAG.getConstant(0, DL, HalfVT);
     // first operand
     SDValue LHS = Op.getOperand(2);
-    SDValue LHS_Lo = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, LHS, Zero);
-    SDValue LHS_Hi = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, LHS, One);
+    SDValue LHS_Lo = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, LHS, DAG.getConstant(0, DL, HalfVT));
+    SDValue LHS_Hi = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, LHS, DAG.getConstant(1, DL, HalfVT));
     // second operand
     SDValue RHS = Op.getOperand(3);
-    SDValue RHS_Lo = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, RHS, Zero);
-    SDValue RHS_Hi = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, RHS, One);
+    SDValue RHS_Lo = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, RHS, DAG.getConstant(0, DL, HalfVT));
+    SDValue RHS_Hi = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, RHS, DAG.getConstant(1, DL, HalfVT));
 
     // build new intrinsic: first create operand list
-    SmallVector<SDValue, 8> OpsV; 
+    SmallVector<SDValue> OpsV; 
       // chain
     OpsV.push_back(Op.getOperand(0));
       // intrinsic ID
@@ -1529,7 +1527,8 @@ SDValue RISCVTargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
     ArrayRef<EVT> ResultTys({MVT::i32, MVT::Other});
 
     // create new node
-    SDValue res = DAG.getNode(ISD::INTRINSIC_W_CHAIN, DL, ResultTys, Ops);
+    SDValue res = DAG.getNode(ISD::INTRINSIC_W_CHAIN, DL, Op->getVTList(), Ops);
+
 
     LLVM_DEBUG(LHS_Lo.dump());
     LLVM_DEBUG(LHS_Hi.dump());

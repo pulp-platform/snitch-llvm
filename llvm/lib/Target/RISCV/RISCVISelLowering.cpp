@@ -4712,22 +4712,20 @@ SDValue RISCVTargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
 
     //HiLo split of src/dst address using the EXTRACT_ELEMENT node
     EVT HalfVT = VT1.getHalfSizedIntegerVT(*DAG.getContext());
-    SDValue One = DAG.getConstant(1, DL, HalfVT);
-    SDValue Zero = DAG.getConstant(0, DL, HalfVT);
     // first operand
     SDValue LHS = Op.getOperand(2);
-    SDValue LHS_Lo = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, LHS, Zero);
-    SDValue LHS_Hi = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, LHS, One);
+    SDValue LHS_Lo = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, LHS, DAG.getConstant(0, DL, HalfVT));
+    SDValue LHS_Hi = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, LHS, DAG.getConstant(1, DL, HalfVT));
     // second operand
     SDValue RHS = Op.getOperand(3);
-    SDValue RHS_Lo = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, RHS, Zero);
-    SDValue RHS_Hi = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, RHS, One);
+    SDValue RHS_Lo = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, RHS, DAG.getConstant(0, DL, HalfVT));
+    SDValue RHS_Hi = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, RHS, DAG.getConstant(1, DL, HalfVT));
 
     // build new intrinsic: first create operand list
     SmallVector<SDValue, 8> OpsV; 
-      // chain
+    // chain
     OpsV.push_back(Op.getOperand(0));
-      // intrinsic ID
+    // intrinsic ID
     if(isTwod)
       OpsV.push_back(DAG.getConstant(Intrinsic::riscv_sdma_start_twod_legal, DL, MVT::i32));
     else
@@ -4748,12 +4746,9 @@ SDValue RISCVTargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
     // original cfg 
     OpsV.push_back(Op.getOperand(isTwod ? 8:5));
     ArrayRef<SDValue> Ops(OpsV);
-
-    // build result types: i32 and Chain
-    SmallVector<EVT, 2> ResultTys({MVT::i32, MVT::Other});
-
+    
     // create new node
-    SDValue Result = DAG.getNode(ISD::INTRINSIC_W_CHAIN, DL, ResultTys, Ops);
+    SDValue Result = DAG.getNode(ISD::INTRINSIC_W_CHAIN, DL, Op->getVTList(), Ops);
 
     LLVM_DEBUG(LHS_Lo.dump());
     LLVM_DEBUG(LHS_Hi.dump());

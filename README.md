@@ -1,3 +1,213 @@
+# Snitch-LLVM
+
+LLVM 12 with extensions for [Snitch](https://github.com/pulp-platform/snitch). These include
+
+- Assembly support for SSR, DMA and FREP extensions
+- Intrinsics and `clang` builtins for SSR and DMA extensions
+- FREP hardware loops
+
+## Build instructions
+Refer to [snitch-toolchain-cd](https://github.com/pulp-platform/snitch-toolchain-cd) for build scripts and continuous deployment of pre-built toolchains.
+
+## Command-line options
+
+| Flag | Description |
+|---|---|
+| `--mcpu=snitch` | Enables all extensions for Snitch `rv32imafd,xfrep,xssr,xdma` and the Snitch machine model, which is not adapted for Snitch yet |
+| `--debug-only=riscv-sdma` | Enable the debug output of the DMA pseudo instruction expansion pass |
+| `--debug-only=riscv-ssr` | Enable the debug output of the SSR pseudo instruction expansion pass |
+| `--debug-only=snitch-freploops` | Enable the debug output of the FREP loop inference pass |
+| `--ssr-noregmerge` | Disable the SSR register merging in the SSR pseudo instruction expansion pass. Register merging is enabled by default and can be disabled with this flag. |
+| `--snitch-frep-inference` | Globally enable the FREP inference on all loops in the compiled module. |
+| `--enable-misched=false` | Disable the machine instruction scheduler. Instructions in a complex loop with multiple SSR push or pop instructions on the same data mover may not be rescheduled because the order in which the SSR are accessed is important. |
+
+## `clang` builtins
+The following `clang` builtins can be used to directly make use of the SSR and DMA extensions.
+
+### SSR
+
+```c
+/**
+ * @brief Setup 1D SSR read transfer
+ * @details rep, b, s are raw values written directly to the SSR registers
+ * 
+ * @param DM data mover ID
+ * @param rep repetition count minus one
+ * @param b bound minus one
+ * @param s relative stride
+ * @param data pointer to data
+ */
+void __builtin_ssr_setup_1d_r(uint32_t DM, uint32_t rep, uint32_t b, uint32_t s, void* data);
+
+/**
+ * @brief Setup 1D SSR write transfer
+ * @details rep, b, s are raw values written directly to the SSR registers
+ * 
+ * @param DM data mover ID
+ * @param rep repetition count minus one
+ * @param b bound minus one
+ * @param s relative stride
+ * @param data pointer to data
+ */
+void __builtin_ssr_setup_1d_w(uint32_t DM, uint32_t rep, uint32_t b, uint32_t s, void* data);
+
+/**
+ * @brief Write a datum to an SSR streamer
+ * @details Must be within an SSR region
+ * 
+ * @param DM data mover ID
+ * @param val value to write
+ */
+void __builtin_ssr_push(uint32_t DM, double val);
+
+/**
+ * @brief Read a datum from an SSR streamer
+ * @details Must be within an SSR region
+ * 
+ * @param DM data mover ID
+ * @return datum fetched from DM
+ */
+double __builtin_ssr_pop(uint32_t DM);
+
+/**
+ * @brief Enable an SSR region
+ * @details FT registers are reserved and the push/pop methods can be used to access the SSR
+ */
+void __builtin_ssr_enable();
+
+/**
+ * @brief Disable an SSR region
+ * @details FT registers are restored and push/pop is not possible
+ */
+void __builtin_ssr_disable();
+
+/**
+ * @brief Start an SSR read transfer
+ * @details Bound and stride can be configured using the respective methods
+ * 
+ * @param DM data mover ID
+ * @param dim Number of dimensions minus one
+ * @param data pointer to data
+ */
+void __builtin_ssr_read(uint32_t DM, uint32_t dim, void* data);
+
+/**
+ * @brief Start an SSR write transfer
+ * @details Bound and stride can be configured using the respective methods
+ * 
+ * @param DM data mover ID
+ * @param dim Number of dimensions minus one
+ * @param data pointer to data
+ */
+void __builtin_ssr_write(uint32_t DM, uint32_t dim, void* data);
+
+/**
+ * @brief Configure repetition value
+ * @details A value of 0 loads each datum once
+ * 
+ * @param DM data mover ID
+ * @param rep repetition count minus one
+ */
+void __builtin_ssr_setup_repetition(uint32_t DM, uint32_t rep);
+
+/**
+ * @brief Configure bound and stride for dimension 1
+ * @details 
+ * 
+ * @param DM data mover ID
+ * @param b bound minus one
+ * @param s relative stride
+ */
+void __builtin_ssr_setup_bound_stride_1d(uint32_t DM, uint32_t b, uint32_t s);
+
+/**
+ * @brief Configure bound and stride for dimension 2
+ * @details 
+ * 
+ * @param DM data mover ID
+ * @param b bound minus one
+ * @param s relative stride
+ */
+void __builtin_ssr_setup_bound_stride_2d(uint32_t DM, uint32_t b, uint32_t s);
+
+/**
+ * @brief Configure bound and stride for dimension 3
+ * @details 
+ * 
+ * @param DM data mover ID
+ * @param b bound minus one
+ * @param s relative stride
+ */
+void __builtin_ssr_setup_bound_stride_3d(uint32_t DM, uint32_t b, uint32_t s);
+
+/**
+ * @brief Configure bound and stride for dimension 4
+ * @details 
+ * 
+ * @param DM data mover ID
+ * @param b bound minus one
+ * @param s relative stride
+ */
+void __builtin_ssr_setup_bound_stride_4d(uint32_t DM, uint32_t b, uint32_t s);
+```
+
+### SDMA
+
+```c
+/**
+ * @brief Start 1D DMA transfer
+ * @details non-blocking call, doesn't check if DMA is ready to accept a new transfer
+ * 
+ * @param src Pointer to source
+ * @param dst Pointer to destination
+ * @param size Number of bytes to copy
+ * @param cfg DMA configuration word
+ * @return transfer ID
+ */
+uint32_t __builtin_sdma_start_oned(uint64_t src, uint64_t dst, uint32_t size, uint32_t cfg);
+
+/**
+ * @brief Start 2D DMA transfer
+ * @details non-blocking call, doesn't check if DMA is ready to accept a new transfer
+ * 
+ * @param src Pointer to source
+ * @param dst Pointer to destination
+ * @param size Number of bytes in the inner transfer
+ * @param sstrd Source stride
+ * @param dstrd Destination stride
+ * @param nreps Number of repetitions in the outer transfer
+ * @param cfg DMA configuration word
+ * @return transfer ID
+ */
+uint32_t __builtin_sdma_start_twod(uint64_t src, uint64_t dst, uint32_t size, 
+  uint32_t sstrd, uint32_t dstrd, uint32_t nreps, uint32_t cfg);
+
+/**
+ * @brief Read DMA status register
+ * @details 
+ * 
+ * @param tid Transfer ID to check
+ * @return status register
+ */
+uint32_t __builtin_sdma_stat(uint32_t tid);
+
+/**
+ * @brief Polling wiat for idle
+ * @details Block until all transactions have completed
+ */
+void __builtin_sdma_wait_for_idle(void);
+```
+
+## FREP hardware loops
+
+Inference can be enabled globally with `--snitch-frep-inference` or locally with `#pragma frep infer`.
+
+```c
+#pragma frep infer
+for(unsigned i = 0; i < 128; ++i)
+  acc += __builtin_ssr_pop(0)*__builtin_ssr_pop(1);
+```
+
 # The LLVM Compiler Infrastructure
 
 This directory and its sub-directories contain source code for LLVM,

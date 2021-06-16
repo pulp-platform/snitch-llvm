@@ -698,6 +698,11 @@ unsigned SNITCHFrepLoops::containsInvalidInstruction(MachineLoop *L, Register *I
         }
       }
 
+      if(MI->isDebugValue()) {
+        LLVM_DEBUG(dbgs() << "  ignoring debug value\n");
+        continue;
+      }
+
       skip = false;
       if(MI->isConditionalBranch()) {
         for(auto MO : MI->operands())

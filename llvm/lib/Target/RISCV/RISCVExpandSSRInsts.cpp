@@ -346,25 +346,11 @@ void RISCVExpandSSR::mergePushPop(MachineBasicBlock &MBB) {
   Register ssr_regs[NUM_SSR];
   for(unsigned ssr_no = 0; ssr_no < NUM_SSR; ++ssr_no) ssr_regs[ssr_no] = getSSRFtReg(ssr_no);
 
-  // MachineBasicBlock::iterator MBBI = MBB.begin(), E = MBB.end();
+  // First pass: Detect moves to or from SSR registers
   for (auto MI = MBB.begin() ; MI != MBB.end() ; ) {
     MachineBasicBlock::iterator NMI = std::next(MI);
 
     LLVM_DEBUG(dbgs()<<"Analyzing: "<<*MI<<"\n");
-
-    if(MI->getOpcode() == RISCV::CSRRSI 
-      && MI->getOperand(1).getImm() == 0x7C0
-      && MI->getOperand(2).getImm() == 1) {
-      LLVM_DEBUG(dbgs() << "SSR region start\n");
-      inSSRRegion = true;
-    }
-
-    if(MI->getOpcode() == RISCV::CSRRCI 
-      && MI->getOperand(1).getImm() == 0x7C0
-      && MI->getOperand(2).getImm() == 1) {
-      LLVM_DEBUG(dbgs() << "SSR region stop\n");
-      inSSRRegion = false;
-    }
 
     // detect an emitted pop and add assignment (virtual_reg, ssr_read) to list
     if(MI->getOpcode() == RISCV::FSGNJ_D) {
@@ -384,34 +370,18 @@ void RISCVExpandSSR::mergePushPop(MachineBasicBlock &MBB) {
         }
         // TODO: check for push
         else if(MI->getOperand(0).getReg() == ssr_regs[ssr_no]) {
-          LLVM_DEBUG(dbgs()<<"  push: operand 0 from SSR"<< ssr_no <<"\n");
-          // append virtual register to list of assigned virtuals
-          LLVM_DEBUG(dbgs()<<"  append: "<< MI->getOperand(0).getReg() <<"\n");
-          virtRegs[ssr_no].insert(MI->getOperand(0).getReg());
-          // remove operation
-          MI->eraseFromParent();
+          // This is non-trivial because a register might be used elsewhere, therefore the entire MBB
+          // must be analyzed and a merge can only be made, if the register is written once
+          // LLVM_DEBUG(dbgs()<<"  push: operand 0 from SSR"<< ssr_no <<"\n");
+          // // append virtual register to list of assigned virtuals
+          // LLVM_DEBUG(dbgs()<<"  append: "<< MI->getOperand(1).getReg() <<"\n");
+          // virtRegs[ssr_no].insert(MI->getOperand(1).getReg());
+          // // remove operation
+          // MI->eraseFromParent();
           break;
         }
       }
     } 
-    else {
-      // look for usage of any of the virtual registers assigned to SSRs
-      for (auto operand = MI->operands_begin() ; operand != MI->operands_end() ; ++operand) {
-        if(!operand->isReg()) continue;
-        // check if operand is in any SSR list
-        for(unsigned ssr_no = 0; ssr_no < NUM_SSR; ++ssr_no) {
-          if(virtRegs[ssr_no].contains(operand->getReg())) {
-            LLVM_DEBUG(dbgs() << "Found usage of operand " << operand->getReg() << " in inst " <<  MI->getOpcode() << "\n");
-            // substitute with SSR register
-            MI->substituteRegister(operand->getReg(), ssr_regs[ssr_no], 0, *TRI);
-            // guard this block and add ssr regs to live in
-            MBB.addLiveIn(ssr_regs[ssr_no]);
-          }
-        }
-      }
-      MBB.sortUniqueLiveIns();
-    }
-
     MI = NMI;
   }
 
@@ -419,8 +389,29 @@ void RISCVExpandSSR::mergePushPop(MachineBasicBlock &MBB) {
   for(unsigned ssr_no = 0; ssr_no < NUM_SSR; ++ssr_no) {
     for (auto iter = virtRegs[ssr_no].begin() ; iter != virtRegs[ssr_no].end() ; ++iter)
       LLVM_DEBUG(dbgs() << "virtregs["<<ssr_no<<"] = " << *iter << "\n");
-
   }
+
+  // Second pass: Replace uses of virtual registers corresponding to DMs with FT registers
+  for (auto MI = MBB.begin() ; MI != MBB.end() ; ) {
+    MachineBasicBlock::iterator NMI = std::next(MI);
+
+    // look for usage of any of the virtual registers assigned to SSRs
+    for (auto operand = MI->operands_begin() ; operand != MI->operands_end() ; ++operand) {
+      if(!operand->isReg()) continue;
+      // check if operand is in any SSR list
+      for(unsigned ssr_no = 0; ssr_no < NUM_SSR; ++ssr_no) {
+        if(virtRegs[ssr_no].contains(operand->getReg())) {
+          LLVM_DEBUG(dbgs() << "Found use of operand " << operand->getReg() << " ssr: " << ssr_no << " in inst " <<  MI->getOpcode() << "\n");
+          // substitute with SSR register
+          MI->substituteRegister(operand->getReg(), ssr_regs[ssr_no], 0, *TRI);
+          // guard this block and add ssr regs to live in
+          MBB.addLiveIn(ssr_regs[ssr_no]);
+        }
+      }
+    }
+    MI = NMI;    
+  }
+  MBB.sortUniqueLiveIns();
 }
 
 /// Gather parameters for the register merging

@@ -99,7 +99,7 @@ class SPseudoSetupBoundStride:
 
 class SPseudoPush:
       Pseudo<(outs), (ins uimm5:$ssr, FPR64:$val),[]> {
-  let mayLoad = 1;
+  let mayLoad = 0;
   let mayStore = 1;
   let hasSideEffects = 1;
   let usesCustomInserter = 0;
@@ -108,7 +108,7 @@ class SPseudoPush:
 class SPseudoPop:
       Pseudo<(outs FPR64:$val), (ins uimm5:$ssr),[]> {
   let mayLoad = 1;
-  let mayStore = 1;
+  let mayStore = 0;
   let hasSideEffects = 1;
   let usesCustomInserter = 0;
 }

@@ -5,6 +5,8 @@
 
 --- |
   define i32 @outline_0(i32 %a, i32 %b) { ret i32 0 }
+  define i32 @outline_1(i32 %a, i32 %b) { ret i32 0 }
+  define i32 @outline_2(i32 %a, i32 %b) { ret i32 0 }
 ...
 ---
 name:            outline_0
@@ -28,6 +30,76 @@ body:             |
     %1:fpr64 = PseudoSSRPop 1
     %2:fpr64 = PseudoSSRPop 2
     %3:fpr64 = FMADD_D %0, %1, %2, 0
+    PseudoSSRDisable
+    PseudoRET
+...
+
+---
+name:            outline_1
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $f5_d, $f6_d
+
+    ; Register merging for SSR push is not yet implemented
+    ; SSR-MERGE:  dead %3:gpr = CSRRSI 1984, 1
+    ; SSR-MERGE:  %0:fpr64 = FADD_D $f5_d, $f5_d, 0
+    ; SSR-MERGE:  %1:fpr64 = FADD_D $f5_d, $f6_d, 0
+    ; SSR-MERGE:  %2:fpr64 = FADD_D $f6_d, $f5_d, 0
+    ; SSR-MERGE:  $f0_d = FSGNJ_D %0, %0
+    ; SSR-MERGE:  $f1_d = FSGNJ_D %1, %1
+    ; SSR-MERGE:  $f2_d = FSGNJ_D %2, %2
+    ; SSR-MERGE:  dead %4:gpr = CSRRCI 1984, 1
+    ; SSR-MERGE:  PseudoRET
+
+    ; SSR-NOMERGE:  dead %3:gpr = CSRRSI 1984, 1
+    ; SSR-NOMERGE:  %0:fpr64 = FADD_D $f5_d, $f5_d, 0
+    ; SSR-NOMERGE:  %1:fpr64 = FADD_D $f5_d, $f6_d, 0
+    ; SSR-NOMERGE:  %2:fpr64 = FADD_D $f6_d, $f5_d, 0
+    ; SSR-NOMERGE:  $f0_d = FSGNJ_D %0, %0
+    ; SSR-NOMERGE:  $f1_d = FSGNJ_D %1, %1
+    ; SSR-NOMERGE:  $f2_d = FSGNJ_D %2, %2
+    ; SSR-NOMERGE:  dead %4:gpr = CSRRCI 1984, 1
+    ; SSR-NOMERGE:  PseudoRET
+
+    PseudoSSREnable
+    %2:fpr64 = FADD_D $f5_d, $f5_d, 0
+    %3:fpr64 = FADD_D $f5_d, $f6_d, 0
+    %4:fpr64 = FADD_D $f6_d, $f5_d, 0
+    PseudoSSRPush 0, %2
+    PseudoSSRPush 1, %3
+    PseudoSSRPush 2, %4
+    PseudoSSRDisable
+    PseudoRET
+...
+
+---
+name:            outline_2
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: 
+
+    ; Register merging for SSR push is not yet implemented
+    ; SSR-MERGE:  dead %3:gpr = CSRRSI 1984, 1
+    ; SSR-MERGE:  %2:fpr64 = FADD_D $f0_d, $f1_d, 0
+    ; SSR-MERGE:  $f2_d = FSGNJ_D %2, %2
+    ; SSR-MERGE:  dead %4:gpr = CSRRCI 1984, 1
+    ; SSR-MERGE:  PseudoRET
+
+    ; SSR-NOMERGE:  dead %3:gpr = CSRRSI 1984, 1
+    ; SSR-NOMERGE:  %0:fpr64 = FSGNJ_D $f0_d, $f0_d
+    ; SSR-NOMERGE:  %1:fpr64 = FSGNJ_D $f1_d, $f1_d
+    ; SSR-NOMERGE:  %2:fpr64 = FADD_D %0, %1, 0
+    ; SSR-NOMERGE:  $f2_d = FSGNJ_D %2, %2
+    ; SSR-NOMERGE:  dead %4:gpr = CSRRCI 1984, 1
+    ; SSR-NOMERGE:  PseudoRET
+
+    PseudoSSREnable
+    %0:fpr64 = PseudoSSRPop 0
+    %1:fpr64 = PseudoSSRPop 1
+    %2:fpr64 = FADD_D %0, %1, 0
+    PseudoSSRPush 2, %2
     PseudoSSRDisable
     PseudoRET
 ...

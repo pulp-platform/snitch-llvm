@@ -1591,13 +1591,13 @@ let TargetPrefix = "riscv" in {
       : GCCBuiltin<"__builtin_ssr_push">,
         Intrinsic<[],
                   [llvm_i32_ty, llvm_double_ty],
-                  [IntrHasSideEffects, ImmArg<ArgIndex<0>>]>,
+                  [IntrWriteMem, IntrHasSideEffects, ImmArg<ArgIndex<0>>]>,
         RISCVSSRIntrinsic;
   def int_riscv_ssr_pop
       : GCCBuiltin<"__builtin_ssr_pop">,
         Intrinsic<[llvm_double_ty],
                   [llvm_i32_ty],
-                  [IntrHasSideEffects, ImmArg<ArgIndex<0>>]>,
+                  [IntrReadMem, IntrHasSideEffects, ImmArg<ArgIndex<0>>]>,
         RISCVSSRIntrinsic;
   def int_riscv_ssr_enable
       : GCCBuiltin<"__builtin_ssr_enable">,

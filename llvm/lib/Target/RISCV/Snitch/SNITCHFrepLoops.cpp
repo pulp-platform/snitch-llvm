@@ -337,20 +337,28 @@ bool SNITCHFrepLoops::runOnMachineFunction(MachineFunction &MF) {
 bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
   // This is just for sanity.
   assert(L->getHeader() && "Loop without a header?");
+  
+  bool changed = false;
 
-  LLVM_DEBUG(dbgs()<<"Found loop "; L->dump(););
+  /// Convert all inner loops firts
+  LLVM_DEBUG(L->dump(););
+  for (MachineLoop::iterator I = L->begin(), E = L->end(); I != E; ++I) {
+    changed |= convertToHardwareLoop(*I);
+  }
+
+  // skip if not innermost loop (should be a redundant check)
+  if(!L->isInnermost()) return false;
+  
+  LLVM_DEBUG(dbgs()<<"-------------------\n");
+  LLVM_DEBUG(dbgs()<<"Running on\n");
+  LLVM_DEBUG(L->dump(););
+  LLVM_DEBUG(dbgs()<<"-------------------\n");
 
   // Check if marked for inference or global inference is enabled
   if(!isMarkedForInference(L) && !EnableFrepInference)
-    return false;
+    return changed;
 
-  // Process nested loops first.
-  for (MachineLoop::iterator I = L->begin(), E = L->end(); I != E; ++I) {
-    LLVM_DEBUG(dbgs()<<"Nested loop not supported\n");
-    return false;
-  }
-
-  SmallVector<MachineInstr*, 2> OldInsts;
+  SmallVector<MachineInstr*, 2> OldInsts, NewInsts;
   Register *IndReg, *IncReg;
 
   LLVM_DEBUG(dbgs() << ">>>>> in getLoopTripCount()\n");
@@ -358,7 +366,7 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
 
   if(TripCount == nullptr) {
     LLVM_DEBUG(dbgs() << "trip count not found\n");
-    return false;
+    return changed;
   }
   LLVM_DEBUG(dbgs() << "getLoopTripCount found count "; TripCount->print(dbgs(), TRI));
 
@@ -366,14 +374,14 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
   LLVM_DEBUG(dbgs() << ">>>>> in containsInvalidInstruction()\n");
   unsigned nFlops = containsInvalidInstruction(L, IndReg, IncReg);
   if (nFlops == 0) {
-    return false;
+    return changed;
   }
   LLVM_DEBUG(dbgs() << "No invalid instructions found\n");
 
   // don't proceed if we don't have a control block
   MachineBasicBlock *ControlBlock = L->findLoopControlBlock();
   if (!ControlBlock) {
-    return false;
+    return changed;
   }
   LLVM_DEBUG(dbgs()<<"ControlBlock: " << ControlBlock->getName() << "\n");
 
@@ -381,7 +389,7 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
   // loop latch, one out of the loop
   MachineBasicBlock::iterator LastI = ControlBlock->getFirstTerminator();
   if (LastI == ControlBlock->end()) {
-    return false;
+    return changed;
   }
 
   // Ensure the loop has a preheader: the loop instruction will be
@@ -389,14 +397,14 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
   MachineBasicBlock *Preheader = MLI->findLoopPreheader(L, SpecPreheader);
   if (!Preheader) {
     dbgs() << "No preheader found\n";
-    return false;
+    return changed;
   }
 
   // Is the trip count available in the preheader?
   // Don't worry if it is immediate
   if (TripCount->isReg()) {
     dbgs() << "Don't know yet how to handle register trip counts\n";
-    return false;
+    return changed;
     // There will be a use of the register inserted into the preheader,
     // so make sure that the register is actually defined at that point.
     // MachineInstr *TCDef = MRI->getVRegDef(TripCount->getReg());
@@ -420,7 +428,7 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
   bool branchNotFound = TII->analyzeBranch(*ControlBlock, TB, FB, Cond, false);
   if (ControlBlock !=  LatchBlock) {
     if (branchNotFound) {
-      return false;
+      return changed;
     }
     if (L->contains(TB)) {
       LoopStart = TB;
@@ -431,7 +439,7 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
       LoopSucc = TB;
     }
     else {
-      return false;
+      return changed;
     }
   }
   else {
@@ -445,7 +453,7 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
   // to a fixed amount of loop iterations.
   if (!ExitBlock) {
     dbgs() << "no exit block found\n";
-    return false;
+    return changed;
   }
 
   // Ensure the loop length can reasonably fit into 12 bits.  Assume
@@ -458,7 +466,7 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
     loopSize += instructionSize * LB->size();
     if (loopSize > 0xFFF) {
       dbgs() << "loopsize exceeds limit: "<<loopSize<<"\n";
-      return false;
+      return changed;
     }
   }
   LLVM_DEBUG(dbgs() << "loopsize: "<<loopSize/instructionSize<<" instructions "<<nFlops<<" flops\n");
@@ -517,8 +525,8 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
     assert(LoopSucc != nullptr && "Expected a loop successor for unconditional branch");
     LLVM_DEBUG(dbgs()<<"Change conditional exit branch to uncondition with target " << LoopSucc->getName() << "\n");
     LLVM_DEBUG(dbgs()<<"  insert at"; FL->condTerm->dump());
-    BuildMI(*FL->condTerm->getParent(), FL->condTerm, FL->condTerm->getDebugLoc(),
-      TII->get(RISCV::PseudoBR)).addMBB(LoopSucc);
+    NewInsts.push_back(BuildMI(*FL->condTerm->getParent(), FL->condTerm, FL->condTerm->getDebugLoc(),
+      TII->get(RISCV::PseudoBR)).addMBB(LoopSucc).getInstr());
     FL->condTerm->removeFromParent();
   }
   else {
@@ -544,6 +552,17 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
     MachineBasicBlock::iterator nextTerm;
     for(;term != MBB->end(); term = nextTerm) {
       nextTerm = std::next(term);
+
+      // ignore if this instruction was added by this pass
+      unsigned skip = 0;
+      for(unsigned p = 0; p < NewInsts.size(); ++p) {
+        if(NewInsts[p] == term) {
+          skip = 1;
+          LLVM_DEBUG(dbgs()<<"skip removal of terminator"; term->dump());
+        }
+      } 
+      if(skip) continue;
+
       // unconditional branch from latch to header
       if(term->isUnconditionalBranch() && 
         term->getOperand(0).getMBB() == Header) {
@@ -694,6 +713,10 @@ unsigned SNITCHFrepLoops::containsInvalidInstruction(MachineLoop *L, Register *I
         }
         if(MI->getOperand(0).getMBB() == ExitingBlock) {
           LLVM_DEBUG(dbgs() << "  ignoring unconditional branch to Exit\n");
+          continue;
+        }
+        if(MI->getOperand(0).getMBB() == L->getExitBlock()) {
+          LLVM_DEBUG(dbgs() << "  ignoring unconditional branch to Exit Block\n");
           continue;
         }
       }

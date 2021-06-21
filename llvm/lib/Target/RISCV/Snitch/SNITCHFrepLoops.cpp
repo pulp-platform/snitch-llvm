@@ -1434,9 +1434,9 @@ void SNITCHFrepLoops::insertFPUBarrier(MachineLoop *L, MachineBasicBlock *MBB) {
 
   // %[tmp] = fmv.x.w fa0
   unsigned ScratchReg = MRI->createVirtualRegister(&RISCV::GPRRegClass);
+  unsigned ScratchFPReg = MRI->createVirtualRegister(&RISCV::FPR64RegClass);
   BuildMI(*MBB, InsertPos, DL, TII->get(RISCV::FMV_X_W), ScratchReg)
-    .addReg(RISCV::F10_F, 0);
-  MBB->addLiveIn(RISCV::F10_F);
+    .addReg(ScratchFPReg, RegState::Define);
   // blt %[tmp], %[tmp], 1f
   BuildMI(*MBB, InsertPos, DL, TII->get(RISCV::BLT))
     .addReg(ScratchReg, 0).addReg(ScratchReg, RegState::Kill)

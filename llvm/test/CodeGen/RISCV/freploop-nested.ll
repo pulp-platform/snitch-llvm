@@ -14,7 +14,7 @@ target triple = "riscv32-unknown-unknown-elf"
 ; CHECK-NEXT:   frep.o  [[rBound]], 2, 0, 0
 ; CHECK-NEXT:   fmul.d  {{.*}}
 ; CHECK-NEXT:   fadd.d  {{.*}}
-; CHECK-NEXT:   fmv.x.w {{.*}}, fa0
+; CHECK-NEXT:   fmv.x.w {{.*}}, {{.*}}
 ; CHECK-NEXT:   addi  [[rInd:[a-zA-Z0-9_]*]], [[rInd]], 1
 ; CHECK-NEXT:   csrrci  {{.*}}, 1984, 1
 ; CHECK-NEXT:   bne [[rInd]], a1, .LBB0_1
@@ -60,14 +60,14 @@ for.body4:                                        ; preds = %for.body, %for.body
 ; CHECK-NEXT:   frep.o  [[rBound]], 2, 0, 0
 ; CHECK-NEXT:   fmul.d  {{.*}}
 ; CHECK-NEXT:   fadd.d  {{.*}}
-; CHECK-NEXT:   fmv.x.w {{.*}}, fa0
+; CHECK-NEXT:   fmv.x.w {{.*}}, {{.*}}
 ; CHECK-NEXT:   csrrci  {{.*}}, 1984, 1
 ; CHECK-NEXT:   csrrsi  {{.*}}, 1984, 1
 ; CHECK:        addi  [[rBound:[a-zA-Z0-9_]*]], zero, 127
 ; CHECK:        frep.o  [[rBound]], 2, 0, 0
 ; CHECK-NEXT:   fmul.d  {{.*}}
 ; CHECK-NEXT:   fadd.d  {{.*}}
-; CHECK:        fmv.x.w {{.*}}, fa0
+; CHECK:        fmv.x.w {{.*}}, {{.*}}
 
 ; Function Attrs: nounwind
 define dso_local i32 @main1() local_unnamed_addr #0 {

@@ -149,7 +149,8 @@ private:
 
   /// Return number of freppable instructions of loop is freppable, zero
   /// if not
-  unsigned containsInvalidInstruction(MachineLoop *L, Register *IV, Register *ICV) const;
+  unsigned containsInvalidInstruction(MachineLoop *L, Register *IV, Register *ICV,
+    SmallVectorImpl<MachineInstr *> &FPPhis) const;
 
   /// Return true if the instruction is not valid within a hardware
   /// loop.
@@ -212,6 +213,8 @@ private:
 
   /// check for any metadata that suggests that this loop should be frepped
   bool isMarkedForInference(MachineLoop *L);
+
+  void fixupPHIs(SmallVectorImpl<MachineInstr *> &FPPhis, MachineBasicBlock *FrepBlock);
 };
 
 /// Abstraction for a trip count of a loop. A smaller version
@@ -372,7 +375,8 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
 
   // Does the loop contain any invalid instructions?
   LLVM_DEBUG(dbgs() << ">>>>> in containsInvalidInstruction()\n");
-  unsigned nFlops = containsInvalidInstruction(L, IndReg, IncReg);
+  SmallVector<MachineInstr*, 2> FPPhis;
+  unsigned nFlops = containsInvalidInstruction(L, IndReg, IncReg, FPPhis);
   if (nFlops == 0) {
     return changed;
   }
@@ -504,6 +508,12 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
     KnownHardwareLoops.insert(hwloop.getInstr()); 
   }
   delete TripCount;
+
+  // Add unconditional branch to exit block where FPU fence is placed
+  // InsertPos = TopBlock->getFirstTerminator();
+  // NewInsts.push_back(BuildMI(*TopBlock, InsertPos, DL,
+  //   TII->get(RISCV::PseudoBR)).addMBB(ExitBlock).getInstr());
+  // if(!TopBlock->isSuccessor(ExitBlock)) TopBlock->addSuccessor(ExitBlock);
 
   // Make sure the loop start always has a reference in the CFG.  We need
   // to create a BlockAddress operand to get this mechanism to work both the
@@ -661,6 +671,9 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
   // insert FPU barrier to synchronize float and integer pipelines after loop
   insertFPUBarrier(L, ExitBlock);
 
+  // fixup any phis that might be deprecated
+  // fixupPHIs(FPPhis, TopBlock);
+
   // statistics
   ++NumFrepLoops;
 
@@ -678,7 +691,8 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
 
 /// Return true if the loop contains an instruction that inhibits
 /// the use of the hardware loop instruction.
-unsigned SNITCHFrepLoops::containsInvalidInstruction(MachineLoop *L, Register *IV, Register *ICV) const {
+unsigned SNITCHFrepLoops::containsInvalidInstruction(MachineLoop *L, Register *IV, Register *ICV,
+    SmallVectorImpl<MachineInstr *> &FPPhis) const {
   MachineBasicBlock *Header = L->getHeader();
   MachineBasicBlock *Latch = L->getLoopLatch();
   MachineBasicBlock *ExitingBlock = L->findLoopControlBlock();
@@ -689,11 +703,16 @@ unsigned SNITCHFrepLoops::containsInvalidInstruction(MachineLoop *L, Register *I
   for (MachineBasicBlock *MBB : L->getBlocks()) {
     for (MachineBasicBlock::iterator
            MII = MBB->begin(), E = MBB->end(); MII != E; ++MII) {
-      const MachineInstr *MI = &*MII;
+      MachineInstr *MI = &*MII;
       LLVM_DEBUG(dbgs()<<"Checking"; MI->dump());
 
       if(MI->getOpcode() ==  TargetOpcode::PHI) {
         LLVM_DEBUG(dbgs() << "  ignoring PHI node\n");
+        // Add to list of FP PHIs that need fixing-up
+        if(MRI->getRegClass(MI->getOperand(0).getReg()) == &RISCV::FPR64RegClass || 
+           MRI->getRegClass(MI->getOperand(0).getReg()) == &RISCV::FPR32RegClass) {
+          FPPhis.push_back(MI);
+        }
         continue;
       }
 
@@ -1450,6 +1469,47 @@ void SNITCHFrepLoops::insertFPUBarrier(MachineLoop *L, MachineBasicBlock *MBB) {
 
   LivePhysRegs LiveRegs;
   computeAndAddLiveIns(LiveRegs, *DoneMBB);
+}
+
+void SNITCHFrepLoops::fixupPHIs(SmallVectorImpl<MachineInstr *> &FPPhis, MachineBasicBlock *FrepBlock) {
+  // A phi before an FREP loop should new be a COPY from the predecessor, not the
+  // MBB where the FREP loop is at and the use be erplaced with the "induction" variable for reductions
+  Register SrcReg, DstReg, IndReg;
+  // const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
+  for(auto phi : FPPhis) {
+    DstReg = phi->getOperand(0).getReg();
+
+    // if one of the source MBB is the block where FREP is, chane it to a copy
+    // from the value of the other source
+    if(phi->getOperand(2).getMBB() == FrepBlock){
+      SrcReg = phi->getOperand(3).getReg();
+      IndReg = phi->getOperand(1).getReg();
+    }
+    else if (phi->getOperand(4).getMBB() == FrepBlock){
+      SrcReg = phi->getOperand(1).getReg();
+      IndReg = phi->getOperand(3).getReg();
+    }
+    else {
+      LLVM_DEBUG(dbgs()<<"WARNING: Fixup PHI no solution found for\n");
+      LLVM_DEBUG(phi->dump(););
+      continue;
+    }
+
+    using use_nodbg_iterator = MachineRegisterInfo::use_nodbg_iterator;
+    use_nodbg_iterator I = MRI->use_nodbg_begin(DstReg);
+    use_nodbg_iterator End = MRI->use_nodbg_end();
+    if (std::next(I) != End) {
+      report_fatal_error("Multiple uses in FP PHI fixup not implemented!");
+      return;
+    }
+    MachineInstr *Use = I->getParent();
+
+    Use->substituteRegister(DstReg, IndReg, 0, *TRI);
+    BuildMI(*FrepBlock, phi, phi->getDebugLoc(), TII->get(TargetOpcode::COPY), 
+      Use->getOperand(0).getReg()).addReg(SrcReg, 0);
+    phi->removeFromParent();
+  }
+
 }
 
 bool SNITCHFrepLoops::isMarkedForInference(MachineLoop *L) {

@@ -1,4 +1,7 @@
 ; RUN: llc -mcpu=snitch -snitch-frep-inference < %s | FileCheck %s
+; RUN: llc -O1 -mcpu=snitch -snitch-frep-inference < %s | FileCheck %s
+; RUN: llc -O2 -mcpu=snitch -snitch-frep-inference < %s | FileCheck %s
+; RUN: llc -O3 -mcpu=snitch -snitch-frep-inference < %s | FileCheck %s
 ; Check that we generate hardware loop instructions.
 
 target datalayout = "e-m:e-p:32:32-i64:64-n32-S128"

@@ -1167,6 +1167,9 @@ let TargetPrefix = "riscv" in {
                   [llvm_i32_ty, llvm_i32_ty],
                   [IntrHasSideEffects, ImmArg<ArgIndex<0>>]>,
         RISCVSSRIntrinsic;
+  def int_riscv_ssr_barrier
+      : GCCBuiltin<"__builtin_ssr_barrier">,
+        Intrinsic<[], [llvm_i32_ty], [IntrHasSideEffects, ImmArg<ArgIndex<0>>]>, RISCVSSRIntrinsic;
 
 } // TargetPrefix = "riscv"
 

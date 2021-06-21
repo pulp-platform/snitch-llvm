@@ -129,6 +129,12 @@ class SPseudoEnDis:
   let usesCustomInserter = 0;
 }
 
+class SPseudoBarrier: 
+      Pseudo<(outs), (ins uimm5:$ssr),[]> {
+  let hasSideEffects = 1;
+  let usesCustomInserter = 0;
+}
+
 let Predicates = [HasExtXssr] in {
   def PseudoSSRSetup_1D_R : SPseudoSetup1D;
   def PseudoSSRSetup_1D_W : SPseudoSetup1D;
@@ -144,6 +150,7 @@ let Predicates = [HasExtXssr] in {
   def PseudoSSRRead    : SPseudoRW;
   def PseudoSSRWrite   : SPseudoRW;
   def PseudoSSRSetupRepetition   : SPseudoSetupRepetition;
+  def PseudoSSRBarrier : SPseudoBarrier;
 
   // pattern matching on intrinsic and resulting in pseudo instruction
   def : Pat<(int_riscv_ssr_setup_1d_r timm:$ssr, GPR:$rep, GPR:$bound, GPR:$stride, GPR:$ptr),
@@ -175,5 +182,8 @@ let Predicates = [HasExtXssr] in {
 
   def : Pat<(int_riscv_ssr_enable), (PseudoSSREnable)>;
   def : Pat<(int_riscv_ssr_disable), (PseudoSSRDisable)>;
+
+  def : Pat<(int_riscv_ssr_barrier timm:$ssr),
+          (PseudoSSRBarrier timm:$ssr)>;
 
 } // Predicates = [HasExtXssr]

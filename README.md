@@ -202,6 +202,8 @@ void __builtin_sdma_wait_for_idle(void);
 
 Inference can be enabled globally with `--snitch-frep-inference` or locally with `#pragma frep infer`.
 
+__For `frep` inference to work, `clang` must be invoked with at least `-O1`__
+
 ```c
 #pragma frep infer
 for(unsigned i = 0; i < 128; ++i)

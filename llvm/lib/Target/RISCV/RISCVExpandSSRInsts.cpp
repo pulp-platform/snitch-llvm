@@ -113,6 +113,15 @@ bool RISCVExpandSSR::runOnMachineFunction(MachineFunction &MF) {
     for (auto &MBB : MF)
       mergePushPop(MBB);
 
+  /// "Forcefully" add all SSR registers as live-in to all MBB in this MF
+  if(Modified) {
+    for (auto &MBB : MF) {
+      for(unsigned ssr_no = 0; ssr_no < NUM_SSR; ++ssr_no)
+        MBB.addLiveIn(getSSRFtReg(ssr_no));
+      MBB.sortUniqueLiveIns();
+    }
+  }
+
   return Modified;
 }
 

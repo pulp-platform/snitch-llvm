@@ -149,6 +149,14 @@ void __builtin_ssr_setup_bound_stride_3d(uint32_t DM, uint32_t b, uint32_t s);
  * @param s relative stride
  */
 void __builtin_ssr_setup_bound_stride_4d(uint32_t DM, uint32_t b, uint32_t s);
+
+/**
+ * @brief Wait for the done bit to be set on data mover `DM`
+ * @details Creates a polling loop and might not exit if SSR not configured correctly
+ * 
+ * @param DM data mover ID
+ */
+void __builtin_ssr_barrier(uint32_t DM);
 ```
 
 ### SDMA

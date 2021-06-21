@@ -39,6 +39,7 @@ SSR_BUILTIN(push, "vUid", "n", "xssr")
 SSR_BUILTIN(pop, "dUi", "n", "xssr")
 SSR_BUILTIN(enable, "v", "n", "xssr")
 SSR_BUILTIN(disable, "v", "n", "xssr")
+SSR_BUILTIN(barrier, "vUi", "n", "xssr")
 
 // SDMA builtins
 

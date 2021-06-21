@@ -80,6 +80,9 @@ private:
                          MachineBasicBlock::iterator MBBI);
   bool expandSSR_SetupRep(MachineBasicBlock &MBB,
                          MachineBasicBlock::iterator MBBI);
+  bool expandSSR_Barrier(MachineBasicBlock &MBB,
+                         MachineBasicBlock::iterator MBBI,
+                         MachineBasicBlock::iterator &NextMBBI);
 
   RISCVExpandSSR::RegisterMergingPreferences gatherRegisterMergingPreferences();
 };
@@ -165,6 +168,8 @@ bool RISCVExpandSSR::expandMI(MachineBasicBlock &MBB,
     return expandSSR_EnDis(MBB, MBBI);
   case RISCV::PseudoSSRSetupRepetition:
     return expandSSR_SetupRep(MBB, MBBI);
+  case RISCV::PseudoSSRBarrier:
+    return expandSSR_Barrier(MBB, MBBI, NextMBBI);
   }
 
   // Prevent excessive live-ins, they pose a problem with multiple SSR regions
@@ -344,6 +349,49 @@ bool RISCVExpandSSR::expandSSR_EnDis(MachineBasicBlock &MBB,
   }
 
   MBBI->eraseFromParent(); // The pseudo instruction is gone now.
+  return true;
+}
+
+bool RISCVExpandSSR::expandSSR_Barrier(MachineBasicBlock &MBB,
+                                      MachineBasicBlock::iterator MBBI,
+                                      MachineBasicBlock::iterator &NextMBBI) {
+  DebugLoc DL = MBBI->getDebugLoc();
+  MachineInstr &MI = *MBBI;
+  MachineFunction *MF = MBB.getParent();
+  MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
+
+  unsigned streamer = (unsigned)MBBI->getOperand(0).getImm();
+  
+  LLVM_DEBUG(dbgs() << "-- Expanding SSR barrier on DM" << streamer << "\n");
+
+  auto LoopMBB = MF->CreateMachineBasicBlock(MBB.getBasicBlock());
+  auto DoneMBB = MF->CreateMachineBasicBlock(MBB.getBasicBlock());
+
+  // Insert new MBBs.
+  MF->insert(++MBB.getIterator(), LoopMBB);
+  MF->insert(++LoopMBB->getIterator(), DoneMBB);
+
+  // Set up successors and transfer remaining instructions to DoneMBB.
+  LoopMBB->addSuccessor(LoopMBB);
+  LoopMBB->addSuccessor(DoneMBB);
+  DoneMBB->splice(DoneMBB->end(), &MBB, MI, MBB.end());
+  DoneMBB->transferSuccessorsAndUpdatePHIs(&MBB);
+  MBB.addSuccessor(LoopMBB);
+  
+  // build loop: %0 = scfgri 0 | DM; srli %0, %0, 31; beq %0, zero, loop
+  Register R = MRI.createVirtualRegister(&RISCV::GPRRegClass);
+  BuildMI(LoopMBB, DL, TII->get(RISCV::SCFGRI), R).addImm(streamer);
+  Register Rs = MRI.createVirtualRegister(&RISCV::GPRRegClass);
+  BuildMI(LoopMBB, DL, TII->get(RISCV::SRLI), Rs).addReg(R, RegState::Kill).addImm(31);
+  BuildMI(LoopMBB, DL, TII->get(RISCV::BEQ)).addReg(Rs, RegState::Kill).addReg(RISCV::X0).addMBB(LoopMBB);
+
+  NextMBBI = MBB.end();
+  MI.eraseFromParent();
+
+  LivePhysRegs LiveRegs;
+  computeAndAddLiveIns(LiveRegs, *LoopMBB);
+  computeAndAddLiveIns(LiveRegs, *DoneMBB);
+
   return true;
 }
 

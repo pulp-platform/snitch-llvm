@@ -17,8 +17,8 @@ def MempoolModel : SchedMachineModel {
   let IssueWidth = 1;
   let LoadLatency = 8;
   let MispredictPenalty = 1;
-  let PostRAScheduler = 1;
-  let CompleteModel = 0;
+  let CompleteModel = 1;
+  let UnsupportedFeatures = [HasStdExtV, HasStdExtZvamo, HasStdExtZvlsseg];
 }
 
 //===----------------------------------------------------------------------===//
@@ -28,10 +28,8 @@ def MempoolModel : SchedMachineModel {
 // Snitch is in-order.
 
 let BufferSize = 0 in {
-def MempoolUnitALU        : ProcResource<1>; // Int ALU
-def MempoolUnitIMulDiv    : ProcResource<1>; // Int Multiply
-def MempoolUnitLSU        : ProcResource<1>; // Load/Store
-def MempoolUnitRegFile    : ProcResource<1>; // RegisterFile
+def MempoolUnitSnitch  : ProcResource<1>; // Snitch's decoder and ALU
+def MempoolUnitIMulDiv : ProcResource<1>; // Mul/Div accelerator
 }
 
 //===----------------------------------------------------------------------===//
@@ -40,33 +38,39 @@ def MempoolUnitRegFile    : ProcResource<1>; // RegisterFile
 
 let SchedModel = MempoolModel in {
 
-def : WriteRes<WriteJmp, [MempoolUnitALU]>;
-def : WriteRes<WriteJal, [MempoolUnitALU]>;
-def : WriteRes<WriteJalr, [MempoolUnitALU]>;
-def : WriteRes<WriteJmpReg, [MempoolUnitALU]>;
+def : WriteRes<WriteJmp, [MempoolUnitSnitch]>;
+def : WriteRes<WriteJal, [MempoolUnitSnitch]>;
+def : WriteRes<WriteJalr, [MempoolUnitSnitch]>;
+def : WriteRes<WriteJmpReg, [MempoolUnitSnitch]>;
 
-def : WriteRes<WriteIALU, [MempoolUnitALU]>;
-def : WriteRes<WriteShift, [MempoolUnitALU]>;
+def : WriteRes<WriteIALU, [MempoolUnitSnitch]>;
+def : WriteRes<WriteShift, [MempoolUnitSnitch]>;
 
 // Multiplies on Snitch are pipelines and take four cycles
-def : WriteRes<WriteIMul, [MempoolUnitIMulDiv]> { let Latency = 4; }
-def : WriteRes<WriteIDiv, [MempoolUnitIMulDiv]> { let Latency = 5; }
-
-// Memory
-def : WriteRes<WriteSTB, [MempoolUnitLSU]>;
-def : WriteRes<WriteSTH, [MempoolUnitLSU]>;
-def : WriteRes<WriteSTW, [MempoolUnitLSU]>;
-
-let Latency = 8 in {
-def : WriteRes<WriteLDB, [MempoolUnitLSU]>;
-def : WriteRes<WriteLDH, [MempoolUnitLSU]>;
-def : WriteRes<WriteLDW, [MempoolUnitLSU]>;
-def : WriteRes<WriteAtomicW, [MempoolUnitLSU]>;
-def : WriteRes<WriteAtomicLDW, [MempoolUnitLSU]>;
+def : WriteRes<WriteIMul, [MempoolUnitSnitch, MempoolUnitIMulDiv]> {
+let Latency = 3;
+let ResourceCycles = [1, 1];
+}
+def : WriteRes<WriteIDiv, [MempoolUnitSnitch, MempoolUnitIMulDiv]> {
+let Latency = 16;
+let ResourceCycles = [1, 14];
 }
 
-def : WriteRes<WriteCSR, [MempoolUnitALU]>;
-def : WriteRes<WriteAtomicSTW, [MempoolUnitLSU]>;
+// Memory
+def : WriteRes<WriteSTB, [MempoolUnitSnitch]>;
+def : WriteRes<WriteSTH, [MempoolUnitSnitch]>;
+def : WriteRes<WriteSTW, [MempoolUnitSnitch]>;
+
+let Latency = 8 in {
+def : WriteRes<WriteLDB, [MempoolUnitSnitch]>;
+def : WriteRes<WriteLDH, [MempoolUnitSnitch]>;
+def : WriteRes<WriteLDW, [MempoolUnitSnitch]>;
+def : WriteRes<WriteAtomicW, [MempoolUnitSnitch]>;
+def : WriteRes<WriteAtomicLDW, [MempoolUnitSnitch]>;
+}
+
+def : WriteRes<WriteCSR, [MempoolUnitSnitch]>;
+def : WriteRes<WriteAtomicSTW, [MempoolUnitSnitch]>;
 
 def : WriteRes<WriteNop, []>;
 

@@ -372,3 +372,10 @@ def : SysReg<"vxrm", 0x00A>;
 def : SysReg<"vl", 0xC20>;
 def : SysReg<"vtype", 0xC21>;
 def : SysReg<"vlenb", 0xC22>;
+
+//===--------------------------
+// Machine Custom CSR
+//===--------------------------
+let FeaturesRequired = [{ {RISCV::FeatureExtXmempool} }] in {
+def TRACE : SysReg<"trace", 0x7D0>;
+}

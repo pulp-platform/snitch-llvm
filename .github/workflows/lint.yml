@@ -22,11 +22,11 @@ jobs:
       id: src_files
       run: |
         src_files=$(for f in ${{ steps.files.outputs.added_modified }}; do echo $f | grep '.*/.*\.\(c\|cpp\|h\)$' ||:; done)
-        echo "::set-output name=src_files::$src_files\n"
+        echo "::set-output name=src_files::$src_files"
         echo "Changed: ${{ steps.files.outputs.added_modified }}"
         echo "Cxx changed: $src_files"
     - uses: DoozyX/clang-format-lint-action@v0.12
       with:
         clangFormatVersion: 12
         extensions: 'h,cpp,c'
-        source: ${{ steps.files.outputs.added_modified }}
+        source: ${{ steps.src_files.outputs.src_files }}

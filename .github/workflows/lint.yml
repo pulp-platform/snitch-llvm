@@ -25,7 +25,7 @@ jobs:
         echo "::set-output name=src_files::$src_files"
         echo "Changed: ${{ steps.files.outputs.added_modified }}"
         echo "Cxx changed: $src_files"
-    - if: ${{ steps.src_files.outputs.src_files }} != ""
+    - if: ${{ steps.src_files.outputs.src_files }}
       uses: DoozyX/clang-format-lint-action@v0.12
       with:
         clangFormatVersion: 12

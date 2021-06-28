@@ -26,6 +26,7 @@ jobs:
       BUILDPREFIX: ${GITHUB_WORKSPACE}/build
       INSTALLPREFIX: ${GITHUB_WORKSPACE}/install
       LLVMSRC: ${GITHUB_WORKSPACE}/llvm-project
+      NEWLIBSRC: ${GITHUB_WORKSPACE}/newlib
     steps:
       ########################################
       ## Checkout
@@ -38,7 +39,11 @@ jobs:
       # NEWLIB
       - name: Checkout newlib
         run: |
-          git clone --depth 1 -b newlib-3.3.0 https://sourceware.org/git/newlib-cygwin.git newlib
+          git clone --depth 1 -b newlib-3.3.0 https://sourceware.org/git/newlib-cygwin.git ${NEWLIBSRC}
+          echo BUILDPREFIX=${BUILDPREFIX}
+          echo INSTALLPREFIX=${INSTALLPREFIX}
+          echo LLVMSRC=${LLVMSRC}
+          echo NEWLIBSRC=${NEWLIBSRC}
       ########################################
       ## Prep OS
       ########################################

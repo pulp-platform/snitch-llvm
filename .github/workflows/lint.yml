@@ -1,0 +1,22 @@
+# Copyright 2020 ETH Zurich and University of Bologna.
+# Licensed under the Apache License, Version 2.0, see LICENSE for details.
+# SPDX-License-Identifier: Apache-2.0
+
+# Run all lint checks
+name: lint
+on: [push, pull_request]
+
+jobs:
+  ######################
+  # Clang-Format Check #
+  ######################
+  # Check C/C++ files for correct formatting.
+  clangfmt:
+    name: C/C++ Sources
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: DoozyX/clang-format-lint-action@v0.12
+      with:
+        clangFormatVersion: 12
+        extensions: 'h,cpp,c'

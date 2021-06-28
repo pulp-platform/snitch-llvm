@@ -153,9 +153,9 @@ jobs:
       - name: Test Snitch LLVM
         run: |
           cd ${GITHUB_WORKSPACE}
-          wget -o test-snitch-llvm.sh https://raw.githubusercontent.com/pulp-platform/snitch-toolchain-cd/main/stages/test-snitch-llvm.sh
+          wget -O test-snitch-llvm.sh https://raw.githubusercontent.com/pulp-platform/snitch-toolchain-cd/main/stages/test-snitch-llvm.sh
           chmod +x test-snitch-llvm.sh
-          LLVM_BIN=${BUILDPREFIX}/llvm/bin \
+          LLVM_BIN=${GITHUB_WORKSPACE}/${BUILDPREFIX}/llvm/bin \
           LLVM_SRC=${GITHUB_WORKSPACE}/${LLVMSRC} \
           ./test-snitch-llvm.sh
       - name: Upload Snitch Test Info

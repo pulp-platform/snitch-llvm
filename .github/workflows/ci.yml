@@ -5,16 +5,27 @@
 # Build toolchain and run regression checks
 name: CI
 on:
+  push:
+    paths:
+      - '.github/workflows/ci.yml'
+      - 'llvm/**'
+      - 'clang/**'
+      - 'lld/**'
   pull_request:
+    paths:
+      - '.github/workflows/ci.yml'
+      - 'llvm/**'
+      - 'clang/**'
+      - 'lld/**'
 
 jobs:
   build_llvm:
     name: Build and Test LLVM
     runs-on: ubuntu-20.04
     env:
-      BUILDPREFIX: build
-      INSTALLPREFIX: install
-      LLVMSRC: llvm-project
+      BUILDPREFIX: ${GITHUB_WORKSPACE}/build
+      INSTALLPREFIX: ${GITHUB_WORKSPACE}/install
+      LLVMSRC: ${GITHUB_WORKSPACE}/llvm-project
     steps:
       ########################################
       ## Checkout

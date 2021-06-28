@@ -30,3 +30,4 @@ jobs:
         clangFormatVersion: 12
         extensions: 'h,cpp,c'
         source: ${{ steps.src_files.outputs.src_files }}
+

@@ -23,10 +23,10 @@ jobs:
     name: Build and Test LLVM
     runs-on: ubuntu-20.04
     env:
-      BUILDPREFIX: ${GITHUB_WORKSPACE}/build
-      INSTALLPREFIX: ${GITHUB_WORKSPACE}/install
-      LLVMSRC: ${GITHUB_WORKSPACE}/llvm-project
-      NEWLIBSRC: ${GITHUB_WORKSPACE}/newlib
+      BUILDPREFIX: build
+      INSTALLPREFIX: install
+      LLVMSRC: llvm-project
+      NEWLIBSRC: newlib
     steps:
       ########################################
       ## Checkout
@@ -44,6 +44,8 @@ jobs:
           echo INSTALLPREFIX=${INSTALLPREFIX}
           echo LLVMSRC=${LLVMSRC}
           echo NEWLIBSRC=${NEWLIBSRC}
+          echo $(pwd)
+          ls -al
       ########################################
       ## Prep OS
       ########################################
@@ -76,7 +78,7 @@ jobs:
             -DLLVM_ENABLE_PROJECTS="clang;lld" \
             -DLLVM_TARGETS_TO_BUILD="RISCV" \
             -DLLVM_DEFAULT_TARGET_TRIPLE="riscv32-unknown-elf" \
-            -G Ninja ${LLVMSRC}/llvm
+            -G Ninja ${GITHUB_WORKSPACE}/${LLVMSRC}/llvm
           ninja
           ninja install
 

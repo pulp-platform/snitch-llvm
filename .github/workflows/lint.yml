@@ -21,7 +21,7 @@ jobs:
     - name: Changed C sources
       id: src_files
       run: |
-        src_files=$(for f in ${{ steps.files.outputs.added_modified }}; do echo $f | grep '.*/.*\.\(c\|cpp\|h\)$' ||:; done)
+        src_files=$(for f in ${{ steps.files.outputs.added_modified }}; do echo $f | grep '.*\.\(c\|cpp\|h\)$' ||:; done)
         echo "::set-output name=src_files::$src_files"
         echo "Changed: ${{ steps.files.outputs.added_modified }}"
         echo "Cxx changed: $src_files"

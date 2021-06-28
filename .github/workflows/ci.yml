@@ -34,7 +34,7 @@ jobs:
       # apt
       - name: Install Packages
         run: |
-          apt-get -y update && apt-get install -y git flex bison build-essential \
+          sudo apt-get -y update && sudo apt-get install -y git flex bison build-essential \
             git python python3 python3-distutils texinfo wget libexpat-dev \
             ninja-build
       # cmake
@@ -44,7 +44,7 @@ jobs:
           wget https://github.com/Kitware/CMake/releases/download/v3.18.4/cmake-3.18.4.tar.gz
           tar xf cmake-3.18.4.tar.gz && cd cmake-3.18.4
           ./bootstrap -- -DCMAKE_USE_OPENSSL=OFF
-          make -j$(nproc) && make install
+          make -j$(nproc) && sudo make install
           cd /tmp && rm -rf cmake
       ########################################
       ## Build

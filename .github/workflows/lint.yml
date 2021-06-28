@@ -32,3 +32,17 @@ jobs:
         extensions: 'h,cpp,c'
         source: ${{ steps.src_files.outputs.src_files }}
 
+  ######################
+  # Commit message     #
+  ######################
+  check-commit-message:
+    name: Check Commit Message
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Check Commit Type
+        uses: gsactions/commit-message-checker@v1
+        with:
+          pattern: '\[[^]]+\] .+$'
+          flags: 'gm'
+          error: 'Your first line has to contain a commit type like "[BUGFIX]".'

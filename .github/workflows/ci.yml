@@ -41,7 +41,7 @@ jobs:
         run: |
           git clone --depth 1 -b newlib-3.3.0 https://sourceware.org/git/newlib-cygwin.git ${NEWLIBSRC}
           echo BUILDPREFIX=${BUILDPREFIX}
-          echo INSTALLPREFIX=${INSTALLPREFIX}
+          echo INSTALLPREFIX=${GITHUB_WORKSPACE}/${INSTALLPREFIX}
           echo LLVMSRC=${LLVMSRC}
           echo NEWLIBSRC=${NEWLIBSRC}
           echo $(pwd)
@@ -74,7 +74,7 @@ jobs:
           cd ${BUILDPREFIX}/llvm
           cmake \
             -DCMAKE_BUILD_TYPE="Release" \
-            -DCMAKE_INSTALL_PREFIX=${INSTALLPREFIX} \
+            -DCMAKE_INSTALL_PREFIX=${GITHUB_WORKSPACE}/${INSTALLPREFIX} \
             -DLLVM_ENABLE_PROJECTS="clang;lld" \
             -DLLVM_TARGETS_TO_BUILD="RISCV" \
             -DLLVM_DEFAULT_TARGET_TRIPLE="riscv32-unknown-elf" \
@@ -88,12 +88,12 @@ jobs:
           cd ${BUILDPREFIX}/newlib32
           ${GITHUB_WORKSPACE}/${NEWLIBSRC}/configure         \
           --target=riscv32-unknown-elf                       \
-          --prefix=${INSTALLPREFIX}                          \
-          AR_FOR_TARGET=${INSTALLPREFIX}/bin/llvm-ar         \
-          AS_FOR_TARGET=${INSTALLPREFIX}/bin/llvm-as         \
-          LD_FOR_TARGET=${INSTALLPREFIX}/bin/llvm-ld         \
-          RANLIB_FOR_TARGET=${INSTALLPREFIX}/bin/llvm-ranlib \
-          CC_FOR_TARGET="${INSTALLPREFIX}/bin/clang -march=rv32imafd"
+          --prefix=${GITHUB_WORKSPACE}/${INSTALLPREFIX}                          \
+          AR_FOR_TARGET=${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin/llvm-ar         \
+          AS_FOR_TARGET=${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin/llvm-as         \
+          LD_FOR_TARGET=${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin/llvm-ld         \
+          RANLIB_FOR_TARGET=${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin/llvm-ranlib \
+          CC_FOR_TARGET="${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin/clang -march=rv32imafd"
           make -j$(nproc)
           make install
       # compiler-rt
@@ -103,12 +103,12 @@ jobs:
           cd ${BUILDPREFIX}/compiler-rt32
           cmake -G"Unix Makefiles"                                                 \
           -DCMAKE_SYSTEM_NAME=Linux                                                \
-          -DCMAKE_INSTALL_PREFIX=$(${INSTALLPREFIX}/bin/clang -print-resource-dir) \
-          -DCMAKE_C_COMPILER=${INSTALLPREFIX}/bin/clang                            \
-          -DCMAKE_CXX_COMPILER=${INSTALLPREFIX}/bin/clang                          \
-          -DCMAKE_AR=${INSTALLPREFIX}/bin/llvm-ar                                  \
-          -DCMAKE_NM=${INSTALLPREFIX}/bin/llvm-nm                                  \
-          -DCMAKE_RANLIB=${INSTALLPREFIX}/bin/llvm-ranlib                          \
+          -DCMAKE_INSTALL_PREFIX=$(${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin/clang -print-resource-dir) \
+          -DCMAKE_C_COMPILER=${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin/clang                            \
+          -DCMAKE_CXX_COMPILER=${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin/clang                          \
+          -DCMAKE_AR=${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin/llvm-ar                                  \
+          -DCMAKE_NM=${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin/llvm-nm                                  \
+          -DCMAKE_RANLIB=${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin/llvm-ranlib                          \
           -DCMAKE_C_COMPILER_TARGET="riscv32-unknown-elf"                          \
           -DCMAKE_CXX_COMPILER_TARGET="riscv32-unknown-elf"                        \
           -DCMAKE_ASM_COMPILER_TARGET="riscv32-unknown-elf"                        \
@@ -132,7 +132,7 @@ jobs:
       # symlinks
       - name: Symlinks
         run: |
-          cd ${INSTALLPREFIX}/bin
+          cd ${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin
           for TRIPLE in riscv32-unknown-elf; do
             for TOOL in clang clang++ cc c++; do
               ln -sv clang ${TRIPLE}-${TOOL}

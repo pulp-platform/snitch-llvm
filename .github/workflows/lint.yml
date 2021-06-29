@@ -6,16 +6,24 @@
 name: lint
 on: [push, pull_request]
 
+env:
+  GITHUB_RUN_ID: ${{ github.run_id }}
+  GITHUB_REPOSITORY: ${{ github.repository }}
+
 jobs:
   ######################
   # Clang-Format Check #
   ######################
   # Check C/C++ files for correct formatting.
+  # Not all sources in upstream LLVM are linted correctly.
+  # Hence we only run it inplace and print a diff
   clangfmt:
     name: C/C++ Sources
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+      with:
+        fetch-depth: 2
     - id: files
       uses: jitterbit/get-changed-files@v1
     - name: Changed C sources
@@ -31,6 +39,22 @@ jobs:
         clangFormatVersion: 12
         extensions: 'h,cpp,c'
         source: ${{ steps.src_files.outputs.src_files }}
+        inplace: true
+    - if: ${{ steps.src_files.outputs.src_files }}
+      run: |
+        git diff | tee lint.diff
+    - if: ${{ steps.src_files.outputs.src_files }}
+      uses: actions/upload-artifact@v2
+      with:
+        name: C Lint diff
+        path: lint.diff
+    - if: ${{ steps.src_files.outputs.src_files && github.event_name == 'pull_request' }}
+      uses: marocchino/sticky-pull-request-comment@v2
+      with:
+        append: true
+        GITHUB_TOKEN: ${{ secrets.PAT }}
+        message: |
+          **[BOT]** C-source lint diff for ${{ github.sha }} available [here](https://github.com/${{ env.GITHUB_REPOSITORY }}/actions/runs/${{ env.GITHUB_RUN_ID }})
 
   ######################
   # Commit message     #

@@ -41,6 +41,7 @@ struct TargetMachineBuilder {
   Optional<Reloc::Model> RelocModel;
   CodeGenOpt::Level CGOptLevel = CodeGenOpt::Aggressive;
 
+  std::unique_ptr<TargetMachine> create(Module &TheModule) const;
   std::unique_ptr<TargetMachine> create() const;
 };
 

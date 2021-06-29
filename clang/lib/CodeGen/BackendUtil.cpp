@@ -922,8 +922,10 @@ void EmitAssemblyHelper::EmitAssembly(BackendAction Action,
 
   if (UsesCodeGen && !TM)
     return;
-  if (TM)
+  if (TM) {
+    TM->initializeOptionsWithModuleMetadata(*TheModule);
     TheModule->setDataLayout(TM->createDataLayout());
+  }
 
   legacy::PassManager PerModulePasses;
   PerModulePasses.add(

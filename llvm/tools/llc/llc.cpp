@@ -565,6 +565,10 @@ static int compileModule(char **argv, LLVMContext &Context) {
   }
 
   assert(M && "Should have exited if we didn't have a module!");
+
+  // Initialise target default options from module metadata
+  Target->initializeOptionsWithModuleMetadata(*M);
+
   if (codegen::getFloatABIForCalls() != FloatABI::Default)
     Options.FloatABIType = codegen::getFloatABIForCalls();
 

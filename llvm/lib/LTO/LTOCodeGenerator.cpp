@@ -379,7 +379,8 @@ bool LTOCodeGenerator::determineTarget() {
 
   TargetMach = createTargetMachine();
   assert(TargetMach && "Unable to create target machine");
-
+  TargetMach->initializeOptionsWithModuleMetadata(*MergedModule);
+  
   return true;
 }
 

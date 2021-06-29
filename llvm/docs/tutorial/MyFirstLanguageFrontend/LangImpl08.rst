@@ -129,8 +129,9 @@ layout.
 
 .. code-block:: c++
 
-  TheModule->setDataLayout(TargetMachine->createDataLayout());
   TheModule->setTargetTriple(TargetTriple);   
+  TargetMachine->initializeOptionsWithModuleMetadata(*TheModule);
+  TheModule->setDataLayout(TargetMachine->createDataLayout());
   
 Emit Object Code
 ================

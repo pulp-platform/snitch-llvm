@@ -110,6 +110,9 @@ protected: // Can only create subclasses.
   unsigned RequireStructuredCFG : 1;
   unsigned O0WantsFastISel : 1;
 
+private:
+  mutable unsigned OptionsCanBeInitalizedFromModule : 1;
+
 public:
   const TargetOptions DefaultOptions;
   mutable TargetOptions Options;
@@ -163,7 +166,10 @@ public:
   }
 
   /// Create a DataLayout.
-  const DataLayout createDataLayout() const { return DL; }
+  const DataLayout createDataLayout() const {
+    OptionsCanBeInitalizedFromModule = false;
+    return DL;
+  }
 
   /// Test if a DataLayout if compatible with the CodeGen for this target.
   ///
@@ -192,6 +198,17 @@ public:
   unsigned getAllocaPointerSize() const {
     return DL.getPointerSize(DL.getAllocaAddrSpace());
   }
+
+  /// Target hook for updating this TargetMachine's Options based
+  // on the provided module metadata.
+  virtual void
+  setTargetOptionsWithModuleMetadata(const Module &M LLVM_ATTRIBUTE_UNUSED) {}
+
+  /// This method ensures that `setTargetOptionsWithModuleMetadata` is
+  // called, and ensures that is called before `createDataLayout` so that
+  // Options set from module metadata are modified as early as possible
+  // before they are used.
+  void initializeOptionsWithModuleMetadata(const Module &M);
 
   /// Reset the target options based on the function's attributes.
   // FIXME: Remove TargetOptions that affect per-function code generation

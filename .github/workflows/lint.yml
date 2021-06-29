@@ -37,7 +37,7 @@ jobs:
         source: ${{ steps.src_files.outputs.src_files }}
         inplace: true
     - run: |
-      git diff | tee lint.diff
+        git diff | tee lint.diff
     - uses: actions/upload-artifact@v2
       with:
         name: C Lint diff

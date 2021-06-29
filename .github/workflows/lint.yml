@@ -36,13 +36,21 @@ jobs:
         extensions: 'h,cpp,c'
         source: ${{ steps.src_files.outputs.src_files }}
         inplace: true
-    - run: |
+    - if: ${{ steps.src_files.outputs.src_files }}
+      run: |
         git diff | tee lint.diff
-    - uses: actions/upload-artifact@v2
+    - if: ${{ steps.src_files.outputs.src_files }}
+      uses: actions/upload-artifact@v2
       with:
         name: C Lint diff
         path: lint.diff
-
+    - if: ${{ steps.src_files.outputs.src_files && github.event_name == 'pull_request' }}
+      uses: marocchino/sticky-pull-request-comment@v2
+      with:
+        append: true
+        GITHUB_TOKEN: ${{ secrets.PAT }}
+        message: |
+          Run $GITHUB_RUN_ID: C source lint diff available [here](https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)  ${{ github.sha }} to <https://pr-${{ github.event.number }}.example.com>
 
   ######################
   # Commit message     #

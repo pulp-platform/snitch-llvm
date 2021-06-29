@@ -11,11 +11,15 @@ jobs:
   # Clang-Format Check #
   ######################
   # Check C/C++ files for correct formatting.
+  # Not all sources in upstream LLVM are linted correctly.
+  # Hence we only run it inplace and print a diff
   clangfmt:
     name: C/C++ Sources
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+      with:
+        fetch-depth: 2
     - id: files
       uses: jitterbit/get-changed-files@v1
     - name: Changed C sources
@@ -31,6 +35,14 @@ jobs:
         clangFormatVersion: 12
         extensions: 'h,cpp,c'
         source: ${{ steps.src_files.outputs.src_files }}
+        inplace: true
+    - run: |
+      git diff | tee lint.diff
+    - uses: actions/upload-artifact@v2
+      with:
+        name: C Lint diff
+        path: lint.diff
+
 
   ######################
   # Commit message     #

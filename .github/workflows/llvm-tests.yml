@@ -1,16 +1,17 @@
 name: LLVM Tests
 
 on:
-  push:
-    branches:
-      - 'release/**'
-    paths:
-      - 'llvm/**'
-      - '.github/workflows/llvm-tests.yml'
-  pull_request:
-    paths:
-      - 'llvm/**'
-      - '.github/workflows/llvm-tests.yml'
+  workflow_dispatch:
+  # push:
+  #   branches:
+  #     - 'release/**'
+  #   paths:
+  #     - 'llvm/**'
+  #     - '.github/workflows/llvm-tests.yml'
+  # pull_request:
+  #   paths:
+  #     - 'llvm/**'
+  #     - '.github/workflows/llvm-tests.yml'
 
 jobs:
   build_llvm:

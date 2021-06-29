@@ -50,7 +50,7 @@ jobs:
         append: true
         GITHUB_TOKEN: ${{ secrets.PAT }}
         message: |
-          Run $GITHUB_RUN_ID: C source lint diff available [here](https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)  ${{ github.sha }} to <https://pr-${{ github.event.number }}.example.com>
+          Run ${{env.GITHUB_RUN_ID}}: C source lint diff available [here](https://github.com/${{env.GITHUB_REPOSITORY}}/actions/runs/${{env.GITHUB_RUN_ID}})
 
   ######################
   # Commit message     #

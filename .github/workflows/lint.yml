@@ -1,0 +1,48 @@
+# Copyright 2020 ETH Zurich and University of Bologna.
+# Licensed under the Apache License, Version 2.0, see LICENSE for details.
+# SPDX-License-Identifier: Apache-2.0
+
+# Run all lint checks
+name: lint
+on: [push, pull_request]
+
+jobs:
+  ######################
+  # Clang-Format Check #
+  ######################
+  # Check C/C++ files for correct formatting.
+  clangfmt:
+    name: C/C++ Sources
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - id: files
+      uses: jitterbit/get-changed-files@v1
+    - name: Changed C sources
+      id: src_files
+      run: |
+        src_files=$(for f in ${{ steps.files.outputs.added_modified }}; do echo $f | grep '.*\.\(c\|cpp\|h\)$' ||:; done)
+        echo "::set-output name=src_files::$src_files"
+        echo "Changed: ${{ steps.files.outputs.added_modified }}"
+        echo "Cxx changed: $src_files"
+    - if: ${{ steps.src_files.outputs.src_files }}
+      uses: DoozyX/clang-format-lint-action@v0.12
+      with:
+        clangFormatVersion: 12
+        extensions: 'h,cpp,c'
+        source: ${{ steps.src_files.outputs.src_files }}
+
+  ######################
+  # Commit message     #
+  ######################
+  check-commit-message:
+    name: Check Commit Message
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Check Commit Type
+        uses: gsactions/commit-message-checker@v1
+        with:
+          pattern: '\[[^\]]+\] .+$'
+          flags: 'gm'
+          error: 'Your first line has to contain a commit type like "[BUGFIX]".'

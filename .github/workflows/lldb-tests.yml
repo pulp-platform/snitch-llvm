@@ -1,29 +1,21 @@
 name: lldb Tests
 
 on:
-  push:
-    branches:
-      - 'release/**'
-    paths:
-      - 'lldb/**'
-      - '.github/workflows/lldb-tests.yml'
-      - '.github/workflows/llvm-project-tests.yml'
-      - '!clang/**'
-      - '!llvm/**'
-  pull_request:
-    paths:
-      - 'lldb/**'
-      - '.github/workflows/lldb-tests.yml'
-      - '.github/workflows/llvm-project-tests.yml'
-      - '!clang/**'
-      - '!llvm/**'
-
-concurrency:
-  # Skip intermediate builds: always.
-  # Cancel intermediate builds: only if it is a pull request build.
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
-
+  workflow_dispatch:
+  # push:
+  #   branches:
+  #     - 'release/**'
+  #   paths:
+  #     - 'clang/**'
+  #     - 'llvm/**'
+  #     - 'lldb/**'
+  #     - '.github/workflows/lldb-tests.yml'
+  # pull_request:
+  #   paths:
+  #     - 'clang/**'
+  #     - 'llvm/**'
+  #     - 'lldb/**'
+  #     - '.github/workflows/lldb-tests.yml'
 
 jobs:
   build_lldb:

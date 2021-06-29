@@ -159,6 +159,12 @@ void RISCV::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   std::string Linker = getToolChain().GetLinkerPath();
 
+  if (D.isUsingLTO()) {
+    assert(!Inputs.empty() && "Must have at least one input.");
+    addLTOOptions(ToolChain, Args, CmdArgs, Output, Inputs[0],
+                  D.getLTOMode() == LTOK_Thin);
+  }
+
   bool WantCRTs =
       !Args.hasArg(options::OPT_nostdlib, options::OPT_nostartfiles);
 

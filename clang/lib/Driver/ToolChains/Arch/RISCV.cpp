@@ -74,7 +74,7 @@ static bool isSupportedExtension(StringRef Ext) {
   if (isExperimentalExtension(Ext))
     return true;
 
-  if (Ext == "xssr" || Ext == "xdma" || Ext == "xfrep")
+  if (Ext == "xssr" || Ext == "xdma" || Ext == "xfrep" || Ext == "xmempool")
     return true;
 
   // LLVM does not support "sx", "s" nor "x" extensions.

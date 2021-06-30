@@ -25,9 +25,9 @@
 using namespace llvm;
 
 static void codegen(Module *M, llvm::raw_pwrite_stream &OS,
-                    function_ref<std::unique_ptr<TargetMachine>()> TMFactory,
+                    function_ref<std::unique_ptr<TargetMachine>(Module &)> TMFactory,
                     CodeGenFileType FileType) {
-  std::unique_ptr<TargetMachine> TM = TMFactory();
+  std::unique_ptr<TargetMachine> TM = TMFactory(*M);
   assert(TM && "Failed to create target machine!");
 
   legacy::PassManager CodeGenPasses;
@@ -39,7 +39,7 @@ static void codegen(Module *M, llvm::raw_pwrite_stream &OS,
 std::unique_ptr<Module> llvm::splitCodeGen(
     std::unique_ptr<Module> M, ArrayRef<llvm::raw_pwrite_stream *> OSs,
     ArrayRef<llvm::raw_pwrite_stream *> BCOSs,
-    const std::function<std::unique_ptr<TargetMachine>()> &TMFactory,
+    const std::function<std::unique_ptr<TargetMachine>(Module &)> &TMFactory,
     CodeGenFileType FileType, bool PreserveLocals) {
   assert(BCOSs.empty() || BCOSs.size() == OSs.size());
 

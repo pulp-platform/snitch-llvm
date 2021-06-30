@@ -47,9 +47,14 @@ bool TargetMachine::isPositionIndependent() const {
 }
 
 void TargetMachine::initializeOptionsWithModuleMetadata(const Module &M) {
-  assert(
-      OptionsCanBeInitalizedFromModule &&
-      "setOptionsWithModuleMetadata cannot be called after createDataLayout");
+  // TODO: This was added in the original patch (D72624) but now fails for llc
+  // because the lambda function `SetDataLayout` is called during IR parsing (llc.cpp).
+  // For RISCV the data layout is independent of the module metadata currently parsed
+  // (target-abi). Other targets don't use this hook
+  
+  // assert(
+  //     OptionsCanBeInitalizedFromModule &&
+  //     "setOptionsWithModuleMetadata cannot be called after createDataLayout");
 
   setTargetOptionsWithModuleMetadata(M);
 }

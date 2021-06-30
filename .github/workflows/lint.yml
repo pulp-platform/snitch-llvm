@@ -26,6 +26,7 @@ jobs:
         fetch-depth: 2
     - id: files
       uses: jitterbit/get-changed-files@v1
+      continue-on-error: true
     - name: Changed C sources
       id: src_files
       run: |

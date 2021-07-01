@@ -1,30 +1,44 @@
 ; REQUIRES: ld_emu_elf32lriscv
 
 ; RUN: rm -f %t*.o
+
 ;; Test mixed-mode LTO (mix of regular and thin LTO objects)
-; RUN: opt %s -o %t.o
+; RUN: opt -module-summary %s -o %t1.o
+; RUN: opt %p/Inputs/mixed_lto.ll -o %t2.o
+; RUN: %gold -m elf32lriscv -plugin %llvmshlibdir/LLVMgold%shlibext \
+; RUN:     --plugin-opt=thinlto \
+; RUN:     -shared --plugin-opt=-import-instr-limit=0 \
+; RUN:     -o %t3.o %t2.o %t1.o
+; RUN: llvm-nm %t3.o | FileCheck %s
+
+;; ChecK target ABI info
+; RUN: llvm-readelf -h %t3.o | FileCheck %s --check-prefix=CHECK-ABI
+
+;; Test regular LTO
+; RUN: opt %s -o %t1.o
+; RUN: opt %p/Inputs/mixed_lto.ll -o %t2.o
+; RUN: %gold -m elf32lriscv -plugin %llvmshlibdir/LLVMgold%shlibext \
+; RUN:     --plugin-opt=thinlto \
+; RUN:     -shared --plugin-opt=-import-instr-limit=0 \
+; RUN:     -o %t3.o %t2.o %t1.o
+; RUN: llvm-nm %t3.o | FileCheck %s
+
+;; ChecK target ABI info
+; RUN: llvm-readelf -h %t3.o | FileCheck %s --check-prefix=CHECK-ABI
+
+;; Test thin LTO
+; RUN: opt -module-summary %s -o %t1.o
 ; RUN: opt -module-summary %p/Inputs/mixed_lto.ll -o %t2.o
-
 ; RUN: %gold -m elf32lriscv -plugin %llvmshlibdir/LLVMgold%shlibext \
 ; RUN:     --plugin-opt=thinlto \
 ; RUN:     -shared --plugin-opt=-import-instr-limit=0 \
-; RUN:     -o %t3.o %t2.o %t.o
+; RUN:     -o %t3.o %t2.o %t1.o
 ; RUN: llvm-nm %t3.o | FileCheck %s
+
 ;; ChecK target ABI info
 ; RUN: llvm-readelf -h %t3.o | FileCheck %s --check-prefix=CHECK-ABI
 
-; RUN: opt %s -module-summary -o %thin0.o
-; RUN: opt %p/Inputs/mixed_lto.ll -module-summary -o %thin1.o
-; RUN: %gold -m elf32lriscv -plugin %llvmshlibdir/LLVMgold%shlibext \
-; RUN:     --plugin-opt=thinlto \
-; RUN:     -shared --plugin-opt=-import-instr-limit=0 \
-; RUN:     -o %thin2.o %thin0.o %thin1.o
-; RUN: llvm-nm %t3.o | FileCheck %s
-;; ChecK target ABI info
-; RUN: llvm-readelf -h %t3.o | FileCheck %s --check-prefix=CHECK-ABI
-; RUN: llvm-readelf -h %thin2.o | FileCheck %s --check-prefix=CHECK-ABI
 
-;; Test ThinLTO
 ; CHECK-DAG: T main
 ; CHECK-DAG: T g
 

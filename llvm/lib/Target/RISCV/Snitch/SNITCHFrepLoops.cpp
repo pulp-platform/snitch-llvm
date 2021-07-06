@@ -1444,9 +1444,15 @@ void SNITCHFrepLoops::removeIfDead(MachineInstr *MI) {
 
 void SNITCHFrepLoops::insertFPUBarrier(MachineLoop *L, MachineBasicBlock *MBB) {
   MachineBasicBlock::iterator InsertPos = MBB->getFirstNonPHI();
-  LLVM_DEBUG(dbgs() << "inserting FPU barrier at "; InsertPos->dump());
   DebugLoc DL;
-  DL = InsertPos->getDebugLoc();
+  if(InsertPos == MBB->end()) {
+    // MBB does not contain any non-PHI instructions, place builder at start of block
+    InsertPos == MBB->begin();
+  }
+  else {
+    DL = InsertPos->getDebugLoc();
+  }
+  LLVM_DEBUG(dbgs() << "inserting FPU barrier in "; MBB->dump());
   MachineFunction *MF = MBB->getParent();
   
   auto DoneMBB = MF->CreateMachineBasicBlock(MBB->getBasicBlock());
@@ -1460,7 +1466,7 @@ void SNITCHFrepLoops::insertFPUBarrier(MachineLoop *L, MachineBasicBlock *MBB) {
   BuildMI(*MBB, InsertPos, DL, TII->get(RISCV::BLT))
     .addReg(ScratchReg, 0).addReg(ScratchReg, RegState::Kill)
     .addMBB(DoneMBB);
-  
+
   // Insert new MBBs.
   MF->insert(++MBB->getIterator(), DoneMBB);
   DoneMBB->splice(DoneMBB->end(), MBB, InsertPos, MBB->end());

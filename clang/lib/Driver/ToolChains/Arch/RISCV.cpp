@@ -72,7 +72,7 @@ isExperimentalExtension(StringRef Ext) {
 static bool isSupportedExtension(StringRef Ext, const llvm::Triple &Triple) {
   // HERO supports xpulpv2
   if(Triple.getVendor() == llvm::Triple::HERO) {
-    if(Ext == "xpulpv2") {
+    if(Ext == "xpulpv") {
       return true;
     }
   }
@@ -135,6 +135,14 @@ static bool getExtensionVersion(const Driver &D, const ArgList &Args,
     return false;
   }
 
+  // Allow XPulp as non-experimental on HERO
+  const llvm::Triple &Triple = llvm::Triple(D.getTargetTriple());
+  if (Triple.getVendor() == llvm::Triple::HERO) {
+    if (Ext == "xpulpv") {
+      return Major == "2"; // Version 2 is supported.
+    }
+  }
+
   // If experimental extension, require use of current version number number
   if (auto ExperimentalExtension = isExperimentalExtension(Ext)) {
     if (!Args.hasArg(options::OPT_menable_experimental_extensions)) {
@@ -191,12 +199,13 @@ static bool getExtensionVersion(const Driver &D, const ArgList &Args,
 // and are separated by a single underscore '_'.
 // Set the hardware features for the extensions that are supported.
 static void getExtensionFeatures(const Driver &D,
-                                 const llvm::Triple& Triple,
                                  const ArgList &Args,
                                  std::vector<StringRef> &Features,
                                  StringRef &MArch, StringRef &Exts) {
   if (Exts.empty())
     return;
+
+  const llvm::Triple &Triple = llvm::Triple(D.getTargetTriple());
 
   // Multi-letter extensions are seperated by a single underscore
   // as described in RISC-V User-Level ISA V2.2.

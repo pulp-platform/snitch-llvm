@@ -188,11 +188,12 @@ def HasStdExtZvamo : Predicate<"Subtarget->hasStdExtZvamo()">,
                               AssemblerPredicate<(all_of FeatureExtZvamo),
                               "'Zvamo'(Vector AMO Operations)">;
 
+// TODO We should remove the "V2" part, since this is handled specially now.
 def FeaturePULPExtV2
-    : SubtargetFeature<"xpulpv2", "HasPULPExtV2",
+    : SubtargetFeature<"xpulpv", "HasPULPExtV2",
                        "true", "'pulpv2' (PULP extensions version 2)">;
 def HasPULPExtV2 : Predicate<"Subtarget->hasPULPExtV2()">,
-                             AssemblerPredicate<"FeaturePULPExtV2">;
+                             AssemblerPredicate<(all_of FeaturePULPExtV2)>;
 
 def Feature64Bit
     : SubtargetFeature<"64bit", "HasRV64", "true", "Implements RV64">;
@@ -280,7 +281,7 @@ include "RISCVInstrInfoXsmallfloat.td"
 // RISC-V processors supported.
 //===----------------------------------------------------------------------===//
 
-def : ProcessorModel<"generic-rv32", RI5CYModel, []>;
+def : ProcessorModel<"generic-rv32", NoSchedModel, []>;
 def : ProcessorModel<"generic-rv64", NoSchedModel, [Feature64Bit]>;
 
 def : ProcessorModel<"mempool-rv32", MempoolModel, [FeatureStdExtM,

@@ -2538,7 +2538,8 @@ void CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
             TT.getArch() == llvm::Triple::x86_64 ||
             TT.getArch() == llvm::Triple::riscv32))
         Diags.Report(diag::err_drv_invalid_omp_target) << A->getValue(i);
-      else if (getArchPtrSize(T) != getArchPtrSize(TT))
+      else if (getArchPtrSize(T) != getArchPtrSize(TT) &&
+               TT.getVendor() != llvm::Triple::HERO)
         Diags.Report(diag::err_drv_incompatible_omp_arch)
             << A->getValue(i) << T.str();
       else

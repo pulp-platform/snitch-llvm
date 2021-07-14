@@ -49,7 +49,7 @@ void HeroHostToolChain::addClangTargetOptions(
     llvm::opt::ArgStringList &CC1Args,
     Action::OffloadKind) const {
   CC1Args.push_back("-nostdsysteminc");
-  CC1Args.push_back("-fuse-init-array");
+  //CC1Args.push_back("-fuse-init-array");
   CC1Args.push_back("-D__host=__attribute((address_space(1)))");
   CC1Args.push_back("-D__device=__attribute((address_space(0)))");
 }
@@ -154,7 +154,9 @@ void HeroHost::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath("crtn.o")));
   }
 
-  AddOpenMPLinkerScript(ToolChain, C, Output, Inputs, Args, CmdArgs, JA);
+  // TODO: Check if enough to comment this out, or if there were additional
+  //       important changes in https://github.com/llvm/llvm-project/commit/a0d83768f10849e5cf230391fac949dc5118c0a6
+  //AddOpenMPLinkerScript(ToolChain, C, Output, Inputs, Args, CmdArgs, JA);
 
   std::string DynamicLinker = std::string("-dynamic-linker /lib/ld-linux-");
   DynamicLinker += ToolChain.getTriple().getArchName();
@@ -167,7 +169,9 @@ void HeroHost::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   CmdArgs.push_back("-o");
   CmdArgs.push_back(Output.getFilename());
-  C.addCommand(llvm::make_unique<Command>(JA, *this, Args.MakeArgString(Linker),
-                                          CmdArgs, Inputs));
+  C.addCommand(std::make_unique<Command>(JA, *this,
+               ResponseFileSupport{ResponseFileSupport::RF_Full,
+                 llvm::sys::WEM_UTF8, "--options-file"},
+               Args.MakeArgString(Linker), CmdArgs, Inputs));
 }
 // RISCV tools end.

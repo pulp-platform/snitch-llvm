@@ -98,7 +98,7 @@ std::string HeroPULPToolChain::computeSysRoot() const {
   return SysRootDir;
 }
 
-HeroPULP::Linker::Linker(const ToolChain &TC) : GnuTool("HeroPULP::Linker", "ld", TC) {
+HeroPULP::Linker::Linker(const ToolChain &TC) : Tool("HeroPULP::Linker", "ld", TC) {
   llvm::Optional<std::string> PulpSdkInstallDir =
         llvm::sys::Process::GetEnv("PULP_SDK_INSTALL");
   if (PulpSdkInstallDir.hasValue()) {
@@ -242,7 +242,9 @@ void HeroPULP::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   CmdArgs.push_back("-o");
   CmdArgs.push_back(Output.getFilename());
 
-  C.addCommand(llvm::make_unique<Command>(JA, *this, Args.MakeArgString(Linker),
-                                          CmdArgs, Inputs));
+  C.addCommand(std::make_unique<Command>(JA, *this,
+               ResponseFileSupport{ResponseFileSupport::RF_Full,
+                 llvm::sys::WEM_UTF8, "--options-file"},
+               Args.MakeArgString(Linker), CmdArgs, Inputs));
 }
 // Hero tools end.

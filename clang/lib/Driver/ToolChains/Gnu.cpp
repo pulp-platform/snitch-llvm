@@ -1959,6 +1959,8 @@ void Generic_GCC::GCCInstallationDetector::init(
   // Loop over the various components which exist and select the best GCC
   // installation available. GCC installs are ranked by version number.
   Version = GCCVersion::Parse("0.0.0");
+  bool GCCDirExists = false;
+  bool GCCCrossDirExists = false;
   for (const std::string &Prefix : Prefixes) {
     auto &VFS = D.getVFS();
     if (!VFS.exists(Prefix))
@@ -1968,8 +1970,8 @@ void Generic_GCC::GCCInstallationDetector::init(
       if (!VFS.exists(LibDir))
         continue;
       // Maybe filter out <libdir>/gcc and <libdir>/gcc-cross.
-      bool GCCDirExists = VFS.exists(LibDir + "/gcc");
-      bool GCCCrossDirExists = VFS.exists(LibDir + "/gcc-cross");
+      GCCDirExists = VFS.exists(LibDir + "/gcc");
+      GCCCrossDirExists = VFS.exists(LibDir + "/gcc-cross");
       // Try to match the exact target triple first.
       ScanLibDirForGCCTriple(TargetTriple, Args, LibDir, TargetTriple.str(),
                              false, GCCDirExists, GCCCrossDirExists);
@@ -1991,8 +1993,8 @@ void Generic_GCC::GCCInstallationDetector::init(
         if (!D.getVFS().exists(LibDir))
           continue;
         for (StringRef Candidate : CandidateBiarchTripleAliases)
-          ScanLibDirForGCCTriple(TargetTriple, Args, LibDir, Candidate,
-                                 /* NeedsBiarchSuffix= */ true);
+          ScanLibDirForGCCTriple(TargetTriple, Args, LibDir, Candidate, true,
+                                 GCCDirExists, GCCCrossDirExists);
       }
     }
   }

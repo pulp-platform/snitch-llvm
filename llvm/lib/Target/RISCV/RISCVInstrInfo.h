@@ -136,8 +136,8 @@ public:
   
   // Check if the instruction is a scheduling boundary.
   bool isSchedulingBoundary(const MachineInstr &MI,
-                                              const MachineBasicBlock *MBB,
-                                              const MachineFunction &MF) const;
+                            const MachineBasicBlock *MBB,
+                            const MachineFunction &MF) const override;
 protected:
   const RISCVSubtarget &STI;
 };

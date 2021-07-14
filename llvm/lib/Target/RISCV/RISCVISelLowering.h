@@ -468,7 +468,7 @@ public:
 
   bool getPostIndexedAddressParts(SDNode *N, SDNode *Op, SDValue &Base,
                                   SDValue &Offset, ISD::MemIndexedMode &AM,
-                                  SelectionDAG &DAG) const;
+                                  SelectionDAG &DAG) const override;
 
   // Lower incoming arguments, copy physregs into vregs
   SDValue LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,

@@ -9,7 +9,7 @@
 
 #include "HeroPULP.h"
 #include "CommonArgs.h"
-#include "InputInfo.h"
+#include "clang/Driver/InputInfo.h"
 #include "clang/Driver/Compilation.h"
 #include "clang/Driver/DriverDiagnostic.h"
 #include "clang/Driver/Options.h"
@@ -98,7 +98,7 @@ std::string HeroPULPToolChain::computeSysRoot() const {
   return SysRootDir;
 }
 
-HeroPULP::Linker::Linker(const ToolChain &TC) : GnuTool("HeroPULP::Linker", "ld", TC) {
+HeroPULP::Linker::Linker(const ToolChain &TC) : Tool("HeroPULP::Linker", "ld", TC) {
   llvm::Optional<std::string> PulpSdkInstallDir =
         llvm::sys::Process::GetEnv("PULP_SDK_INSTALL");
   if (PulpSdkInstallDir.hasValue()) {
@@ -133,7 +133,7 @@ static void Add64BitLinkerMode(Compilation &C, const InputInfo &Output,
 
   // Open script file and write the contents.
   std::error_code EC;
-  llvm::raw_fd_ostream Lksf(LKS, EC, llvm::sys::fs::F_None);
+  llvm::raw_fd_ostream Lksf(LKS, EC, llvm::sys::fs::OF_None);
 
   if (EC) {
     C.getDriver().Diag(clang::diag::err_unable_to_make_temp) << EC.message();
@@ -242,7 +242,9 @@ void HeroPULP::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   CmdArgs.push_back("-o");
   CmdArgs.push_back(Output.getFilename());
 
-  C.addCommand(llvm::make_unique<Command>(JA, *this, Args.MakeArgString(Linker),
-                                          CmdArgs, Inputs));
+  C.addCommand(std::make_unique<Command>(JA, *this,
+               ResponseFileSupport{ResponseFileSupport::RF_Full,
+                 llvm::sys::WEM_UTF8, "--options-file"},
+               Args.MakeArgString(Linker), CmdArgs, Inputs));
 }
 // Hero tools end.

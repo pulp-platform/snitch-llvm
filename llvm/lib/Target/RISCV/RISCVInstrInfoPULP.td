@@ -66,6 +66,7 @@ def uimm12pcrel : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<12>(Imm);}]> 
   let DecoderMethod = "decodeUImmOperand<12>";
 }
 
+let Predicates = [IsRV32, HasPULPExtV2] in {
 def LOOP0setup : Instruction {
 
     bits<32> Inst;
@@ -391,6 +392,7 @@ def LOOP1count : Instruction {
     let AsmString = "lp.count\tx1, $uimmS";
 
 }
+}
 
 
 //===----------------------------------------------------------------------===//
@@ -398,10 +400,11 @@ def LOOP1count : Instruction {
 //===----------------------------------------------------------------------===//
 
 // Opcodes
-def OPC_PULP_LPI : RISCVOpcode<0b0001011>;
-def OPC_PULP_SPI : RISCVOpcode<0b0101011>;
+def OPC_PULP_LPI : RISCVOpcode<"PULP_LPI", 0b0001011>;
+def OPC_PULP_SPI : RISCVOpcode<"PULP_SPI", 0b0101011>;
 
 // Instruction class: Stores with Immediate increment
+let Predicates = [IsRV32, HasPULPExtV2] in {
 let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
 class PULP_Store_rri_postinc<bits<3> funct3, string opcodestr>
     : RVInstS<funct3, OPC_PULP_SPI, (outs GPR:$rd),
@@ -428,6 +431,7 @@ class PULP_Load_rr_postinc<bits<7> funct7, bits<3> funct3, string opcodestr>
     : RVInstR<funct7, funct3, OPC_PULP_LPI, (outs GPR:$rd, GPR:$rs1_wb),
               (ins GPR:$rs1, GPR:$rs2),
               opcodestr, "$rd, ${rs2}(${rs1}!)">;
+}
 
 // Instructions: Stores with Immediate increment
 def PULP_SB_IMM_PI : PULP_Store_rri_postinc<0b000, "p.sb">;
@@ -509,3 +513,4 @@ def : Pat<(int_riscv_pulp_fl1 GPR:$rs),
           (PULP_FL1 GPR:$rs)>;
 def : Pat<(int_riscv_pulp_bitinsert GPR:$rd, GPR:$rs1, uimm5:$ls2, uimm5:$ls3),
           (PULP_INSERT GPR:$rd, GPR:$rs1, uimm5:$ls2, uimm5:$ls3)>;
+

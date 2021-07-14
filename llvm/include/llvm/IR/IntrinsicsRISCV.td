@@ -1571,7 +1571,7 @@ def int_riscv_pulp_bitinsert
     : GCCBuiltin<"__builtin_bitinsert">, // NOTE: GCC has no pulp here
       Intrinsic<[llvm_i32_ty],
                 [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-                [IntrNoMem, ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
+                [IntrNoMem]>;
 
 } // TargetPrefix = "riscv"
 

@@ -43,14 +43,14 @@ protected:
   Tool *buildLinker() const override;
 
 private:
-  std::string computeSysRoot() const;
+  std::string computeSysRoot() const override;
 };
 
 } // end namespace toolchains
 
 namespace tools {
 namespace HeroPULP {
-class LLVM_LIBRARY_VISIBILITY Linker : public GnuTool {
+class LLVM_LIBRARY_VISIBILITY Linker : public Tool {
 public:
   Linker(const ToolChain &TC);
   bool hasIntegratedCPP() const override { return false; }

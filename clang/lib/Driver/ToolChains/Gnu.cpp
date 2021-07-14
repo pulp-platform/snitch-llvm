@@ -1968,18 +1968,18 @@ void Generic_GCC::GCCInstallationDetector::init(
         ScanLibDirForGCCTriple(TargetTriple, Args, LibDir, Candidate, false,
                                GCCDirExists, GCCCrossDirExists);
     }
-  }
 
-  // Only search biarch when no match is found in standard candidates
-  if (!IsValid) {
-    for (const std::string &Prefix : Prefixes) {
+    // Only search biarch when no match is found in standard candidates
+    if(!IsValid) {
       for (StringRef Suffix : CandidateBiarchLibDirs) {
         const std::string LibDir = Prefix + Suffix.str();
-        if (!D.getVFS().exists(LibDir))
+        if (!VFS.exists(LibDir))
           continue;
+        bool GCCDirExists = VFS.exists(LibDir + "/gcc");
+        bool GCCCrossDirExists = VFS.exists(LibDir + "/gcc-cross");
         for (StringRef Candidate : CandidateBiarchTripleAliases)
-          ScanLibDirForGCCTriple(TargetTriple, Args, LibDir, Candidate,
-                                 /* NeedsBiarchSuffix= */ true);
+          ScanLibDirForGCCTriple(TargetTriple, Args, LibDir, Candidate, true,
+                                GCCDirExists, GCCCrossDirExists);
       }
     }
 
@@ -3032,11 +3032,12 @@ Generic_GCC::TranslateArgs(const llvm::opt::DerivedArgList &Args, StringRef,
   // is required to load the device image dynamically at run time.
   if (DeviceOffloadKind == Action::OFK_OpenMP) {
     DerivedArgList *DAL = new DerivedArgList(Args.getBaseArgs());
+    const OptTable &Opts = getDriver().getOpts();
 
     // Request the shared library. Given that these options are decided
     // implicitly, they do not refer to any base argument.
-//    DAL->AddFlagArg(/*BaseArg=*/nullptr, Opts.getOption(options::OPT_shared));
-//    DAL->AddFlagArg(/*BaseArg=*/nullptr, Opts.getOption(options::OPT_fPIC));
+    DAL->AddFlagArg(/*BaseArg=*/nullptr, Opts.getOption(options::OPT_shared));
+    DAL->AddFlagArg(/*BaseArg=*/nullptr, Opts.getOption(options::OPT_fPIC));
 
     // Filter all the arguments we don't care passing to the offloading
     // toolchain as they can mess up with the creation of a shared library.

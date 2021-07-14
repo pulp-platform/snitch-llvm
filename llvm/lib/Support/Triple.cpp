@@ -175,6 +175,7 @@ StringRef Triple::getVendorTypeName(VendorType Kind) {
   case Apple: return "apple";
   case CSR: return "csr";
   case Freescale: return "fsl";
+  case HERO: return "hero";
   case IBM: return "ibm";
   case ImaginationTechnologies: return "img";
   case Mesa: return "mesa";

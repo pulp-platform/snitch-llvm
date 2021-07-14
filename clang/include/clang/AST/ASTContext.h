@@ -2096,6 +2096,7 @@ public:
   QualType getMSGuidType() const {
     assert(MSGuidTagDecl && "asked for GUID type but MS extensions disabled");
     return getTagDeclType(MSGuidTagDecl);
+  }
 
   /// Retrieve the C type declaration corresponding to the predefined
   /// \c __builtin_hero_dev_va_list type.

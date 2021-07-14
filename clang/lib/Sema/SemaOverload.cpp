@@ -4560,7 +4560,7 @@ Sema::CompareReferenceRelationship(SourceLocation Loc,
     Conv |= ReferenceConversions::Function;
     // No need to check qualifiers; function types don't have them.
     return Ref_Compatible;
-  else {
+  } else {
     // FIXME: We should set up a new stdarg.h for HERO, where va_start and
     // va_end are annotated with address spaces. However, due to the format used
     // by LLVM for these headers, it does not seem possible to provide address

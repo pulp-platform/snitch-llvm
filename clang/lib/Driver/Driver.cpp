@@ -5657,6 +5657,7 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
           TC = std::make_unique<toolchains::HeroPULPToolChain>(*this, Target, Args);
           break;
         }
+      LLVM_FALLTHROUGH;
       case llvm::Triple::riscv64:
         if (toolchains::RISCVToolChain::hasGCCToolchain(*this, Args))
           TC =

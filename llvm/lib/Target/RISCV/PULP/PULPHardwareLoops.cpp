@@ -36,6 +36,7 @@
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DebugLoc.h"
+#include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -1296,10 +1297,10 @@ bool PULPHardwareLoops::loopCountMayWrapOrUnderFlow(
   if (checkForImmediate(*InitVal, Imm))
     return (EndVal->getImm() == Imm);
 
-  unsigned Reg = InitVal->getReg();
+  Register Reg = InitVal->getReg();
 
   // We don't know the value of a physical register.
-  if (!TargetRegisterInfo::isVirtualRegister(Reg))
+  if (!Reg.isVirtual())
     return true;
 
   MachineInstr *Def = MRI->getVRegDef(Reg);
@@ -1322,8 +1323,8 @@ bool PULPHardwareLoops::loopCountMayWrapOrUnderFlow(
   for (MachineRegisterInfo::use_instr_nodbg_iterator I = MRI->use_instr_nodbg_begin(Reg),
          E = MRI->use_instr_nodbg_end(); I != E; ++I) {
     MachineInstr *MI = &*I;
-    unsigned CmpReg1 = 0, CmpReg2 = 0;
-    int CmpMask = 0, CmpValue = 0;
+    Register CmpReg1 = 0, CmpReg2 = 0;
+    int64_t CmpMask = 0, CmpValue = 0;
 
     if (!TII->analyzeCompare(*MI, CmpReg1, CmpReg2, CmpMask, CmpValue))
       continue;
@@ -1378,8 +1379,8 @@ bool PULPHardwareLoops::checkForImmediate(const MachineOperand &MO,
   // processed to handle potential subregisters in MO.
   int64_t TV;
 
-  unsigned R = MO.getReg();
-  if (!TargetRegisterInfo::isVirtualRegister(R)) {
+  Register R = MO.getReg();
+  if (!R.isVirtual()) {
     if (R == RISCV::X0) {
       // This is the zero register!
       Val = 0;

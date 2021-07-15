@@ -131,17 +131,15 @@ void HeroHost::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   AddLinkerInputs(ToolChain, Inputs, Args, CmdArgs, JA);
 
   addOpenMPRuntime(CmdArgs, ToolChain, Args,
-                   JA.isHostOffloading(Action::OFK_OpenMP), true);
+                   /* ForceStaticHostRuntime = */ false,
+                   /* OffloadHost = */ JA.isHostOffloading(Action::OFK_OpenMP),
+                   /* GompNeedsRT = */ false);
 
   if (!Args.hasArg(options::OPT_nostdlib) &&
       !Args.hasArg(options::OPT_nodefaultlibs)) {
     if (ToolChain.ShouldLinkCXXStdlib(Args))
       ToolChain.AddCXXStdlibLibArgs(Args, CmdArgs);
     CmdArgs.push_back("--start-group");
-
-    addOpenMPRuntime(CmdArgs, ToolChain, Args,
-                     JA.isHostOffloading(Action::OFK_OpenMP), true);
-
     CmdArgs.push_back("-lpthread");
     CmdArgs.push_back("-lc");
     CmdArgs.push_back("--end-group");

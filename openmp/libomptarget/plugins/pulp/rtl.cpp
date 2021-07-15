@@ -45,10 +45,11 @@ static int DebugLevel = 10;
 #endif // OMPTARGET_DEBUG
 
 #include "omptarget.h"
+#include "Debug.h"
 #include "omptargetplugin.h"
 #include "plugin-pulp-hero.cpp"
 
-#include "../common/elf_common.c"
+#include "../common/elf_common/elf_common.h"
 #include <gelf.h>
 
 // size of the argument buffer in words

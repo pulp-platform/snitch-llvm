@@ -103,5 +103,5 @@ bool RISCVTTIImpl::isLoweredToCall(const Function *F) {
 }
 
 bool RISCVTTIImpl::shouldFavorPostInc() const {
-  return ST->hasNonStdExtPulp();
+  return ST->hasPULPExtV2();
 }

@@ -1710,7 +1710,7 @@ RISCVAsmParser::parseMemOpBaseReg(OperandVector &Operands) {
     return MatchOperand_ParseFail;
   }
 
-  if (getSTI().getFeatureBits()[RISCV::FeaturePulp]) {
+  if (getSTI().getFeatureBits()[RISCV::FeaturePULPExtV2]) {
     if (getLexer().is(AsmToken::Exclaim)){
       getParser().Lex(); // Eat '!'
       Operands.push_back(RISCVOperand::createToken("!", getLoc(), isRV64()));
@@ -1810,7 +1810,7 @@ bool RISCVAsmParser::parseOperand(OperandVector &Operands, StringRef Mnemonic) {
 
   // Attempt to parse token as a register.
   if (parseRegister(Operands, true) == MatchOperand_Success) {
-    if (getSTI().getFeatureBits()[RISCV::FeaturePulp]) {
+    if (getSTI().getFeatureBits()[RISCV::FeaturePULPExtV2]) {
       if (getLexer().is(AsmToken::LParen))
         return parseMemOpBaseReg(Operands) != MatchOperand_Success;
     }

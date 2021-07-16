@@ -89,7 +89,7 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
     addRegisterClass(MVT::f32, &RISCV::FPR32RegClass);
   if (Subtarget.hasStdExtD())
     addRegisterClass(MVT::f64, &RISCV::FPR64RegClass);
-  if (Subtarget.hasNonStdExtPulp()) {
+  if (Subtarget.hasPULPExtV2()) {
     addRegisterClass(MVT::v2i16, &RISCV::PulpV2RegClass);
     addRegisterClass(MVT::v4i8, &RISCV::PulpV4RegClass);
   }
@@ -355,7 +355,7 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::DEBUGTRAP, MVT::Other, Legal);
   setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
 
-  if (Subtarget.hasNonStdExtPulp()) {
+  if (Subtarget.hasPULPExtV2()) {
     for (auto VT : {XLenVT.SimpleTy, MVT::v2i16, MVT::v4i8}){
       setOperationAction(ISD::ABS, VT, Legal);
       setOperationAction(ISD::SMIN, VT, Legal);
@@ -4810,7 +4810,7 @@ bool RISCVTargetLowering::allowsMisalignedMemoryAccesses(
        EVT VT, unsigned AddrSpace = 0, unsigned Align = 1,
        MachineMemOperand::Flags Flags = MachineMemOperand::MONone,
        bool *Fast = nullptr) const {
-  if(Subtarget.hasNonStdExtPulp()) {
+  if(Subtarget.hasPULPExtV2()) {
     if (Fast) {
       *Fast = false;
     }

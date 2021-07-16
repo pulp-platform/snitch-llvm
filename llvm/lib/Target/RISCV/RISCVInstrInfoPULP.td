@@ -678,19 +678,6 @@ def P_SUBUNR :  Pulp_ALU_rr_wb<0b1100000, 0b011, RISCVOpcode<0b1011011>, "p.subu
 def P_SUBRNR :  Pulp_ALU_rr_wb<0b0100000, 0b111, RISCVOpcode<0b1011011>, "p.subrnr">;
 def P_SUBURNR : Pulp_ALU_rr_wb<0b1100000, 0b111, RISCVOpcode<0b1011011>, "p.suburnr">;
 
-
-def simm5 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isInt<5>(Imm);}]> {
-  let ParserMatchClass = SImmAsmOperand<5>;
-  let EncoderMethod = "getImmOpValue";
-  let DecoderMethod = "decodeSImmOperand<5>";
-  let MCOperandPredicate = [{
-    int64_t Imm;
-    if (MCOp.evaluateAsConstantImm(Imm))
-      return isInt<5>(Imm);
-    return MCOp.isBareSymbolRef();
-  }];
-}
-
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0,
     isBranch = 1, isTerminator = 1, Predicates = [HasNonStdExtPulp] in
 class Pulp_Immediate_Branch<bits<3> funct3, string opcodestr>
@@ -975,6 +962,19 @@ def uimm13_lsb0 : Operand<OtherVT>,
     int64_t Imm;
     if (MCOp.evaluateAsConstantImm(Imm))
       return isShiftedInt<12, 1>(Imm);
+    return MCOp.isBareSymbolRef();
+  }];
+}
+
+def uimm6_lsb0 : Operand<OtherVT>,
+                 ImmLeaf<XLenVT, [{return isShiftedUInt<5, 1>(Imm);}]>  {
+  let ParserMatchClass = UImmAsmOperand<6, "Lsb0">;
+  let EncoderMethod = "getImmOpValueAsr1";
+  let DecoderMethod = "decodeUImmOperand<13>";
+  let MCOperandPredicate = [{
+    int64_t Imm;
+    if (MCOp.evaluateAsConstantImm(Imm))
+      return isShiftedInt<5, 1>(Imm);
     return MCOp.isBareSymbolRef();
   }];
 }

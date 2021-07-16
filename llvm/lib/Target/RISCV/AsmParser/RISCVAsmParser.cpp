@@ -513,16 +513,6 @@ public:
     return IsConstantImm && isUInt<1>(Imm) && VK == RISCVMCExpr::VK_RISCV_None;
   }
 
-  bool isSImm5() const {
-    if (!isImm())
-      return false;
-    RISCVMCExpr::VariantKind VK = RISCVMCExpr::VK_RISCV_None;
-    int64_t Imm;
-    bool IsConstantImm = evaluateConstantImm(getImm(), Imm, VK);
-    return IsConstantImm && isInt<5>(Imm) &&
-	    VK == RISCVMCExpr::VK_RISCV_None;
-  }
-
   bool isUImm5() const {
     int64_t Imm;
     RISCVMCExpr::VariantKind VK = RISCVMCExpr::VK_RISCV_None;
@@ -558,6 +548,20 @@ public:
       return false;
     bool IsConstantImm = evaluateConstantImm(getImm(), Imm, VK);
     return IsConstantImm && isUInt<6>(Imm) && VK == RISCVMCExpr::VK_RISCV_None;
+  }
+
+  bool isUImm6Lsb0() const {
+    int64_t Imm;
+    RISCVMCExpr::VariantKind VK = RISCVMCExpr::VK_RISCV_None;
+    if (!isImm())
+      return false;
+    bool IsConstantImm = evaluateConstantImm(getImm(), Imm, VK);
+    bool IsValid;
+    if (!IsConstantImm)
+      IsValid = RISCVAsmParser::classifySymbolRef(getImm(), VK);
+    else
+      IsValid = isShiftedUInt<5, 1>(Imm);
+    return IsValid && VK == RISCVMCExpr::VK_RISCV_None;
   }
 
   bool isSImm6NonZero() const {
@@ -695,15 +699,6 @@ public:
                        VK == RISCVMCExpr::VK_RISCV_TPREL_LO);
   }
 
-  bool isUImm12() const {
-    int64_t Imm;
-    RISCVMCExpr::VariantKind VK = RISCVMCExpr::VK_RISCV_None;
-    if (!isImm())
-      return false;
-    bool IsConstantImm = evaluateConstantImm(getImm(), Imm, VK);
-    return IsConstantImm && isUInt<12>(Imm) && VK == RISCVMCExpr::VK_RISCV_None;
-  }
-
   bool isSImm12Lsb0() const { return isBareSimmNLsb0<12>(); }
 
   bool isSImm13Lsb0() const { return isBareSimmNLsb0<13>(); }
@@ -787,15 +782,6 @@ public:
     bool IsConstantImm = evaluateConstantImm(getImm(), Imm, VK);
     return IsConstantImm && isInt<5>(Imm - 1) &&
            VK == RISCVMCExpr::VK_RISCV_None;
-  }
-
-  bool isUImm6() const {
-    int64_t Imm;
-    RISCVMCExpr::VariantKind VK = RISCVMCExpr::VK_RISCV_None;
-    if (!isImm())
-      return false;
-    bool IsConstantImm = evaluateConstantImm(getImm(), Imm, VK);
-    return IsConstantImm && isUInt<6>(Imm) && VK == RISCVMCExpr::VK_RISCV_None;
   }
 
   /// getStartLoc - Gets location of the first token of this operand

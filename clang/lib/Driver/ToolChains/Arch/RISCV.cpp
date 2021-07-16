@@ -292,7 +292,7 @@ static void getExtensionFeatures(const Driver &D,
   // TODO: Hardware features to be handled in Support/TargetParser.cpp.
   // TODO: Use version number when setting target features.
   for (auto Ext : AllExts) {
-    if (!isSupportedExtension(Ext, Triple)) {
+    if (!isSupportedExtension(Ext)) {
       StringRef Desc = getExtensionTypeDesc(getExtensionType(Ext));
       std::string Error = "unsupported ";
       Error += Desc;

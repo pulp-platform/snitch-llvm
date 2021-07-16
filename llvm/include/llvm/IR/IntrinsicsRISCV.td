@@ -1272,11 +1272,6 @@ def int_riscv_pulp_event_unit_read
       Intrinsic<[llvm_i32_ty],
                 [llvm_ptr_ty, llvm_i32_ty],
                 []>;
-def int_riscv_pulp_fl1
-    : GCCBuiltin<"__builtin_pulp_fl1">,
-      Intrinsic<[llvm_i32_ty],
-                [llvm_i32_ty],
-                [IntrNoMem]>;
 
 def int_riscv_pulp_bitinsert
     : GCCBuiltin<"__builtin_bitinsert">, // NOTE: GCC has no pulp here

@@ -11087,6 +11087,10 @@ void Sema::CheckMain(FunctionDecl* FD, const DeclSpec& DS) {
   // Treat protoless main() as nullary.
   if (isa<FunctionNoProtoType>(FT)) return;
 
+  // Do not check main() parameters on Snitch.
+  // FIXME: Check the platform triple instead once Snitch defines its own.
+  if (Context.getTargetInfo().getTriple().isRISCV()) return;
+
   const FunctionProtoType* FTP = cast<const FunctionProtoType>(FT);
   unsigned nparams = FTP->getNumParams();
   assert(FD->getNumParams() == nparams);

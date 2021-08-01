@@ -3,38 +3,24 @@
 # RUN: echo "SECTIONS { \
 # RUN:   . = SIZEOF_HEADERS; \
 # RUN:   .text : { *(.text) } \
-# RUN:   foo : { *(foo) } \
+# RUN:   foo : { __tbss_start = .; *(foo) __tbss_end = .; } \
 # RUN:   bar : { *(bar) } \
 # RUN: }" > %t.script
 # RUN: ld.lld -T %t.script %t.o -o %t
-# RUN: llvm-readobj -S %t | FileCheck %s
+# RUN: llvm-readelf -S -s %t | FileCheck %s
 
-# test that a tbss section doesn't use address space.
+## Test that a tbss section doesn't affect the start address of the next section.
 
-# CHECK:        Name: foo
-# CHECK-NEXT:   Type: SHT_NOBITS
-# CHECK-NEXT:   Flags [
-# CHECK-NEXT:     SHF_ALLOC
-# CHECK-NEXT:     SHF_TLS
-# CHECK-NEXT:     SHF_WRITE
-# CHECK-NEXT:   ]
-# CHECK-NEXT:   Address: 0x[[ADDR:.*]]
-# CHECK-NEXT:   Offset: 0x[[ADDR]]
-# CHECK-NEXT:   Size: 4
-# CHECK-NEXT:   Link: 0
-# CHECK-NEXT:   Info: 0
-# CHECK-NEXT:   AddressAlignment: 1
-# CHECK-NEXT:   EntrySize: 0
-# CHECK-NEXT: }
-# CHECK-NEXT: Section {
-# CHECK-NEXT:   Index:
-# CHECK-NEXT:   Name: bar
-# CHECK-NEXT:   Type: SHT_PROGBITS
-# CHECK-NEXT:   Flags [
-# CHECK-NEXT:     SHF_ALLOC
-# CHECK-NEXT:     SHF_WRITE
-# CHECK-NEXT:   ]
-# CHECK-NEXT:   Address: 0x[[ADDR]]
+# CHECK: Name  Type     Address              Off                Size   ES Flg
+# CHECK: foo   NOBITS   [[#%x,ADDR:]]        [[#%x,OFF:]]       000004 00 WAT
+# CHECK: bar   PROGBITS {{0+}}[[#%x,ADDR]]   {{0+}}[[#%x,OFF]]  000004 00  WA
+
+## Test that . in a tbss section represents the current location, even if the
+## address will be reset.
+
+# CHECK: Value                {{.*}} Name
+# CHECK: {{0+}}[[#%x,ADDR]]   {{.*}} __tbss_start
+# CHECK: {{0+}}[[#%x,ADDR+4]] {{.*}} __tbss_end
 
         .section foo,"awT",@nobits
         .long   0

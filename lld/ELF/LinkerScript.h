@@ -247,7 +247,6 @@ class LinkerScript final {
   // not be used outside of the scope of a call to the above functions.
   struct AddressState {
     AddressState();
-    uint64_t threadBssOffset = 0;
     OutputSection *outSec = nullptr;
     MemoryRegion *memRegion = nullptr;
     MemoryRegion *lmaRegion = nullptr;

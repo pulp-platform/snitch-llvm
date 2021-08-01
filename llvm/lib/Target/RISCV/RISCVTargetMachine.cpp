@@ -212,8 +212,8 @@ void RISCVPassConfig::addMachineSSAOptimization() {
 }
 
 void RISCVPassConfig::addPreRegAlloc() {
-  addPass(createRISCVExpandSSRPass());
   addPass(createRISCVExpandSDMAPass());
+  addPass(createRISCVExpandSSRPass());
   addPass(createSNITCHFrepLoopsPass());
   if (TM->getOptLevel() != CodeGenOpt::None)
     addPass(createRISCVMergeBaseOffsetOptPass());

@@ -196,8 +196,8 @@ void RISCVPassConfig::addPreEmitPass2() {
 }
 
 void RISCVPassConfig::addPreRegAlloc() {
-  addPass(createRISCVExpandSSRPass());
   addPass(createRISCVExpandSDMAPass());
+  addPass(createRISCVExpandSSRPass());
   addPass(createSNITCHFrepLoopsPass());
   if (TM->getOptLevel() != CodeGenOpt::None) {
     addPass(createRISCVMergeBaseOffsetOptPass());

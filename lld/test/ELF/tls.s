@@ -31,6 +31,10 @@ _start:
   movl %fs:c@tpoff, %eax
   movl %fs:d@tpoff, %eax
 
+/// There are more than two SHF_TLS SHT_NOBITS sections (user error).
+/// The first SHF_TLS SHT_NOBITS collides with the following SHF_TLS
+/// in addresses, so the output is not meaningful.
+/// The GNU ld output is similar.
   .global a
 	.section	.tbss,"awT",@nobits
 a:
@@ -112,7 +116,7 @@ d:
 
 // 0x2021F4 = TBSS_ADDR + 4
 
-// CHECK-NEXT:     Address: 0x2021F4
+// CHECK-NEXT:     Address: 0x2021F0
 // CHECK-NEXT:     Offset:
 // CHECK-NEXT:     Size: 4
 // CHECK-NEXT:     Link:
@@ -138,7 +142,7 @@ d:
 // CHECK-NEXT:     VirtualAddress: [[TDATA_ADDR]]
 // CHECK-NEXT:     PhysicalAddress: [[TDATA_ADDR]]
 // CHECK-NEXT:     FileSize: 8
-// CHECK-NEXT:     MemSize: 16
+// CHECK-NEXT:     MemSize: 12
 // CHECK-NEXT:     Flags [
 // CHECK-NEXT:       PF_R
 // CHECK-NEXT:     ]
@@ -165,7 +169,7 @@ d:
 // CHECK-NEXT:   }
 // CHECK-NEXT:   Symbol {
 // CHECK-NEXT:     Name: c
-// CHECK-NEXT:     Value: 0xC
+// CHECK-NEXT:     Value: 0x8
 // CHECK-NEXT:     Size:
 // CHECK-NEXT:     Binding: Global
 // CHECK-NEXT:     Type: TLS
@@ -185,7 +189,7 @@ d:
 // DIS:      Disassembly of section .text:
 // DIS-EMPTY:
 // DIS-NEXT: <_start>:
-// DIS-NEXT:   movl    %fs:-8, %eax
-// DIS-NEXT:   movl    %fs:-16, %eax
 // DIS-NEXT:   movl    %fs:-4, %eax
 // DIS-NEXT:   movl    %fs:-12, %eax
+// DIS-NEXT:   movl    %fs:-4, %eax
+// DIS-NEXT:   movl    %fs:-8, %eax

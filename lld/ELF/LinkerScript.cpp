@@ -820,17 +820,8 @@ void LinkerScript::diagnoseOrphanHandling() const {
 }
 
 uint64_t LinkerScript::advance(uint64_t size, unsigned alignment) {
-  bool isTbss =
-      (ctx->outSec->flags & SHF_TLS) && ctx->outSec->type == SHT_NOBITS;
-  uint64_t start = isTbss ? dot + ctx->threadBssOffset : dot;
-  start = alignTo(start, alignment);
-  uint64_t end = start + size;
-
-  if (isTbss)
-    ctx->threadBssOffset = end - dot;
-  else
-    dot = end;
-  return end;
+  dot = alignTo(dot, alignment) + size;
+  return dot;
 }
 
 void LinkerScript::output(InputSection *s) {
@@ -979,7 +970,11 @@ void LinkerScript::assignOffsets(OutputSection *sec) {
 
   // Non-SHF_ALLOC sections do not affect the addresses of other OutputSections
   // as they are not part of the process image.
-  if (!(sec->flags & SHF_ALLOC))
+  //
+  // NOBITS TLS sections reset the location as well. Having another TLS section
+  // below sec is unsupported and regarded as user error.
+  if (!(sec->flags & SHF_ALLOC) ||
+      ((sec->flags & SHF_TLS) && sec->type == SHT_NOBITS))
     dot = savedDot;
 }
 

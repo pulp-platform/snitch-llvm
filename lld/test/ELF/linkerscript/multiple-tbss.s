@@ -1,4 +1,7 @@
 # REQUIRES: x86
+## Having another TLS section below a SHF_TLS SHT_NOBITS is unsupported.
+## This test just demonstrates the behavior.
+
 # RUN: llvm-mc -filetype=obj -triple=x86_64-pc-linux %s -o %t.o
 # RUN: echo "SECTIONS { }" > %t.script
 # RUN: ld.lld -T %t.script %t.o -o %t
@@ -37,7 +40,7 @@
 # CHECK-NEXT: VirtualAddress:
 # CHECK-NEXT: PhysicalAddress:
 # CHECK-NEXT: FileSize: 0
-# CHECK-NEXT: MemSize: 9
+# CHECK-NEXT: MemSize: 1
 
 .section        .tbss,"awT",@nobits
 .quad   0

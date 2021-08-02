@@ -239,6 +239,13 @@ def HasExtXssr : Predicate<"Subtarget->hasExtXssr()">,
                            AssemblerPredicate<(all_of FeatureExtXssr),
                            "'Xssr' (Stream Semantic Registers)">;
 
+def FeatureExtXsmallfloat
+    : SubtargetFeature<"xsmallfloat", "HasExtXsmallfloat", "true",
+                       "'Xsmallfloat' (Small Floating Point)">;
+def HasExtXsmallfloat : Predicate<"Subtarget->hasExtXsmallfloat()">,
+                           AssemblerPredicate<(all_of FeatureExtXsmallfloat),
+                           "'Xsmallfloat' (Small Floating Point)">;
+
 def FeatureExtXmempool
     : SubtargetFeature<"xmempool", "HasExtXmempool", "true",
                        "'Xmempool' (MemPool System)">;
@@ -268,6 +275,7 @@ include "RISCVSchedSnitch.td"
 include "RISCVInstrInfoXfrep.td"
 include "RISCVInstrInfoXdma.td"
 include "RISCVInstrInfoXssr.td"
+include "RISCVInstrInfoXsmallfloat.td"
 
 //===----------------------------------------------------------------------===//
 // RISC-V processors supported.
@@ -316,7 +324,9 @@ def : ProcessorModel<"snitch", SnitchModel, [FeatureStdExtM,
                                              FeatureExtZfh,
                                              FeatureExtXfrep,
                                              FeatureExtXdma,
-                                             FeatureExtXssr]>;
+                                             FeatureExtXssr,
+                                             FeatureExtZfh,
+                                             FeatureExtXsmallfloat]>;
 
 //===----------------------------------------------------------------------===//
 // Define the RISC-V target.

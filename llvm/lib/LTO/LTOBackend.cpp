@@ -201,6 +201,7 @@ createTargetMachine(const Config &Conf, const Target *TheTarget, Module &M) {
       TheTriple, Conf.CPU, Features.getString(), Conf.Options, RelocModel,
       CodeModel, Conf.CGOptLevel));
   assert(TM && "Failed to create target machine");
+  TM->initializeOptionsWithModuleMetadata(M);
   return TM;
 }
 

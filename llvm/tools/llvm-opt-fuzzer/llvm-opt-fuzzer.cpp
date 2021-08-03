@@ -129,6 +129,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
   //
 
   M->setTargetTriple(TM->getTargetTriple().normalize());
+  TM->initializeOptionsWithModuleMetadata(*M);
   M->setDataLayout(TM->createDataLayout());
   codegen::setFunctionAttributes(TM->getTargetCPU(),
                                  TM->getTargetFeatureString(), *M);

@@ -706,6 +706,9 @@ int main(int argc, char **argv) {
 
   std::unique_ptr<TargetMachine> TM(Machine);
 
+  if (TM)
+    TM->initializeOptionsWithModuleMetadata(*M);
+
   // Override function attributes based on CPUStr, FeaturesStr, and command line
   // flags.
   codegen::setFunctionAttributes(CPUStr, FeaturesStr, *M);

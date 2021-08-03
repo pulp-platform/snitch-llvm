@@ -109,6 +109,19 @@ RISCVTargetMachine::getSubtargetImpl(const Function &F) const {
   return I.get();
 }
 
+void RISCVTargetMachine::setTargetOptionsWithModuleMetadata(
+    const Module &M LLVM_ATTRIBUTE_UNUSED) {
+  StringRef ABIName = Options.MCOptions.getABIName();
+  if (const MDString *ModuleTargetABI =
+          dyn_cast_or_null<MDString>(M.getModuleFlag("target-abi"))) {
+    StringRef ModuleABIName = ModuleTargetABI->getString();
+    if (!ABIName.empty() && ModuleABIName != ABIName)
+      report_fatal_error("-target-abi option != target-abi module flag");
+    if (ABIName.empty())
+      Options.MCOptions.ABIName = ModuleABIName.str();
+  }
+}
+
 TargetTransformInfo
 RISCVTargetMachine::getTargetTransformInfo(const Function &F) {
   return TargetTransformInfo(RISCVTTIImpl(this, F));

@@ -193,6 +193,7 @@ static LLVMBool LLVMTargetMachineEmit(LLVMTargetMachineRef T, LLVMModuleRef M,
 
   std::string error;
 
+  TM->initializeOptionsWithModuleMetadata(*Mod);
   Mod->setDataLayout(TM->createDataLayout());
 
   CodeGenFileType ft;

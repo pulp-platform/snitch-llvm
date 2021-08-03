@@ -204,7 +204,7 @@ private:
       llvm::function_ref<bool(const GlobalValue &)> mustPreserveGV);
 
   bool determineTarget();
-  std::unique_ptr<TargetMachine> createTargetMachine();
+  std::unique_ptr<TargetMachine> createTargetMachine(Module &M);
 
   void emitError(const std::string &ErrMsg);
   void emitWarning(const std::string &ErrMsg);

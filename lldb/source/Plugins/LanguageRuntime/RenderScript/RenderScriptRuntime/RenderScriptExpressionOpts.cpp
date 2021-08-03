@@ -147,6 +147,7 @@ bool RenderScriptRuntimeModulePass::runOnModule(llvm::Module &module) {
           target_machine->createDataLayout().getStringRepresentation().c_str());
     }
     module.setTargetTriple(real_triple);
+    target_machine->initializeOptionsWithModuleMetadata(module);
     module.setDataLayout(target_machine->createDataLayout());
   }
   return changed_module;

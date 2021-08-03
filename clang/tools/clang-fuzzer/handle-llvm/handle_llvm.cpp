@@ -117,6 +117,8 @@ static std::string OptLLVM(const std::string &IR, CodeGenOpt::Level OLvl) {
   if (!TM)
     ErrorAndExit("Could not create target machine");
 
+  TM->initializeOptionsWithModuleMetadata(*M);
+  
   codegen::setFunctionAttributes(codegen::getCPUStr(),
                                  codegen::getFeaturesStr(), *M);
 

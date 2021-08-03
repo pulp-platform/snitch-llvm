@@ -305,6 +305,10 @@ def have_ld_plugin_support():
     if len(fields) != 3:
         return False
     emulations = fields[2].split()
+    # default RISC-V ld supports linker plugin
+    if 'elf32lriscv' in emulations:
+        config.available_features.add('ld_emu_elf32lriscv')
+        return True
     if 'elf_x86_64' not in emulations:
         return False
     if 'elf32ppc' in emulations:

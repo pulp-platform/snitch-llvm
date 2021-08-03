@@ -94,6 +94,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
 
   // Set up the module to build for our target.
   M->setTargetTriple(TM->getTargetTriple().normalize());
+  TM->initializeOptionsWithModuleMetadata(*M);
   M->setDataLayout(TM->createDataLayout());
 
   // Build up a PM to do instruction selection.

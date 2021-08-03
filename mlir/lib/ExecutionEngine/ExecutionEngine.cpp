@@ -134,8 +134,9 @@ bool ExecutionEngine::setupTargetTriple(Module *llvmModule) {
     errs() << "Unable to create target machine\n";
     return true;
   }
-  llvmModule->setDataLayout(machine->createDataLayout());
   llvmModule->setTargetTriple(targetTriple);
+  machine->initializeOptionsWithModuleMetadata(*llvmModule);
+  llvmModule->setDataLayout(machine->createDataLayout());
   return false;
 }
 

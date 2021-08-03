@@ -565,7 +565,8 @@ void ThinLTOCodeGenerator::crossReferenceSymbol(StringRef Name) {
 }
 
 // TargetMachine factory
-std::unique_ptr<TargetMachine> TargetMachineBuilder::create() const {
+std::unique_ptr<TargetMachine>
+TargetMachineBuilder::create(Module &TheModule) const {
   std::string ErrMsg;
   const Target *TheTarget =
       TargetRegistry::lookupTarget(TheTriple.str(), ErrMsg);
@@ -582,6 +583,7 @@ std::unique_ptr<TargetMachine> TargetMachineBuilder::create() const {
       TheTarget->createTargetMachine(TheTriple.str(), MCpu, FeatureStr, Options,
                                      RelocModel, None, CGOptLevel));
   assert(TM && "Cannot create target machine");
+  TM->initializeOptionsWithModuleMetadata(TheModule);
 
   return TM;
 }
@@ -879,8 +881,8 @@ void ThinLTOCodeGenerator::optimize(Module &TheModule) {
   initTMBuilder(TMBuilder, Triple(TheModule.getTargetTriple()));
 
   // Optimize now
-  optimizeModule(TheModule, *TMBuilder.create(), OptLevel, Freestanding,
-                 nullptr);
+  optimizeModule(TheModule, *TMBuilder.create(TheModule), OptLevel,
+                 Freestanding, nullptr);
 }
 
 /// Write out the generated object file, either from CacheEntryPath or from
@@ -951,7 +953,8 @@ void ThinLTOCodeGenerator::run() {
                                              /*IsImporting*/ false);
 
         // CodeGen
-        auto OutputBuffer = codegenModule(*TheModule, *TMBuilder.create());
+        auto OutputBuffer =
+            codegenModule(*TheModule, *TMBuilder.create(*TheModule));
         if (SavedObjectsDirectoryPath.empty())
           ProducedBinaries[count] = std::move(OutputBuffer);
         else
@@ -1124,8 +1127,8 @@ void ThinLTOCodeGenerator::run() {
         auto &ImportList = ImportLists[ModuleIdentifier];
         // Run the main process now, and generates a binary
         auto OutputBuffer = ProcessThinLTOModule(
-            *TheModule, *Index, ModuleMap, *TMBuilder.create(), ImportList,
-            ExportList, GUIDPreservedSymbols,
+            *TheModule, *Index, ModuleMap, *TMBuilder.create(*TheModule),
+            ImportList, ExportList, GUIDPreservedSymbols,
             ModuleToDefinedGVSummaries[ModuleIdentifier], CacheOptions,
             DisableCodeGen, SaveTempsDir, Freestanding, OptLevel, count);
 

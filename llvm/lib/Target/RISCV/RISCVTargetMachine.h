@@ -42,6 +42,9 @@ public:
     return TLOF.get();
   }
 
+  void setTargetOptionsWithModuleMetadata(
+      const Module &M LLVM_ATTRIBUTE_UNUSED) override;
+
   TargetTransformInfo getTargetTransformInfo(const Function &F) override;
 
   virtual bool isNoopAddrSpaceCast(unsigned SrcAS,

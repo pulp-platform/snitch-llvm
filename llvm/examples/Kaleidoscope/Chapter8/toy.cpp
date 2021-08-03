@@ -1246,6 +1246,7 @@ int main() {
   auto TheTargetMachine =
       Target->createTargetMachine(TargetTriple, CPU, Features, opt, RM);
 
+  TheTargetMachine->initializeOptionsWithModuleMetadata(*TheModule);
   TheModule->setDataLayout(TheTargetMachine->createDataLayout());
 
   auto Filename = "output.o";

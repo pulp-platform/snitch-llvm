@@ -37,7 +37,7 @@ class raw_pwrite_stream;
 std::unique_ptr<Module>
 splitCodeGen(std::unique_ptr<Module> M, ArrayRef<raw_pwrite_stream *> OSs,
              ArrayRef<llvm::raw_pwrite_stream *> BCOSs,
-             const std::function<std::unique_ptr<TargetMachine>()> &TMFactory,
+             const std::function<std::unique_ptr<TargetMachine>(Module &)> &TMFactory,
              CodeGenFileType FileType = CGFT_ObjectFile,
              bool PreserveLocals = false);
 

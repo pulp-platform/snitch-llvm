@@ -377,16 +377,18 @@ bool LTOCodeGenerator::determineTarget() {
       MCpu = "cyclone";
   }
 
-  TargetMach = createTargetMachine();
+  TargetMach = createTargetMachine(*MergedModule);
   assert(TargetMach && "Unable to create target machine");
 
   return true;
 }
 
-std::unique_ptr<TargetMachine> LTOCodeGenerator::createTargetMachine() {
+std::unique_ptr<TargetMachine> LTOCodeGenerator::createTargetMachine(Module &M) {
   assert(MArch && "MArch is not set!");
-  return std::unique_ptr<TargetMachine>(MArch->createTargetMachine(
+  std::unique_ptr<TargetMachine> TM(MArch->createTargetMachine(
       TripleStr, MCpu, FeatureStr, Options, RelocModel, None, CGOptLevel));
+  TM->initializeOptionsWithModuleMetadata(M);
+  return TM;
 }
 
 // If a linkonce global is present in the MustPreserveSymbols, we need to make
@@ -619,7 +621,7 @@ bool LTOCodeGenerator::compileOptimized(ArrayRef<raw_pwrite_stream *> Out) {
   // original module at parallelism level 1 which we then assign back to
   // MergedModule.
   MergedModule = splitCodeGen(std::move(MergedModule), Out, {},
-                              [&]() { return createTargetMachine(); }, FileType,
+                              [&](Module &M) { return createTargetMachine(M); }, FileType,
                               ShouldRestoreGlobalsLinkage);
 
   // If statistics were requested, save them to the specified file or

@@ -19,6 +19,7 @@
 #include "llvm/Pass.h"
 
 #include <queue>
+#include <set>
 
 using namespace llvm;
 
@@ -173,7 +174,7 @@ bool PULPFixupHwLoops::runOnMachineFunction(MachineFunction &MF) {
           // Nothing changed
           continue;
         }
-        New->setAlignment(4);
+        New->setAlignment(Align(4));
         break;
       }
     }

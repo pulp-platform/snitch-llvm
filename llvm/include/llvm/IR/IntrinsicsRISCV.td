@@ -180,20 +180,20 @@ let TargetPrefix = "riscv" in {
   multiclass mul_mac_N_RN {
     defm mul #NAME #N
         : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-                        [IntrNoMem, ImmArg<2>]>;
+                        [IntrNoMem, ImmArg<ArgIndex<2>>]>;
     defm mul #NAME #RN
         : PulpIntrinsic<[llvm_i32_ty],
                         [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-                        [IntrNoMem, ImmArg<2>, ImmArg<3>]>;
+                        [IntrNoMem, ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
     defm mac #NAME #N
         : PulpIntrinsic<[llvm_i32_ty],
                         [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-                        [IntrNoMem, ImmArg<3>]>;
+                        [IntrNoMem, ImmArg<ArgIndex<3>>]>;
     defm mac #NAME #RN
         : PulpIntrinsic<
               [llvm_i32_ty],
               [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-              [IntrNoMem, ImmArg<3>, ImmArg<4>]>;
+              [IntrNoMem, ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>]>;
   }
 
   defm s : mul_mac_N_RN;
@@ -205,7 +205,7 @@ let TargetPrefix = "riscv" in {
     // <op>N: op with normalization factor as immediate
     defm N
         : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-                        [IntrNoMem, ImmArg<2>]>;
+                        [IntrNoMem, ImmArg<ArgIndex<2>>]>;
     // <op>N_r: op with normalization factor
     defm N_r
         : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
@@ -214,7 +214,7 @@ let TargetPrefix = "riscv" in {
     defm RN
         : PulpIntrinsic<[llvm_i32_ty],
                         [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-                        [IntrNoMem, ImmArg<2>, ImmArg<3>]>;
+                        [IntrNoMem, ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>]>;
     // <op>RN: op with normalization and round factors as immediates
     defm RN_r
         : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
@@ -264,17 +264,18 @@ let TargetPrefix = "riscv" in {
       : PulpIntrinsic<
             [llvm_i32_ty],
             [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-            [IntrNoMem, ImmArg<1>, ImmArg<3>, ImmArg<4>]>;
+            [IntrNoMem, ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<3>>,
+            ImmArg<ArgIndex<4>>]>;
   defm binsert_r
       : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
                       [IntrNoMem]>;
   defm clip
       : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-                      [IntrNoMem, ImmArg<1>, ImmArg<2>]>;
+                      [IntrNoMem, ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
   defm clip_r : PulpBinary32;
   defm clipu
       : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-                      [IntrNoMem, ImmArg<1>, ImmArg<2>]>;
+                      [IntrNoMem, ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
   defm clipu_r : PulpBinary32;
 
   // PULP Memory Intrinsics
@@ -282,7 +283,8 @@ let TargetPrefix = "riscv" in {
   multiclass PulpReadMemIntrinsic<LLVMType element_type>
       : PulpIntrinsic<[llvm_i32_ty],
                       [LLVMPointerType<element_type>, llvm_i32_ty],
-                      [IntrReadMem, ReadOnly<0>, NoCapture<0>]>;
+                      [IntrReadMem, ReadOnly<ArgIndex<0>>,
+                      NoCapture<ArgIndex<0>>]>;
 
   defm OffsetedRead : PulpReadMemIntrinsic<llvm_i32_ty>;
   defm OffsetedReadHalf : PulpReadMemIntrinsic<llvm_i16_ty>;
@@ -293,7 +295,8 @@ let TargetPrefix = "riscv" in {
   multiclass PulpWriteMemIntrinsic<LLVMType element_type>
       : PulpIntrinsic<[],
                       [llvm_i32_ty, LLVMPointerType<element_type>, llvm_i32_ty],
-                      [IntrWriteMem, WriteOnly<1>, NoCapture<1>]>;
+                      [IntrWriteMem, WriteOnly<ArgIndex<1>>,
+                      NoCapture<ArgIndex<1>>]>;
 
   defm OffsetedWrite : PulpWriteMemIntrinsic<llvm_i32_ty>;
   defm OffsetedWriteHalf : PulpWriteMemIntrinsic<llvm_i16_ty>;
@@ -304,26 +307,33 @@ let TargetPrefix = "riscv" in {
   // PULP SPR Intrinsics
 
   defm spr_read
-      : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty], [IntrNoMem, ImmArg<0>]>;
+      : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty], [IntrNoMem,
+                                                    ImmArg<ArgIndex<0>>]>;
   defm spr_read_vol : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty],
-                                    [IntrNoMem, IntrHasSideEffects, ImmArg<0>]>;
+                                    [IntrNoMem, IntrHasSideEffects,
+                                    ImmArg<ArgIndex<0>>]>;
   defm spr_write : PulpIntrinsic<[], [llvm_i32_ty, llvm_i32_ty],
-                                 [IntrNoMem, IntrHasSideEffects, ImmArg<0>]>;
+                                 [IntrNoMem, IntrHasSideEffects,
+                                 ImmArg<ArgIndex<0>>]>;
   defm spr_bit_set
       : PulpIntrinsic<[], [llvm_i32_ty, llvm_i32_ty],
-                      [IntrNoMem, IntrHasSideEffects, ImmArg<0>, ImmArg<1>]>;
+                      [IntrNoMem, IntrHasSideEffects, ImmArg<ArgIndex<0>>,
+                      ImmArg<ArgIndex<1>>]>;
   defm spr_bit_clr
       : PulpIntrinsic<[], [llvm_i32_ty, llvm_i32_ty],
-                      [IntrNoMem, IntrHasSideEffects, ImmArg<0>, ImmArg<1>]>;
+                      [IntrNoMem, IntrHasSideEffects, ImmArg<ArgIndex<0>>,
+                      ImmArg<ArgIndex<1>>]>;
   defm read_then_spr_write
       : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-                      [IntrNoMem, IntrHasSideEffects, ImmArg<0>]>;
+                      [IntrNoMem, IntrHasSideEffects, ImmArg<ArgIndex<0>>]>;
   defm read_then_spr_bit_set
       : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-                      [IntrNoMem, IntrHasSideEffects, ImmArg<0>, ImmArg<1>]>;
+                      [IntrNoMem, IntrHasSideEffects, ImmArg<ArgIndex<0>>,
+                      ImmArg<ArgIndex<1>>]>;
   defm read_then_spr_bit_clr
       : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
-                      [IntrNoMem, IntrHasSideEffects, ImmArg<0>, ImmArg<1>]>;
+                      [IntrNoMem, IntrHasSideEffects, ImmArg<ArgIndex<0>>,
+                      ImmArg<ArgIndex<1>>]>;
 
   defm CoreId : PulpIntrinsic<[llvm_i32_ty], [], [IntrNoMem]>;
   defm ClusterId : PulpIntrinsic<[llvm_i32_ty], [], [IntrNoMem]>;

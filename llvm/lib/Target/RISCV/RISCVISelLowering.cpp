@@ -4220,6 +4220,11 @@ RISCVTargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
         return std::make_pair(0U, &RISCV::FPR32RegClass);
       if (Subtarget.hasStdExtD() && VT == MVT::f64)
         return std::make_pair(0U, &RISCV::FPR64RegClass);
+      if (Subtarget.hasExtXsmallfloat())
+        if ((VT == MVT::v2f32) || (VT == MVT::v4f16) || (VT == MVT::v4bf16) ||
+            (VT == MVT::v4i16)    // __f16 is currently encoded as i16
+            || (VT == MVT::v8i8)) // __fp8 not supported, treat as i8)
+          return std::make_pair(0U, &RISCV::FPR64RegClass);
       break;
     default:
       break;

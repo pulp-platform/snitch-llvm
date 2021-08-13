@@ -56,8 +56,6 @@ SDMA_BUILTIN(wait_for_idle, "v", "n", "xdma")
 // Auto-generated from builtins formal spec by:
 // git@iis-git.ee.ethz.ch:f.ficarelli/pulp-intrinsics.git
 
-TARGET_BUILTIN(__builtin_pulp_event_unit_read, "Uii*Ui", "n", "xpulpv")
-
 // PULP legacy
 TARGET_BUILTIN(__builtin_bitinsert, "iiiIUiIUi", "nc", "xpulpv") // NOTE: normal builtin in GCC
 
@@ -92,7 +90,7 @@ TARGET_BUILTIN(__builtin_pulp_spr_bit_set, "vIiIi", "n", "xpulpv2")
 TARGET_BUILTIN(__builtin_pulp_spr_read, "iIi", "n", "xpulpv2")
 TARGET_BUILTIN(__builtin_pulp_spr_read_vol, "iIi", "n", "xpulpv2")
 TARGET_BUILTIN(__builtin_pulp_spr_write, "vIii", "n", "xpulpv2")
-TARGET_BUILTIN(__builtin_pulp_event_unit_read, "ii*i", "n", "xpulpv2")
+TARGET_BUILTIN(__builtin_pulp_event_unit_read, "Uii*Ui", "n", "xpulpv")
 TARGET_BUILTIN(__builtin_pulp_abs, "Uii", "nc", "xpulpv2")
 TARGET_BUILTIN(__builtin_pulp_addN, "iiiUIi", "nc", "xpulpv2")
 TARGET_BUILTIN(__builtin_pulp_addN_r, "iiiUi", "nc", "xpulpv2")

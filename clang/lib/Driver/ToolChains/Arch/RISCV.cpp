@@ -74,7 +74,7 @@ static bool isSupportedExtension(StringRef Ext) {
   if (isExperimentalExtension(Ext))
     return true;
 
-  if (Ext == "xssr" || Ext == "xdma" || Ext == "xfrep" || Ext == "xmempool")
+  if (Ext == "xssr" || Ext == "xdma" || Ext == "xfrep" || Ext == "xmempool" || Ext == "xsmallfloat")
     return true;
 
   // LLVM does not support "sx", "s" nor "x" extensions.
@@ -161,7 +161,6 @@ static bool getExtensionVersion(const Driver &D, const ArgList &Args,
 
   return false;
 }
-
 // Handle other types of extensions other than the standard
 // general purpose and standard user-level extensions.
 // Parse the ISA string containing non-standard user-level

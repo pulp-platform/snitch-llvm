@@ -325,7 +325,6 @@ def : ProcessorModel<"snitch", SnitchModel, [FeatureStdExtM,
                                              FeatureExtXfrep,
                                              FeatureExtXdma,
                                              FeatureExtXssr,
-                                             FeatureExtZfh,
                                              FeatureExtXsmallfloat]>;
 
 //===----------------------------------------------------------------------===//

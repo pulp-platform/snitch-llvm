@@ -387,6 +387,8 @@ def LOOP1count : Instruction, Sched<[ReadIALU, WriteCSR]> {
 // Opcodes
 def OPC_PULP_LPI : RISCVOpcode<"PULP_LPI", 0b0001011>;
 def OPC_PULP_SPI : RISCVOpcode<"PULP_SPI", 0b0101011>;
+def OPC_PULP_LPI_RR : RISCVOpcode<"PULP_LPI_RR", 0b0000011>;
+def OPC_PULP_SPI_RR : RISCVOpcode<"PULP_SPI_RR", 0b0100011>;
 
 // Instruction class: Stores with Immediate increment
 let Predicates = [IsRV32, HasPULPExtV2] in {
@@ -863,6 +865,58 @@ defm PV_CMPGEU : SC_SCI_H_B<0b00111, 1, uimm6, "cmpgeu">;
 defm PV_CMPLTU : SC_SCI_H_B<0b01000, 1, uimm6, "cmpltu">;
 defm PV_CMPLEU : SC_SCI_H_B<0b01001, 1, uimm6, "cmpleu">;
 
+
+let hasSideEffects = 0, mayLoad = 1, mayStore = 0, Predicates = [HasPULPExtV2] in
+multiclass Pulp_Load<bits<7> funct7, bits<3> funct3, string opcodestr> {
+
+  def _ri_PostIncrement
+    : RVInstI<funct3, OPC_PULP_LPI, (outs GPR:$rd, GPR:$rs1_wb),
+    (ins GPR:$rs1, simm12:$imm12), opcodestr, "$rd, ${imm12}(${rs1}!)">{
+      let Constraints = "$rs1 = $rs1_wb";
+    }
+
+  def _rr_PostIncrement
+    : RVInstR<funct7, 0b111, OPC_PULP_LPI, (outs GPR:$rd, GPR:$rs1_wb),
+    (ins GPR:$rs1, GPR:$rs2), opcodestr, "$rd, ${rs2}(${rs1}!)">{
+      let Constraints = "$rs1 = $rs1_wb";
+    }
+
+  def _rr
+    : RVInstR<funct7, 0b111, OPC_PULP_LPI_RR, (outs GPR:$rd),
+    (ins GPR:$rs1, GPR:$rs2), opcodestr, "$rd, ${rs2}(${rs1})">;
+}
+
+
+defm P_LB  : Pulp_Load<0b0000000, 0b000, "p.lb">,  Sched<[WriteLDB, ReadMemBase]>;
+defm P_LBU : Pulp_Load<0b0100000, 0b100, "p.lbu">, Sched<[WriteLDB, ReadMemBase]>;
+defm P_LH  : Pulp_Load<0b0001000, 0b001, "p.lh">,  Sched<[WriteLDH, ReadMemBase]>;
+defm P_LHU : Pulp_Load<0b0101000, 0b101, "p.lhu">, Sched<[WriteLDH, ReadMemBase]>;
+defm P_LW  : Pulp_Load<0b0010000, 0b010, "p.lw">,  Sched<[WriteLDW, ReadMemBase]>;
+
+
+let hasSideEffects = 0, mayLoad = 0, mayStore = 1, Predicates = [HasPULPExtV2] in
+multiclass Pulp_Store<bits<2> funct2, string opcodestr> {
+
+    def _ri_PostIncrement
+      : RVInstS<{0, funct2}, OPC_PULP_SPI, (outs GPR:$rs1_wb),
+      (ins GPR:$rs2, GPR:$rs1, simm12:$imm12), opcodestr, "$rs2, ${imm12}(${rs1}!)">{
+        let Constraints = "$rs1 = $rs1_wb";
+      }
+
+    def _rr_PostIncrement
+      : RVInstR<0b0000000, {1, funct2}, OPC_PULP_SPI, (outs GPR:$rs1_wb),
+      (ins GPR:$rs2, GPR:$rs1, GPR:$rd), opcodestr, "$rs2, ${rd}(${rs1}!)">{
+        let Constraints = "$rs1 = $rs1_wb";
+      }
+
+    def _rr
+      : RVInstR<0b0000000, {1, funct2}, OPC_PULP_SPI_RR, (outs),
+      (ins GPR:$rs2, GPR:$rs1, GPR:$rd), opcodestr, "$rs2, ${rd}(${rs1})">;
+}
+
+defm P_SB : Pulp_Store<0b00, "p.sb">, Sched<[WriteSTB, ReadStoreData, ReadMemBase]>;
+defm P_SH : Pulp_Store<0b01, "p.sh">, Sched<[WriteSTH, ReadStoreData, ReadMemBase]>;
+defm P_SW : Pulp_Store<0b10, "p.sw">, Sched<[WriteSTW, ReadStoreData, ReadMemBase]>;
 
 def uimm1 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<1>(Imm);}]> {
   let ParserMatchClass = UImmAsmOperand<1>;
@@ -1730,6 +1784,46 @@ def : Pat<(v4i8 (bitconvert GPR:$rs1)), (v4i8 PulpV4:$rs1)>;
 def : Pat<(i32 (bitconvert PulpV2:$rs1)), (i32 GPR:$rs1)>;
 def : Pat<(i32 (bitconvert PulpV4:$rs1)), (i32 GPR:$rs1)>;
 
+// Patterns for load/store instructions
+
+// post increment loads need custom selection, because tablegen can't deal with
+// multiple result values
+
+def : Pat<(sextloadi8 (add GPR:$base, GPR:$offset)),
+    (P_LB_rr GPR:$base, GPR:$offset)>;
+def : Pat<(zextloadi8 (add GPR:$base, GPR:$offset)),
+    (P_LBU_rr GPR:$base, GPR:$offset)>;
+def : Pat<(sextloadi16 (add GPR:$base, GPR:$offset)),
+    (P_LH_rr GPR:$base, GPR:$offset)>;
+def : Pat<(zextloadi16 (add GPR:$base, GPR:$offset)),
+    (P_LHU_rr GPR:$base, GPR:$offset)>;
+def : Pat<(load (add GPR:$base, GPR:$offset)),
+    (P_LW_rr GPR:$base, GPR:$offset)>;
+
+def : Pat<(post_truncsti8 GPR:$val, GPR:$base, simm12:$offset),
+    (P_SB_ri_PostIncrement GPR:$val, GPR:$base, simm12:$offset)>;
+def : Pat<(post_truncsti16 GPR:$val, GPR:$base, simm12:$offset),
+    (P_SH_ri_PostIncrement GPR:$val, GPR:$base, simm12:$offset)>;
+def : Pat<(post_store GPR:$val, GPR:$base, simm12:$offset),
+    (P_SW_ri_PostIncrement GPR:$val, GPR:$base, simm12:$offset)>;
+
+def : Pat<(post_truncsti8 GPR:$val, GPR:$base, GPR:$offset),
+    (P_SB_rr_PostIncrement GPR:$val, GPR:$base, GPR:$offset)>;
+def : Pat<(post_truncsti16 GPR:$val, GPR:$base, GPR:$offset),
+    (P_SH_rr_PostIncrement GPR:$val, GPR:$base, GPR:$offset)>;
+def : Pat<(post_store GPR:$val, GPR:$base, GPR:$offset),
+    (P_SW_rr_PostIncrement GPR:$val, GPR:$base, GPR:$offset)>;
+
+def : Pat<(truncstorei8 GPR:$val, (add GPR:$base, GPR:$offset)),
+    (P_SB_rr GPR:$val, GPR:$base, GPR:$offset)>;
+def : Pat<(truncstorei16 GPR:$val, (add GPR:$base, GPR:$offset)),
+    (P_SH_rr GPR:$val, GPR:$base, GPR:$offset)>;
+def : Pat<(store GPR:$val, (add GPR:$base, GPR:$offset)),
+    (P_SW_rr GPR:$val, GPR:$base, GPR:$offset)>;
+
+
+
+
 //===----------------------------------------------------------------------===//
 // Pseudo-instructions and codegen patterns
 //===----------------------------------------------------------------------===//
@@ -1950,17 +2044,16 @@ def : Pat<(int_riscv_pulp_clipu GPR:$rs1, 0, powerOf2Minus1:$upperBound),
 def : PatGprGpr<int_riscv_pulp_clipu_r, P_CLIPUR>;
 
 
-def : Pat<(int_riscv_pulp_OffsetedRead GPR:$rs1, GPR:$rs2), (PULP_LW_REG_PI GPR:$rs1, GPR:$rs2)>;
-def : Pat<(int_riscv_pulp_OffsetedReadHalf GPR:$rs1, GPR:$rs2), (PULP_LH_REG_PI GPR:$rs1, GPR:$rs2)>;
-def : Pat<(int_riscv_pulp_OffsetedReadByte GPR:$rs1, GPR:$rs2), (PULP_LB_REG_PI GPR:$rs1, GPR:$rs2)>;
+def : Pat<(int_riscv_pulp_OffsetedRead GPR:$rs1, GPR:$rs2), (P_LW_rr GPR:$rs1, GPR:$rs2)>;
+def : Pat<(int_riscv_pulp_OffsetedReadHalf GPR:$rs1, GPR:$rs2), (P_LH_rr GPR:$rs1, GPR:$rs2)>;
+def : Pat<(int_riscv_pulp_OffsetedReadByte GPR:$rs1, GPR:$rs2), (P_LB_rr GPR:$rs1, GPR:$rs2)>;
 
-def : Pat<(int_riscv_pulp_OffsetedWrite GPR:$rd, GPR:$rs1, GPR:$rs3), (PULP_SW_REG_PI GPR:$rd, GPR:$rs3, GPR:$rs1)>;
-def : Pat<(int_riscv_pulp_OffsetedWriteHalf GPR:$rd, GPR:$rs1, GPR:$rs3), (PULP_SH_REG_PI GPR:$rd, GPR:$rs3, GPR:$rs1)>;
-def : Pat<(int_riscv_pulp_OffsetedWriteByte GPR:$rd, GPR:$rs1, GPR:$rs3), (PULP_SB_REG_PI GPR:$rd, GPR:$rs3, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_OffsetedWrite GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SW_rr GPR:$rs2, GPR:$rs1, GPR:$rs3)>;
+def : Pat<(int_riscv_pulp_OffsetedWriteHalf GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SH_rr GPR:$rs2, GPR:$rs1, GPR:$rs3)>;
+def : Pat<(int_riscv_pulp_OffsetedWriteByte GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SB_rr GPR:$rs2, GPR:$rs1, GPR:$rs3)>;
 
-
-def : Pat<(int_riscv_pulp_read_base_off GPR:$rs1, GPR:$rs2), (PULP_LW_REG_PI GPR:$rs1, GPR:$rs2)>;
-def : Pat<(int_riscv_pulp_write_base_off GPR:$rd, GPR:$rs1, GPR:$rs3), (PULP_SW_REG_PI GPR:$rd, GPR:$rs3, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_read_base_off GPR:$rs1, GPR:$rs2), (P_LW_rr GPR:$rs1, GPR:$rs2)>;
+def : Pat<(int_riscv_pulp_write_base_off GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SW_rr GPR:$rs2, GPR:$rs1, GPR:$rs3)>;
 
 // CSR intrinsic patterns have been changed:
 // (CSRRS csr_sysreg:$imm12, X0) -> (CSRRS uimm12:$imm12, X0)
@@ -1977,8 +2070,8 @@ def : Pat<(int_riscv_pulp_read_then_spr_bit_set uimm12:$imm12, GPR:$rs1), (CSRRS
 def : Pat<(int_riscv_pulp_read_then_spr_bit_clr uimm12:$imm12, GPR:$rs1), (CSRRC uimm12:$imm12, GPR:$rs1)>;
 
 // TODO the *_v versions should have side effects
-def : Pat<(int_riscv_pulp_read_base_off_v GPR:$rs1, GPR:$rs2), (PULP_LW_REG_PI GPR:$rs1, GPR:$rs2)>;
-def : Pat<(int_riscv_pulp_write_base_off_v GPR:$rd, GPR:$rs1, GPR:$rs3), (PULP_SW_REG_PI GPR:$rd, GPR:$rs3, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_read_base_off_v GPR:$rs1, GPR:$rs2), (P_LW_rr GPR:$rs1, GPR:$rs2)>;
+def : Pat<(int_riscv_pulp_write_base_off_v GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SW_rr GPR:$rs2, GPR:$rs3, GPR:$rs1)>;
 
 def : Pat<(int_riscv_pulp_CoreId), (ANDI (CSRRS MHARTID.Encoding, X0), 0b1111)>;
 def : Pat<(int_riscv_pulp_ClusterId), (SRLI (ANDI (CSRRS MHARTID.Encoding, X0), 0b11111100000), 5)>;

@@ -64,11 +64,6 @@ ArrayRef<TargetInfo::GCCRegAlias> RISCVTargetInfo::getGCCRegAliases() const {
   return llvm::makeArrayRef(GCCRegAliases);
 }
 
-ArrayRef<Builtin::Info> RISCVTargetInfo::getTargetBuiltins() const {
-  return llvm::makeArrayRef(BuiltinInfo, clang::RISCV::LastTSBuiltin -
-                                         Builtin::FirstTSBuiltin);
-}
-
 bool RISCVTargetInfo::validateAsmConstraint(
     const char *&Name, TargetInfo::ConstraintInfo &Info) const {
   switch (*Name) {

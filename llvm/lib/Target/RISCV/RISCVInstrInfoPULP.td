@@ -805,18 +805,6 @@ def uimm1 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<1>(Imm);}]> {
   }];
 }
 
-def uimm12 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<12>(Imm);}]> {
-  let ParserMatchClass = UImmAsmOperand<12>;
-  let EncoderMethod = "getImmOpValue";
-  let DecoderMethod = "decodeUImmOperand<12>";
-  let MCOperandPredicate = [{
-    int64_t Imm;
-    if (MCOp.evaluateAsConstantImm(Imm))
-      return isUInt<12>(Imm);
-    return MCOp.isBareSymbolRef();
-  }];
-}
-
 def uimm13_lsb0 : Operand<OtherVT>,
                   ImmLeaf<XLenVT, [{return isShiftedUInt<12, 1>(Imm);}]>  {
   let ParserMatchClass = UImmAsmOperand<13, "Lsb0">;

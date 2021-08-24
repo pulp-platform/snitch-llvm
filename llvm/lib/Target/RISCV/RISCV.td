@@ -455,12 +455,6 @@ def HasExtXmempool : Predicate<"Subtarget->hasExtXmempool()">,
                            AssemblerPredicate<(all_of FeatureExtXmempool),
                            "'Xmempool' (MemPool System)">;
 
-def FeaturePulp : SubtargetFeature<"xpulpv", "HasNonStdExtPulp", "true",
-                                    "'pulp' (non-standard extension)">;
-def HasNonStdExtPulp : Predicate<"Subtarget->hasNonStdExtPulp()">,
-                        AssemblerPredicate<(all_of FeaturePulp),
-                        "pulp Instruction Set">;
-
 
 //===----------------------------------------------------------------------===//
 // Named operands for CSR instructions.

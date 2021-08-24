@@ -16718,24 +16718,6 @@ Value *CodeGenFunction::EmitAMDGPUBuiltinExpr(unsigned BuiltinID,
   }
 }
 
-Value *CodeGenFunction::EmitRISCVBuiltinExpr(unsigned BuiltinID,
-                                             const CallExpr *E) {
-  switch (BuiltinID) {
-  default:
-    return nullptr;
-  // PULP platform queries: they resolve to returning specific
-  // external symbol's address
-  case RISCV::BI__builtin_pulp_CoreCount:
-    llvm::StringRef Name = "__rt_nb_pe";
-    llvm::Module *M = &CGM.getModule();
-    M->getOrInsertGlobal(Name, Int8Ty);
-    llvm::GlobalVariable *V = M->getNamedGlobal(Name);
-    V->setLinkage(llvm::GlobalValue::ExternalLinkage);
-    V->setDSOLocal(true);
-    return Builder.CreatePtrToInt(V, Int32Ty);
-  }
-}
-
 /// Handle a SystemZ function in which the final argument is a pointer
 /// to an int that receives the post-instruction CC value.  At the LLVM level
 /// this is represented as a function that returns a {result, cc} pair.
@@ -18917,6 +18899,17 @@ Value *CodeGenFunction::EmitRISCVBuiltinExpr(unsigned BuiltinID,
 
     IntrinsicTypes = {ResultType};
     break;
+  }
+  case RISCV::BI__builtin_pulp_CoreCount: {
+    // PULP platform queries: they resolve to returning specific
+    // external symbol's address
+    llvm::StringRef Name = "__rt_nb_pe";
+    llvm::Module *M = &CGM.getModule();
+    M->getOrInsertGlobal(Name, Int8Ty);
+    llvm::GlobalVariable *V = M->getNamedGlobal(Name);
+    V->setLinkage(llvm::GlobalValue::ExternalLinkage);
+    V->setDSOLocal(true);
+    return Builder.CreatePtrToInt(V, Int32Ty);
   }
   // Vector builtins are handled from here.
 #include "clang/Basic/riscv_vector_builtin_cg.inc"

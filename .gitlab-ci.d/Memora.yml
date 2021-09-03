@@ -1,0 +1,36 @@
+# Copyright 2021 ETH Zurich and University of Bologna.
+# Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# Author: Noah Huetter <huettern@iis.ee.ethz.ch>, ETH Zurich
+
+cache_root_dir: /usr/scratch2/dolent4/gitlabci/buildcache/iis-compilers/llvm-project
+
+artifacts:
+  # Contains the entire LLVM build directory
+  tc-llvm:
+    inputs:
+      - .gitlab-ci.d/Makefile
+      - clang
+      - clang-tools-extra
+      - compiler-rt
+      - debuginfo-tests
+      - flang
+      - libc
+      - libclc
+      - libcxx
+      - libcxxabi
+      - libunwind
+      - lld
+      - lldb
+      - llvm
+      - mlir
+      - openmp
+      - parallel-libs
+      - polly
+      - pstl
+      - runtimes
+      - utils
+    outputs:
+      - .gitlab-ci.d/work/install

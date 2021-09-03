@@ -1,0 +1,138 @@
+# Copyright 2021 ETH Zurich and University of Bologna.
+# Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# Author: Noah Huetter <huettern@iis.ee.ethz.ch>, ETH Zurich
+
+########################################
+## Environment
+########################################
+
+# Variables must coincide with Memora.yml
+variables:
+  WORK: ${CI_PROJECT_DIR}/.gitlab-ci.d/work
+  SRC: ${CI_PROJECT_DIR}
+  NEWLIB_VERS: 3.3.0
+  TRIPLE: riscv32-iis-llvm
+  LLVM_VERSION: 12.0.1
+
+stages:
+  - tools
+  - build
+  - test
+  - package
+  - deploy
+
+########################################
+## Build stage
+########################################
+
+tc-llvm:
+  stage: build
+  script:
+    - |
+      if ! $CI_PROJECT_DIR/.gitlab-ci.d/memora_retry.sh lookup tc-llvm; then
+        make -C ${CI_PROJECT_DIR}/.gitlab-ci.d tc-llvm
+        make -C ${CI_PROJECT_DIR}/.gitlab-ci.d tc-llvm-newlib
+        make -C ${CI_PROJECT_DIR}/.gitlab-ci.d tc-llvm-crt
+        $CI_PROJECT_DIR/.gitlab-ci.d/memora_retry.sh insert tc-llvm
+      fi
+
+# Build most recent banshee and upload as artifact
+banshee:
+  stage: build
+  before_script:
+    - |
+    - rustup toolchain install 1.50.0
+    - rustup override set 1.50.0 
+    - rustc --version
+    - cargo --version
+    - export CC=gcc-9.2.0
+    - export CXX=g++-9.2.0
+    - export LLVM_SYS_100_PREFIX=/usr/pack/llvm-10.0.1-af
+    - export LLVM_SYS_120_PREFIX=/usr/pack/llvm-12.0.1-af
+    - export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=/usr/pack/gcc-9.2.0-af/linux-x64/bin/gcc
+    - git clone --depth 1 git@github.com:pulp-platform/snitch.git ${WORK}/snitch
+  script:
+    - cd ${WORK}/snitch/sw/banshee
+    - cargo build
+    - cargo install --debug --path . --root ${WORK}/install
+  artifacts:
+    paths:
+      - ${WORK}/install/bin/banshee
+
+########################################
+## Test stage
+########################################
+
+# Runs a test discovery on newly added regression tests and runs them
+# Re-build entire LLVM
+llvm-new:
+  stage: test
+  before_script:
+    - make -C ${CI_PROJECT_DIR}/.gitlab-ci.d tc-llvm
+  script:
+    - make -C ${CI_PROJECT_DIR}/.gitlab-ci.d LLVM_BASE=llvmorg-${LLVM_VERSION} test-llvm-new
+
+# Use the built TC to build the snitch runtime and test it on banshee
+snitch-runtime-banshee:
+  stage: test
+  dependencies: 
+    - banshee
+  before_script:
+    - $CI_PROJECT_DIR/.gitlab-ci.d/memora_retry.sh get tc-llvm
+    - git clone --depth 1 git@github.com:pulp-platform/snitch.git ${WORK}/snitch
+  script:
+    - cd ${WORK}/snitch/sw/snRuntime
+    - mkdir build; cd build
+    - export PATH=${WORK}/install/bin:${PATH}
+    - cmake-3.18.1 -DCMAKE_TOOLCHAIN_FILE=toolchain-llvm -DBUILD_TESTS=ON .. 
+    - make -j`nproc`
+    - ctest -j`nproc`
+
+########################################
+## Package stage
+########################################
+
+dist:
+  stage: package
+  before_script:
+    - export PKGVERS=${TRIPLE}-centos7-${LLVM_VERSION}-$(git rev-parse --short HEAD)
+    - echo ${PKGVERS}
+    - $CI_PROJECT_DIR/.gitlab-ci.d/memora_retry.sh get tc-llvm
+  script:
+    - tar -czf ${PKGVERS}.tar.gz --transform s/^install/${PKGVERS}/ ${WORK}/install
+  artifacts:
+    paths:
+      - "*.tar.gz"
+
+########################################
+## Deploy stage
+########################################
+
+github:
+  stage: deploy
+  only:
+    refs:
+      - main
+  dependencies: []
+  before_script:
+    - echo "2048 SHA256:nThbg6kXUpJWGl7E1IGOCspRomTxdCARLviKw6E5SY8 github.com (RSA)" >> ~/.ssh/known_hosts
+    - echo ${SSH_PRIVKEY} | base64 -d > id_iisgit_github
+    - chmod 600 id_iisgit_github
+    - PW_SCRIPT=`pwd`/pw.sh
+    - echo '#!/bin/sh' > ${PW_SCRIPT}
+    - echo 'echo ${SSH_PRIVKEY_PW}' >> ${PW_SCRIPT}
+    - export SSH_PRIVKEY_PW
+    - chmod +x ${PW_SCRIPT}
+    - eval `ssh-agent -s`
+    - DISPLAY=1 SSH_ASKPASS=${PW_SCRIPT} ssh-add id_iisgit_github < /dev/null
+  script:
+    - remote="git@github.com:pulp-platform/llvm-project.git"
+    - remote_branch=main
+    - local_branch=main
+    - git remote add upstream ${remote}
+    - git fetch -n --depth 50 upstream ${remote_branch}
+    - git checkout ${local_branch}
+    - git push upstream ${local_branch}:${remote_branch}

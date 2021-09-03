@@ -132,7 +132,19 @@ github:
     - remote="git@github.com:pulp-platform/llvm-project.git"
     - remote_branch=main
     - local_branch=main
-    - git remote add upstream ${remote}
-    - git fetch -n --depth 50 upstream ${remote_branch}
-    - git checkout ${local_branch}
-    - git push upstream ${local_branch}:${remote_branch}
+    - if ! git remote | grep -q '^upstream$'; then git remote add upstream ${remote}; fi
+    # remove local branch if exists
+    - git branch -D ${local_branch} || true
+    # Do a deep fetch
+    - git fetch --depth=1000 -n -v origin ${local_branch}
+    - git fetch --depth=1000 -n -v upstream ${remote_branch}
+    # Show some status
+    - git show-ref
+    - git remote -v
+    - git log origin/${local_branch} --pretty=oneline
+    - git log upstream/${remote_branch} --pretty=oneline
+    # Checkout local branch to be pushed
+    - git checkout -b ${local_branch} origin/${local_branch}
+    - git pull origin ${local_branch}
+    # Do actual push to upstream
+    - git push -v upstream ${local_branch}

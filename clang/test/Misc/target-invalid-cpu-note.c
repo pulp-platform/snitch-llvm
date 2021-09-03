@@ -78,7 +78,6 @@
 // R600-SAME: palm, cypress, hemlock, juniper, redwood, sumo, sumo2, barts,
 // R600-SAME: caicos, aruba, cayman, turks
 
-
 // RUN: not %clang_cc1 -triple amdgcn--- -target-cpu not-a-cpu -fsyntax-only %s 2>&1 | FileCheck %s --check-prefix AMDGCN
 // AMDGCN: error: unknown target CPU 'not-a-cpu'
 // AMDGCN: note: valid target CPU values are: gfx600, tahiti, gfx601, pitcairn, verde,
@@ -192,7 +191,7 @@
 
 // RUN: not %clang_cc1 -triple riscv32 -target-cpu not-a-cpu -fsyntax-only %s 2>&1 | FileCheck %s --check-prefix RISCV32
 // RISCV32: error: unknown target CPU 'not-a-cpu'
-// RISCV32: note: valid target CPU values are: generic-rv32, rocket-rv32, sifive-7-rv32, sifive-e31, sifive-e76
+// RISCV32: note: valid target CPU values are: generic-rv32, mempool-rv32, rocket-rv32, sifive-7-rv32, sifive-e31, sifive-e76, snitch
 
 // RUN: not %clang_cc1 -triple riscv64 -target-cpu not-a-cpu -fsyntax-only %s 2>&1 | FileCheck %s --check-prefix RISCV64
 // RISCV64: error: unknown target CPU 'not-a-cpu'
@@ -200,7 +199,7 @@
 
 // RUN: not %clang_cc1 -triple riscv32 -tune-cpu not-a-cpu -fsyntax-only %s 2>&1 | FileCheck %s --check-prefix TUNE-RISCV32
 // TUNE-RISCV32: error: unknown target CPU 'not-a-cpu'
-// TUNE-RISCV32: note: valid target CPU values are: generic-rv32, rocket-rv32, sifive-7-rv32, sifive-e31, sifive-e76, snitch, generic, rocket, sifive-7-series
+// TUNE-RISCV32: note: valid target CPU values are: generic-rv32, mempool-rv32, rocket-rv32, sifive-7-rv32, sifive-e31, sifive-e76, snitch
 
 // RUN: not %clang_cc1 -triple riscv64 -tune-cpu not-a-cpu -fsyntax-only %s 2>&1 | FileCheck %s --check-prefix TUNE-RISCV64
 // TUNE-RISCV64: error: unknown target CPU 'not-a-cpu'

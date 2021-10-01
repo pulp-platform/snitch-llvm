@@ -268,6 +268,7 @@ include "RISCVSchedSnitch.td"
 include "RISCVInstrInfoXfrep.td"
 include "RISCVInstrInfoXdma.td"
 include "RISCVInstrInfoXssr.td"
+include "RISCVInstrInfoXsmallfloat.td"
 
 //===----------------------------------------------------------------------===//
 // RISC-V processors supported.
@@ -316,7 +317,28 @@ def : ProcessorModel<"snitch", SnitchModel, [FeatureStdExtM,
                                              FeatureExtZfh,
                                              FeatureExtXfrep,
                                              FeatureExtXdma,
-                                             FeatureExtXssr]>;
+                                             FeatureExtXssr,
+                                             FeatureExtXfalthalf,
+                                             FeatureExtXfquarter,
+                                             FeatureExtXfaltquarter,
+                                             FeatureExtXfvecsingle,
+                                             FeatureExtXfvechalf,
+                                             FeatureExtXfvecalthalf,
+                                             FeatureExtXfvecquarter,
+                                             FeatureExtXfvecaltquarter,
+                                             FeatureExtXfauxhalf,
+                                             FeatureExtXfauxalthalf,
+                                             FeatureExtXfauxquarter,
+                                             FeatureExtXfauxaltquarter,
+                                             FeatureExtXfauxvecsingle,
+                                             FeatureExtXfauxvechalf,
+                                             FeatureExtXfauxvecalthalf,
+                                             FeatureExtXfauxvecquarter,
+                                             FeatureExtXfauxvecaltquarter,
+                                             FeatureExtXfexpauxvechalf,
+                                             FeatureExtXfexpauxvecalthalf,
+                                             FeatureExtXfexpauxvecquarter,
+                                             FeatureExtXfexpauxvecaltquarter ]>;
 
 //===----------------------------------------------------------------------===//
 // Define the RISC-V target.

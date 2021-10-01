@@ -77,6 +77,18 @@ static bool isSupportedExtension(StringRef Ext) {
   if (Ext == "xssr" || Ext == "xdma" || Ext == "xfrep" || Ext == "xmempool")
     return true;
 
+  // Pass smallfloat extensions as valid extensions
+  if (Ext == "xfalthalf" || Ext == "xfquarter" || Ext == "xfaltquarter" ||
+      Ext == "xfvecsingle" || Ext == "xfvechalf" || Ext == "xfvecalthalf" ||
+      Ext == "xfvecquarter" || Ext == "xfvecaltquarter" || Ext == "xfauxhalf" ||
+      Ext == "xfauxalthalf" || Ext == "xfauxquarter" ||
+      Ext == "xfauxaltquarter" || Ext == "xfauxvecsingle" ||
+      Ext == "xfauxvechalf" || Ext == "xfauxvecalthalf" ||
+      Ext == "xfauxvecquarter" || Ext == "xfauxvecaltquarter" ||
+      Ext == "xfexpauxvechalf" || Ext == "xfexpauxvecalthalf" ||
+      Ext == "xfexpauxvecquarter" || Ext == "xfexpauxvecaltquarter")
+    return true;
+
   // LLVM does not support "sx", "s" nor "x" extensions.
   return false;
 }

@@ -281,8 +281,10 @@ bool RISCVTargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
       HasZbs = true;
     else if (Feature == "+experimental-zbt")
       HasZbt = true;
-    else if (Feature == "+experimental-zfh")
+    else if (Feature == "+experimental-zfh") {
       HasZfh = true;
+      HasFloat16 = true;
+    }
     else if (Feature == "+experimental-zvamo")
       HasZvamo = true;
     else if (Feature == "+experimental-zvlsseg")

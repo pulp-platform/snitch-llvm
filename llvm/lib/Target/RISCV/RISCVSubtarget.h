@@ -104,6 +104,29 @@ private:
   bool HasExtXdma = false;
   bool HasExtXssr = false;
   bool HasExtXmempool = false;
+  // <-- Start of smallfloat extensions
+  bool HasExtXfalthalf = false;
+  bool HasExtXfquarter = false;
+  bool HasExtXfaltquarter = false;
+  bool HasExtXfvecsingle = false;
+  bool HasExtXfvechalf = false;
+  bool HasExtXfvecalthalf = false;
+  bool HasExtXfvecquarter = false;
+  bool HasExtXfvecaltquarter = false;
+  bool HasExtXfauxhalf = false;
+  bool HasExtXfauxalthalf = false;
+  bool HasExtXfauxquarter = false;
+  bool HasExtXfauxaltquarter = false;
+  bool HasExtXfauxvecsingle = false;
+  bool HasExtXfauxvechalf = false;
+  bool HasExtXfauxvecalthalf = false;
+  bool HasExtXfauxvecquarter = false;
+  bool HasExtXfauxvecaltquarter = false;
+  bool HasExtXfexpauxvechalf = false;
+  bool HasExtXfexpauxvecalthalf = false;
+  bool HasExtXfexpauxvecquarter = false;
+  bool HasExtXfexpauxvecaltquarter = false;
+  // -->
   bool HasRV64 = false;
   bool IsRV32E = false;
   bool EnableLinkerRelax = false;
@@ -142,9 +165,7 @@ public:
     return &FrameLowering;
   }
   const RISCVInstrInfo *getInstrInfo() const override { return &InstrInfo; }
-  const RISCVRegisterInfo *getRegisterInfo() const override {
-    return &RegInfo;
-  }
+  const RISCVRegisterInfo *getRegisterInfo() const override { return &RegInfo; }
   const RISCVTargetLowering *getTargetLowering() const override {
     return &TLInfo;
   }
@@ -195,6 +216,40 @@ public:
   bool hasExtXdma() const { return HasExtXdma; }
   bool hasExtXssr() const { return HasExtXssr; }
   bool hasExtXmempool() const { return HasExtXmempool; }
+  bool hasExtXsmallfloat() const {
+    return HasExtXfalthalf || HasExtXfquarter || HasExtXfaltquarter ||
+           HasExtXfvecsingle || HasExtXfvechalf || HasExtXfvecalthalf ||
+           HasExtXfvecquarter || HasExtXfvecaltquarter || HasExtXfauxhalf ||
+           HasExtXfauxalthalf || HasExtXfauxquarter || HasExtXfauxaltquarter ||
+           HasExtXfauxvecsingle || HasExtXfauxvechalf ||
+           HasExtXfauxvecalthalf || HasExtXfauxvecquarter ||
+           HasExtXfauxvecaltquarter || HasExtXfexpauxvechalf ||
+           HasExtXfexpauxvecalthalf || HasExtXfexpauxvecquarter ||
+           HasExtXfexpauxvecaltquarter;
+  }
+  // <-- Start of smallfloat extensions
+  bool hasExtXfalthalf() const { return HasExtXfalthalf; }
+  bool hasExtXfquarter() const { return HasExtXfquarter; }
+  bool hasExtXfaltquarter() const { return HasExtXfaltquarter; }
+  bool hasExtXfvecsingle() const { return HasExtXfvecsingle; }
+  bool hasExtXfvechalf() const { return HasExtXfvechalf; }
+  bool hasExtXfvecalthalf() const { return HasExtXfvecalthalf; }
+  bool hasExtXfvecquarter() const { return HasExtXfvecquarter; }
+  bool hasExtXfvecaltquarter() const { return HasExtXfvecaltquarter; }
+  bool hasExtXfauxhalf() const { return HasExtXfauxhalf; }
+  bool hasExtXfauxalthalf() const { return HasExtXfauxalthalf; }
+  bool hasExtXfauxquarter() const { return HasExtXfauxquarter; }
+  bool hasExtXfauxaltquarter() const { return HasExtXfauxaltquarter; }
+  bool hasExtXfauxvecsingle() const { return HasExtXfauxvecsingle; }
+  bool hasExtXfauxvechalf() const { return HasExtXfauxvechalf; }
+  bool hasExtXfauxvecalthalf() const { return HasExtXfauxvecalthalf; }
+  bool hasExtXfauxvecquarter() const { return HasExtXfauxvecquarter; }
+  bool hasExtXfauxvecaltquarter() const { return HasExtXfauxvecaltquarter; }
+  bool hasExtXfexpauxvechalf() const { return HasExtXfexpauxvechalf; }
+  bool hasExtXfexpauxvecalthalf() const { return HasExtXfexpauxvecalthalf; }
+  bool hasExtXfexpauxvecquarter() const { return HasExtXfexpauxvecquarter; }
+  bool hasExtXfexpauxvecaltquarter() const { return HasExtXfexpauxvecaltquarter; }
+  // -->
   bool is64Bit() const { return HasRV64; }
   bool isRV32E() const { return IsRV32E; }
   bool enableLinkerRelax() const { return EnableLinkerRelax; }
@@ -266,6 +321,6 @@ public:
   unsigned getMaxELENForFixedLengthVectors() const;
   bool useRVVForFixedLengthVectors() const;
 };
-} // End llvm namespace
+} // namespace llvm
 
 #endif

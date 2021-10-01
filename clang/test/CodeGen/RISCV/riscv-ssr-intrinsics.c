@@ -1,4 +1,4 @@
-// RUN: %clang -mcpu=snitch -S -emit-llvm -o - %s \
+// RUN: %clang -march=rv32ifd_xssr -S -emit-llvm -o - %s \
 // RUN:  | FileCheck %s --check-prefix=CHECK --check-prefix=CHECK-RISCV
 
 #include <stdint.h>

@@ -107,6 +107,28 @@ static const RISCVSupportedExtension SupportedExperimentalExtensions[] = {
     {"dma", RISCVExtensionVersion{0, 1}},
     {"frep", RISCVExtensionVersion{0, 1}},
     {"mempool", RISCVExtensionVersion{0, 1}},
+    // Smallfloat extensions
+    {"falthalf", RISCVExtensionVersion{0, 1}},
+    {"fquarter", RISCVExtensionVersion{0, 1}},
+    {"faltquarter"  , RISCVExtensionVersion{0, 1}},
+    {"fvecsingle", RISCVExtensionVersion{0, 1}},
+    {"fvechalf", RISCVExtensionVersion{0, 1}},
+    {"fvecalthalf", RISCVExtensionVersion{0, 1}},
+    {"fvecquarter", RISCVExtensionVersion{0, 1}},
+    {"fvecaltquarter", RISCVExtensionVersion{0, 1}},
+    {"fauxhalf", RISCVExtensionVersion{0, 1}},
+    {"fauxalthalf", RISCVExtensionVersion{0, 1}},
+    {"fauxquarter", RISCVExtensionVersion{0, 1}},
+    {"fauxaltquarter", RISCVExtensionVersion{0, 1}},
+    {"fauxvecsingle", RISCVExtensionVersion{0, 1}},
+    {"fauxvechalf", RISCVExtensionVersion{0, 1}},
+    {"fauxvecalthalf", RISCVExtensionVersion{0, 1}},
+    {"fauxvecquarter", RISCVExtensionVersion{0, 1}},
+    {"fauxvecaltquarter", RISCVExtensionVersion{0, 1}},
+    {"fexpauxvechalf", RISCVExtensionVersion{0, 1}},
+    {"fexpauxvecalthalf", RISCVExtensionVersion{0, 1}},
+    {"fexpauxvecquarter", RISCVExtensionVersion{0, 1}},
+    {"fexpauxvecaltquarter", RISCVExtensionVersion{0, 1}},
 };
 
 static bool stripExperimentalPrefix(StringRef &Ext) {

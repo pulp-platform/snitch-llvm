@@ -81,7 +81,7 @@ class SPseudoSetup1D:
 
 class SPseudoSetupRepetition:
       Pseudo<(outs),
-             (ins uimm5:$ssr, GPR:$rep),[]> {
+             (ins GPR:$ssr, GPR:$rep),[]> {
   let mayLoad = 1;
   let mayStore = 1;
   let hasSideEffects = 1;
@@ -90,7 +90,7 @@ class SPseudoSetupRepetition:
 
 class SPseudoSetupBoundStride:
       Pseudo<(outs),
-             (ins uimm5:$ssr, GPR:$bound, GPR:$stride),[]> {
+             (ins GPR:$ssr, GPR:$bound, GPR:$stride),[]> {
   let mayLoad = 1;
   let mayStore = 1;
   let hasSideEffects = 1;
@@ -114,7 +114,7 @@ class SPseudoPop:
 }
 
 class SPseudoRW:
-      Pseudo<(outs), (ins uimm5:$ssr, uimm5:$dim, GPR:$ptr),[]> {
+      Pseudo<(outs), (ins GPR:$ssr, GPR:$dim, GPR:$ptr),[]> {
   let mayLoad = 1;
   let mayStore = 1;
   let hasSideEffects = 1;
@@ -145,10 +145,10 @@ let Predicates = [HasExtXssr] in {
     def PseudoSSRSetupBoundStride_#dim#D : SPseudoSetupBoundStride;
   }
 
-  def PseudoSSREnable  : SPseudoEnDis;
-  def PseudoSSRDisable : SPseudoEnDis;
-  def PseudoSSRRead    : SPseudoRW;
-  def PseudoSSRWrite   : SPseudoRW;
+  def PseudoSSREnable   : SPseudoEnDis;
+  def PseudoSSRDisable  : SPseudoEnDis;
+  def PseudoSSRRead     : SPseudoRW;
+  def PseudoSSRWrite    : SPseudoRW;
   def PseudoSSRSetupRepetition   : SPseudoSetupRepetition;
   def PseudoSSRBarrier : SPseudoBarrier;
 
@@ -158,27 +158,27 @@ let Predicates = [HasExtXssr] in {
   def : Pat<(int_riscv_ssr_setup_1d_w timm:$ssr, GPR:$rep, GPR:$bound, GPR:$stride, GPR:$ptr),
           (PseudoSSRSetup_1D_W timm:$ssr, GPR:$rep, GPR:$bound, GPR:$stride, GPR:$ptr)>;
   
-  def : Pat<(int_riscv_ssr_setup_bound_stride_1d timm:$ssr, GPR:$bound, GPR:$stride),
-          (PseudoSSRSetupBoundStride_1D timm:$ssr, GPR:$bound, GPR:$stride)>;
-  def : Pat<(int_riscv_ssr_setup_bound_stride_2d timm:$ssr, GPR:$bound, GPR:$stride),
-          (PseudoSSRSetupBoundStride_2D timm:$ssr, GPR:$bound, GPR:$stride)>;
-  def : Pat<(int_riscv_ssr_setup_bound_stride_3d timm:$ssr, GPR:$bound, GPR:$stride),
-          (PseudoSSRSetupBoundStride_3D timm:$ssr, GPR:$bound, GPR:$stride)>;
-  def : Pat<(int_riscv_ssr_setup_bound_stride_4d timm:$ssr, GPR:$bound, GPR:$stride),
-          (PseudoSSRSetupBoundStride_4D timm:$ssr, GPR:$bound, GPR:$stride)>;
+  def : Pat<(int_riscv_ssr_setup_bound_stride_1d GPR:$ssr, GPR:$bound, GPR:$stride),
+          (PseudoSSRSetupBoundStride_1D GPR:$ssr, GPR:$bound, GPR:$stride)>;
+  def : Pat<(int_riscv_ssr_setup_bound_stride_2d GPR:$ssr, GPR:$bound, GPR:$stride),
+          (PseudoSSRSetupBoundStride_2D GPR:$ssr, GPR:$bound, GPR:$stride)>;
+  def : Pat<(int_riscv_ssr_setup_bound_stride_3d GPR:$ssr, GPR:$bound, GPR:$stride),
+          (PseudoSSRSetupBoundStride_3D GPR:$ssr, GPR:$bound, GPR:$stride)>;
+  def : Pat<(int_riscv_ssr_setup_bound_stride_4d GPR:$ssr, GPR:$bound, GPR:$stride),
+          (PseudoSSRSetupBoundStride_4D GPR:$ssr, GPR:$bound, GPR:$stride)>;
 
-  def : Pat<(int_riscv_ssr_read timm:$ssr, timm:$dim, GPR:$ptr),
-          (PseudoSSRRead timm:$ssr, timm:$dim, GPR:$ptr)>;
-  def : Pat<(int_riscv_ssr_write timm:$ssr, timm:$dim, GPR:$ptr),
-          (PseudoSSRWrite timm:$ssr, timm:$dim, GPR:$ptr)>;
+  def : Pat<(int_riscv_ssr_read GPR:$ssr, GPR:$dim, GPR:$ptr),
+          (PseudoSSRRead GPR:$ssr, GPR:$dim, GPR:$ptr)>;
+  def : Pat<(int_riscv_ssr_write GPR:$ssr, GPR:$dim, GPR:$ptr),
+          (PseudoSSRWrite GPR:$ssr, GPR:$dim, GPR:$ptr)>;
 
   def : Pat<(int_riscv_ssr_push timm:$ssr, FPR64:$val),
           (PseudoSSRPush timm:$ssr, FPR64:$val)>;
   def : Pat<(int_riscv_ssr_pop timm:$ssr),
           (PseudoSSRPop timm:$ssr)>;
 
-  def : Pat<(int_riscv_ssr_setup_repetition timm:$ssr, GPR:$rep),
-          (PseudoSSRSetupRepetition timm:$ssr, GPR:$rep)>;
+  def : Pat<(int_riscv_ssr_setup_repetition GPR:$ssr, GPR:$rep),
+          (PseudoSSRSetupRepetition GPR:$ssr, GPR:$rep)>;
 
   def : Pat<(int_riscv_ssr_enable), (PseudoSSREnable)>;
   def : Pat<(int_riscv_ssr_disable), (PseudoSSRDisable)>;

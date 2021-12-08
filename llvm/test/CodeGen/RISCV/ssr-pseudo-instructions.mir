@@ -67,20 +67,26 @@ name:            outline_4
 tracksRegLiveness: true
 body:             |
   bb.0:
-    liveins: $x5, $x6, $x7, $x28
-    ; RV32-SSR: SCFGWI $x5, 96
-    ; RV32-SSR-NEXT: SCFGWI $x6, 224
-    ; RV32-SSR-NEXT: SCFGWI $x5, 128
-    ; RV32-SSR-NEXT: SCFGWI $x6, 256
-    ; RV32-SSR-NEXT: SCFGWI $x5, 160
-    ; RV32-SSR-NEXT: SCFGWI $x6, 288
+    liveins: $x5, $x6, $x7, $x28, $x29
+    ; RV32-SSR: %0:gpr = ADDI $x29, 96
+    ; RV32-SSR-NEXT: %1:gpr = ADDI $x29, 224
+    ; RV32-SSR-NEXT: SCFGW $x5, killed %0
+    ; RV32-SSR-NEXT: SCFGW $x6, killed %1
+    ; RV32-SSR-NEXT: %2:gpr = ADDI $x29, 128
+    ; RV32-SSR-NEXT: %3:gpr = ADDI $x29, 256
+    ; RV32-SSR-NEXT: SCFGW $x5, killed %2
+    ; RV32-SSR-NEXT: SCFGW $x6, killed %3
+    ; RV32-SSR-NEXT: %4:gpr = ADDI $x29, 160
+    ; RV32-SSR-NEXT: %5:gpr = ADDI $x29, 288
+    ; RV32-SSR-NEXT: SCFGW $x5, killed %4
+    ; RV32-SSR-NEXT: SCFGW $x6, killed %5
     ; RV32-SSR-NEXT: SCFGWI $x5, 32
     ; RV32-SSR-NEXT: SCFGWI $x6, 64
     ; RV32-SSR-NEXT: SCFGWI $x7, 192
     ; RV32-SSR-NEXT: SCFGWI $x28, 768
-    PseudoSSRSetupBoundStride_2D 0,$x5, $x6 /* streamer, bound, stride */
-    PseudoSSRSetupBoundStride_3D 0,$x5, $x6 /* streamer, bound, stride */
-    PseudoSSRSetupBoundStride_4D 0,$x5, $x6 /* streamer, bound, stride */
+    PseudoSSRSetupBoundStride_2D $x29,$x5, $x6 /* streamer, bound, stride */
+    PseudoSSRSetupBoundStride_3D $x29,$x5, $x6 /* streamer, bound, stride */
+    PseudoSSRSetupBoundStride_4D $x29,$x5, $x6 /* streamer, bound, stride */
     PseudoSSRSetup_1D_R 0, $x5, $x6, $x7, $x28 /* streamer, rep, bound, stride, ptr */
     PseudoRET
 ...

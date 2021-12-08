@@ -1119,14 +1119,14 @@ let TargetPrefix = "riscv" in {
         /* RetTypes, ParamTypes, Properties */
         Intrinsic<[],
                   [llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty],
-                  [IntrHasSideEffects, ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<1>>]>,
+                  [IntrHasSideEffects]>,
         RISCVSSRIntrinsic;
   def int_riscv_ssr_write
       : GCCBuiltin<"__builtin_ssr_write">,
         /* RetTypes, ParamTypes, Properties */
         Intrinsic<[],
                   [llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty],
-                  [IntrHasSideEffects, ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<1>>]>,
+                  [IntrHasSideEffects]>,
         RISCVSSRIntrinsic;
 
   // The `Throws` attribute ensures that the push/pop don't get removed from loops
@@ -1158,14 +1158,14 @@ let TargetPrefix = "riscv" in {
         : GCCBuiltin<"__builtin_ssr_setup_bound_stride_"#dim#"d">,
           Intrinsic<[], 
                     [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-                    [IntrHasSideEffects, ImmArg<ArgIndex<0>>]>,
+                    [IntrHasSideEffects]>,
           RISCVSSRIntrinsic;
   }
   def int_riscv_ssr_setup_repetition
       : GCCBuiltin<"__builtin_ssr_setup_repetition">,
         Intrinsic<[],
                   [llvm_i32_ty, llvm_i32_ty],
-                  [IntrHasSideEffects, ImmArg<ArgIndex<0>>]>,
+                  [IntrHasSideEffects]>,
         RISCVSSRIntrinsic;
   def int_riscv_ssr_barrier
       : GCCBuiltin<"__builtin_ssr_barrier">,

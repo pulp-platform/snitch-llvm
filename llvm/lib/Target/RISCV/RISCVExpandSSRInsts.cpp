@@ -12,6 +12,40 @@
 //
 //===----------------------------------------------------------------------===//
 
+//===----------------------------------------------------------------------===//
+// The SSR are configured in a memory-mapped address space accessible through 
+// the SCGGW(I)/SCGGR(I) instructions. The (I)mmediate instructions take the 
+// address as an immediate. The Address map is as follows:
+//
+// | Word| Hex  | reg        |
+// |-----|------|------------|
+// | 0   | 0x00 | status     |
+// | 1   | 0x01 | repeat     |
+// | 2   | 0x02 | Bound 0    |
+// | 3   | 0x03 | Bound 1    |
+// | 4   | 0x04 | Bound 2    |
+// | 5   | 0x05 | Bound 3    |
+// | 6   | 0x06 | Stride 0   |
+// | 7   | 0x07 | Stride 1   |
+// | 8   | 0x08 | Stride 2   |
+// | 9   | 0x09 | Stride 3   |
+// |     |      | _reserved_ |
+// | 24  | 0x18 | Rptr 0     |
+// | 25  | 0x19 | Rptr 1     |
+// | 26  | 0x1a | Rptr 2     |
+// | 27  | 0x1b | Rptr 3     |
+// | 28  | 0x1c | Wptr 0     |
+// | 29  | 0x1d | Wptr 1     |
+// | 30  | 0x1e | Wptr 2     |
+// | 31  | 0x1f | Wptr 3     |
+// 
+// The data mover is selected in the lower 5 bits, the register offset is encoded
+// in the upper 7 bits. The value passed to scfgX is therefore
+//             addr = dm + reg << 5
+//
+// scfgw   rs1 rs2 # rs1=value rs2=addr
+//===----------------------------------------------------------------------===//
+
 #include "RISCV.h"
 #include "RISCVInstrInfo.h"
 #include "RISCVTargetMachine.h"
@@ -197,19 +231,19 @@ bool RISCVExpandSSR::expandSSR_Setup(MachineBasicBlock &MBB,
 
   // set repeat
   Register RepReg = MBBI->getOperand(1).getReg();
-  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(RepReg, 0).addImm(dm_off+(0x1<<5));
+  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(RepReg).addImm(dm_off+(0x1<<5));
   // set bound 0
   Register BoundReg = MBBI->getOperand(2).getReg();
-  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(BoundReg, 0).addImm(dm_off+(0x2<<5));
+  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(BoundReg).addImm(dm_off+(0x2<<5));
   // set stride 0
   Register StrideReg = MBBI->getOperand(3).getReg();
-  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(StrideReg, 0).addImm(dm_off+(0x6<<5));
+  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(StrideReg).addImm(dm_off+(0x6<<5));
   // set read/write pointer
   Register PtrReg = MBBI->getOperand(4).getReg();
   if(MBBI->getOpcode() == RISCV::PseudoSSRSetup_1D_R)
-    BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(PtrReg, 0).addImm(dm_off+(0x18<<5));
+    BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(PtrReg).addImm(dm_off+(0x18<<5));
   if(MBBI->getOpcode() == RISCV::PseudoSSRSetup_1D_W)
-    BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(PtrReg, 0).addImm(dm_off+(0x1c<<5));
+    BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(PtrReg).addImm(dm_off+(0x1c<<5));
 
   MBBI->eraseFromParent(); // The pseudo instruction is gone now.
   return true;
@@ -264,17 +298,28 @@ bool RISCVExpandSSR::expandSSR_ReadWrite(MachineBasicBlock &MBB,
                                           MachineBasicBlock::iterator MBBI) {
   DebugLoc DL = MBBI->getDebugLoc();
   bool isRead = MBBI->getOpcode() == RISCV::PseudoSSRRead;
+  MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
   
   // select streamer based on first argument
-  int dm_off = (int)MBBI->getOperand(0).getImm();
+  Register dm_off_reg = (int)MBBI->getOperand(0).getReg();
   // select dimension based on second argument
-  int dim_off = (int)MBBI->getOperand(1).getImm();
+  Register dim_off_reg = (int)MBBI->getOperand(1).getReg();
   // select read/write based read/write
   int rw_off = isRead ? 0x18 : 0x1c;
 
+  // reg  = (read ? 0x18 : 0x1c) + dim_off_reg
+  // addr = reg << 5 + dm_off
+
+  Register dim_off0 = MRI.createVirtualRegister(&RISCV::GPRRegClass);
+  BuildMI(MBB, MBBI, DL, TII->get(RISCV::ADDI), dim_off0).addReg(dim_off_reg).addImm(rw_off);
+  Register dim_off1 = MRI.createVirtualRegister(&RISCV::GPRRegClass);
+  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SLLI), dim_off1).addReg(dim_off0).addImm(5);
+  Register dim_off2 = MRI.createVirtualRegister(&RISCV::GPRRegClass);
+  BuildMI(MBB, MBBI, DL, TII->get(RISCV::ADD), dim_off2).addReg(dim_off1).addReg(dm_off_reg);
+
   // emit scfgwi at proper location
   Register PtrReg = MBBI->getOperand(2).getReg();
-  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(PtrReg, 0).addImm(dm_off+((dim_off+rw_off)<<5));
+  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGW)).addReg(PtrReg).addReg(dim_off2);
 
   MBBI->eraseFromParent(); // The pseudo instruction is gone now.
   return true;
@@ -283,13 +328,16 @@ bool RISCVExpandSSR::expandSSR_ReadWrite(MachineBasicBlock &MBB,
 bool RISCVExpandSSR::expandSSR_SetupRep(MachineBasicBlock &MBB,
                                           MachineBasicBlock::iterator MBBI) {
   DebugLoc DL = MBBI->getDebugLoc();
+  MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
 
   // select streamer based on first argument
-  int dm_off = (int)MBBI->getOperand(0).getImm();
+  Register dm_off_reg = MBBI->getOperand(0).getReg();
+  Register dm_off = MRI.createVirtualRegister(&RISCV::GPRRegClass);
+  BuildMI(MBB, MBBI, DL, TII->get(RISCV::ADDI), dm_off).addReg(dm_off_reg).addImm(1<<5);
 
   // emit scfgwi at proper location
   Register PtrReg = MBBI->getOperand(1).getReg();
-  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(PtrReg, 0).addImm(dm_off+(1<<5));
+  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGW)).addReg(PtrReg).addReg(dm_off, RegState::Kill);
 
   MBBI->eraseFromParent(); // The pseudo instruction is gone now.
   return true;
@@ -299,6 +347,8 @@ bool RISCVExpandSSR::expandSSR_BoundStride(MachineBasicBlock &MBB,
                                           MachineBasicBlock::iterator MBBI) {
   unsigned dim;
   DebugLoc DL = MBBI->getDebugLoc();
+  MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
+
   if(MBBI->getOpcode() == RISCV::PseudoSSRSetupBoundStride_1D) dim = 1;
   if(MBBI->getOpcode() == RISCV::PseudoSSRSetupBoundStride_2D) dim = 2;
   if(MBBI->getOpcode() == RISCV::PseudoSSRSetupBoundStride_3D) dim = 3;
@@ -307,14 +357,24 @@ bool RISCVExpandSSR::expandSSR_BoundStride(MachineBasicBlock &MBB,
   LLVM_DEBUG(dbgs() << "-- Expanding SSR Bound Stride " << dim << "D\n");
 
   // select streamer based on first argument
-  int dm_off = (int)MBBI->getOperand(0).getImm();
+  Register dm_off_reg = MBBI->getOperand(0).getReg();
+
+  // SCFGW rs1 rs2 # rs1=value rs2=addr
+  // addr= reg << 5 + dm_off
+  // dm_off = 0,1,2,3
+
+  // Build an add to calculate the SSR register
+  Register addr_bound = MRI.createVirtualRegister(&RISCV::GPRRegClass);
+  Register addr_stride = MRI.createVirtualRegister(&RISCV::GPRRegClass);
+  BuildMI(MBB, MBBI, DL, TII->get(RISCV::ADDI), addr_bound).addReg(dm_off_reg).addImm( ((2+(dim-1))<<5));
+  BuildMI(MBB, MBBI, DL, TII->get(RISCV::ADDI), addr_stride).addReg(dm_off_reg).addImm( ((6+(dim-1))<<5));
 
   // set bound
   Register BoundReg = MBBI->getOperand(1).getReg();
-  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(BoundReg, 0).addImm(dm_off + ((2+(dim-1))<<5) );
+  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGW)).addReg(BoundReg).addReg(addr_bound, RegState::Kill);
   // set stride
   Register StrideReg = MBBI->getOperand(2).getReg();
-  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(StrideReg, 0).addImm(dm_off + ((6+(dim-1))<<5) );
+  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGW)).addReg(StrideReg).addReg(addr_stride, RegState::Kill);
   
   MBBI->eraseFromParent(); // The pseudo instruction is gone now.
   return true;

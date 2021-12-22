@@ -38,6 +38,7 @@ define cmake_llvm
 	mkdir -p $(1); \
 	${CMAKE} \
 		-DCMAKE_BUILD_TYPE="Release" -DLLVM_ENABLE_ASSERTIONS=ON \
+		-DLLVM_OPTIMIZED_TABLEGEN=True \
 		-DCMAKE_INSTALL_PREFIX=$(2) \
 		-DLLVM_ENABLE_PROJECTS="clang;lld" \
 		-DLLVM_TARGETS_TO_BUILD="RISCV" \

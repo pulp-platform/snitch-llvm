@@ -11,6 +11,7 @@ artifacts:
   # Contains the entire LLVM build directory
   tc-llvm:
     inputs:
+      - .gitlab-ci.yml
       - .gitlab-ci.d/Makefile
       - clang
       - clang-tools-extra

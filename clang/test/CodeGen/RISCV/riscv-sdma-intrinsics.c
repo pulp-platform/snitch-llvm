@@ -1,4 +1,4 @@
-// RUN: %clang -march=rv32i_xdma -S -emit-llvm -o - %s \
+// RUN: %clang -march=rv32i_xdma1 -S -emit-llvm -o - %s \
 // RUN:  | FileCheck %s --check-prefix=CHECK --check-prefix=CHECK-RISCV
 
 #include <stdint.h>

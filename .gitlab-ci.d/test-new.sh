@@ -18,6 +18,9 @@ if [ -z ${mergebase+x} ]; then
     mergebase=llvmorg-12.0.1
 fi
 
+# Fetch all tags, so they can be referred to for diffs.
+git fetch --tags
+
 # Test discovery
 prefix=$(git rev-parse --show-toplevel)
 clang_tests=$(git diff --name-only $mergebase HEAD -- ${prefix}/clang/test | xargs -I{} -n1 echo ${prefix}/{})

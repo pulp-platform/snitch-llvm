@@ -20,8 +20,8 @@ fi
 
 # Test discovery
 prefix=$(git rev-parse --show-toplevel)
-clang_tests=$(git diff --name-only $mergebase HEAD ${prefix}/clang/test | xargs -I{} -n1 echo ${prefix}/{})
-llvm_tests=$(git diff --name-only $mergebase HEAD ${prefix}/llvm/test | xargs -I{} -n1 echo ${prefix}/{})
+clang_tests=$(git diff --name-only $mergebase HEAD -- ${prefix}/clang/test | xargs -I{} -n1 echo ${prefix}/{})
+llvm_tests=$(git diff --name-only $mergebase HEAD -- ${prefix}/llvm/test | xargs -I{} -n1 echo ${prefix}/{})
 
 # Collect all tests and remove configs
 tests="${clang_tests} ${llvm_tests}"

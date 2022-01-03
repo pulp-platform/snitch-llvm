@@ -4514,13 +4514,13 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back(Args.MakeArgString(herculesPassRoot +
           "libChannelArgInsertion.so"));
 
-  } else {
     llvm::errs() << llvm::sys::path::filename(Input.getBaseInput())
       << " (" << getToolChain().getArchName() << "): ";
     llvm::errs().changeColor(llvm::raw_fd_ostream::Colors::BLUE, true);
-    llvm::errs() << "HERCULES PREM Passes not applied. ";
+    llvm::errs() << "Applying HERCULES PREM Passes installed at '";
+    llvm::errs() << herculesInstallPathEnv;
     llvm::errs().resetColor();
-    llvm::errs() << "Set the HERCULES_INSTALL env if you want to enable PREM.\n";
+    llvm::errs() << "'\n";
   }
 
   if (Triple.isOSWindows() && (Triple.getArch() == llvm::Triple::arm ||

@@ -104,15 +104,19 @@ def FSB : RVInstS<0b000, RISCVOpcode<"FSB", 0b0100111>, (outs ),
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 def FMADD_B : RVInstR4Frm<0b11, RISCVOpcode<"FMADD_B", 0b1000011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2, FPR16:$rs3, frmarg:$funct3), "fmadd.b", "$rd, $rs1, $rs2, $rs3, $funct3">, Sched<[]>;
+def      : InstAlias<"fmadd.b $rd, $rs1, $rs2, $rs3", (FMADD_B FPR16:$rd, FPR16:$rs1, FPR16:$rs2, FPR16:$rs3, 0b111)>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 def FMSUB_B : RVInstR4Frm<0b11, RISCVOpcode<"FMSUB_B", 0b1000111>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2, FPR16:$rs3, frmarg:$funct3), "fmsub.b", "$rd, $rs1, $rs2, $rs3, $funct3">, Sched<[]>;
+def      : InstAlias<"fmsub.b $rd, $rs1, $rs2, $rs3", (FMSUB_B FPR16:$rd, FPR16:$rs1, FPR16:$rs2, FPR16:$rs3, 0b111)>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 def FNMSUB_B : RVInstR4Frm<0b11, RISCVOpcode<"FNMSUB_B", 0b1001011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2, FPR16:$rs3, frmarg:$funct3), "fnmsub.b", "$rd, $rs1, $rs2, $rs3, $funct3">, Sched<[]>;
+def      : InstAlias<"fnmsub.b $rd, $rs1, $rs2, $rs3", (FNMSUB_B FPR16:$rd, FPR16:$rs1, FPR16:$rs2, FPR16:$rs3, 0b111)>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 def FNMADD_B : RVInstR4Frm<0b11, RISCVOpcode<"FNMADD_B", 0b1001111>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2, FPR16:$rs3, frmarg:$funct3), "fnmadd.b", "$rd, $rs1, $rs2, $rs3, $funct3">, Sched<[]>;
+def      : InstAlias<"fnmadd.b $rd, $rs1, $rs2, $rs3", (FNMADD_B FPR16:$rd, FPR16:$rs1, FPR16:$rs2, FPR16:$rs3, 0b111)>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 def FADD_B : RVInstRFrm<0b0000011, RISCVOpcode<"FADD_B", 0b1010011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2, frmarg:$funct3), "fadd.b", "$rd, $rs1, $rs2, $funct3">, Sched<[]> ;

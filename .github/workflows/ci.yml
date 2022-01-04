@@ -141,21 +141,21 @@ jobs:
       ########################################
       ## Test
       ########################################
-      - name: Test LLVM
-        run: |
-          cd ${BUILDPREFIX}/llvm
-          ninja check-all 2>&1 | tee ${GITHUB_WORKSPACE}/llvm-check-all.log
-          echo "**[BOT]** \`ninja check-all\` failed tests\n\`\`\`" > ${GITHUB_WORKSPACE}/llvm-check-all-summary.log
-          cat check-all.log | awk '/Failed Tests/,0' >> ${GITHUB_WORKSPACE}/llvm-check-all-summary.log
-          echo "\`\`\`" >> ${GITHUB_WORKSPACE}/llvm-check-all-summary.log
-          cat ${GITHUB_WORKSPACE}/llvm-check-all-summary.log
-      - name: Report Test LLVM
-        uses: marocchino/sticky-pull-request-comment@v2
-        with:
-          append: false
-          header: llvm-check-all
-          GITHUB_TOKEN: ${{ secrets.PAT }}
-          path: ${GITHUB_WORKSPACE}/llvm-check-all-summary.log
+      #- name: Test LLVM
+      #  run: |
+      #    cd ${BUILDPREFIX}/llvm
+      #    ninja check-all 2>&1 | tee ${GITHUB_WORKSPACE}/llvm-check-all.log
+      #    echo "**[BOT]** \`ninja check-all\` failed tests\n\`\`\`" > ${GITHUB_WORKSPACE}/llvm-check-all-summary.log
+      #    cat check-all.log | awk '/Failed Tests/,0' >> ${GITHUB_WORKSPACE}/llvm-check-all-summary.log
+      #    echo "\`\`\`" >> ${GITHUB_WORKSPACE}/llvm-check-all-summary.log
+      #    cat ${GITHUB_WORKSPACE}/llvm-check-all-summary.log
+      #- name: Report Test LLVM
+      #  uses: marocchino/sticky-pull-request-comment@v2
+      #  with:
+      #    append: false
+      #    header: llvm-check-all
+      #    GITHUB_TOKEN: ${{ secrets.PAT }}
+      #    path: ${GITHUB_WORKSPACE}/llvm-check-all-summary.log
       - name: Test Snitch LLVM
         run: |
           cd ${GITHUB_WORKSPACE}

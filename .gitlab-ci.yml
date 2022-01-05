@@ -17,6 +17,13 @@ variables:
   TRIPLE: riscv32-iis-llvm
   LLVM_VERSION: 12.0.1
 
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+      when: never # avoid duplicate branch and merge request pipelines
+    - if: '$CI_COMMIT_BRANCH'
+
 stages:
   - tools
   - build
@@ -96,6 +103,20 @@ snitch-runtime-banshee:
     - cmake-3.18.1 -DCMAKE_TOOLCHAIN_FILE=toolchain-llvm -DBUILD_TESTS=ON .. 
     - make -j`nproc`
     - ctest -j`nproc`
+
+hero:
+  stage: test
+  needs: []
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  trigger:
+    project: hero/hero
+  inherit:
+    variables: false
+  variables:
+    DOWNSTREAM: "true"
+    SUBMODULE_NAME: $CI_PROJECT_NAME
+    SUBMODULE_COMMIT_SHA: $CI_COMMIT_SHA
 
 ########################################
 ## Package stage

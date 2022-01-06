@@ -111,6 +111,8 @@ hero:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
   trigger:
     project: hero/hero
+    strategy: depend
+  allow_failure: true
   inherit:
     variables: false
   variables:

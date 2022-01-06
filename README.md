@@ -1,10 +1,16 @@
-# Snitch-LLVM
+# LLVM for PULP Platform Projects
 
-LLVM 12 with extensions for [Snitch](https://github.com/pulp-platform/snitch). These include
+LLVM 12 with extensions for processors and computer systems of the [PULP platform](https://pulp-platform.org).  These include:
+- [HERO][hero]: mixed-data-model (64-bit + 32-bit) compilation and data sharing; automatic tiling of data structures and insertion of DMA transfers;
+- MemPool: Instruction scheduling model for the MemPool architecture; `Xmempool` extension to allow dynamic instruction tracing;
+- [PULPv2 RISC-V ISA extension (`Xpulpv2`)][hero]: automatic insertion of hardware loops, post-increment memory accesses, and multiply-accumulates; intrinsics, `clang` builtins , and assembly support for all instructions of the extension;
+- [Snitch RISC-V ISA extensions (`Xssr`, `Xfrep`, and `Xdma`)][snitch]: automatic insertion of `frep` hardware loops; intrinsics and `clang` builtins for `Xssr` and `Xdma` extensions; assembly support for all instructions of the extension.
 
-- Assembly support for SSR, DMA and FREP extensions
-- Intrinsics and `clang` builtins for SSR and DMA extensions
-- FREP hardware loops
+# HERO and PULPv2 RISC-V ISA Extension Support
+
+Refer to the [HERO repository](https://github.com/pulp-platform/hero) for build scripts and instructions to use these features.
+
+# Snitch RISC-V ISA Extension Support
 
 ## Build instructions
 Refer to [snitch-toolchain-cd](https://github.com/pulp-platform/snitch-toolchain-cd) for build scripts and continuous deployment of pre-built toolchains.
@@ -332,3 +338,6 @@ Consult the
 page for detailed information on configuring and compiling LLVM. You can visit
 [Directory Layout](https://llvm.org/docs/GettingStarted.html#directory-layout)
 to learn about the layout of the source code tree.
+
+[hero]: #hero-and-pulpv2-risc-v-isa-extension-support
+[snitch]: #snitch-risc-v-isa-extension-support

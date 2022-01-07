@@ -169,3 +169,100 @@ jobs:
         with:
           name: Test Info
           path: ${GITHUB_WORKSPACE}/snitch-tests.log
+
+  ########################################
+  ########################################
+  ## NIGHLY RELEASE
+  ########################################
+  ########################################
+  nightly_release:
+    name: Build nightly Release
+    strategy:
+      matrix:
+        os:
+        - ubuntu2004
+        - centos7
+    runs-on: ubuntu-20.04
+    env:
+      PKGVERS: riscv32-pulp-llvm-${{ matrix.os }}-${{ github.run_number }}
+      BUGURL: https://github.com/pulp-platform/llvm-project/issues
+      BUILDNO: ${{ github.run_number }}
+      SOURCEFORGE_SSH_PRIVATE_KEY: ${{secrets.SOURCEFORGE_SSH_PRIVATE_KEY}}
+      SOURCEFORGE_HOST_SIGNATURE: ${{secrets.SOURCEFORGE_HOST_SIGNATURE}}
+      SOURCEFORGE_KEY: ${{ github.workspace }}/../private.key
+    steps:
+      ########################################
+      ## Checkout
+      ########################################
+      
+      ## This
+      -
+        name: Checkout LLVM
+        uses: actions/checkout@v2
+        with:
+          path: llvm-project
+      
+      ## NEWLIB
+      -
+        name: Checkout newlib
+        run: |
+          git clone --depth 1 -b newlib-3.3.0 https://sourceware.org/git/newlib-cygwin.git newlib
+      
+      ########################################
+      ## Build docker container
+      ########################################
+      -
+        name: Prepare Docker
+        uses: docker/build-push-action@v2
+        with:
+          push: false
+          load: true
+          context: llvm-project/.github/docker
+          file: llvm-project/.github/docker/linux-${{ matrix.os }}.Dockerfile
+          tags: linux-${{ matrix.os }}:latest
+      
+      ########################################
+      ## Build Info
+      ########################################
+      -
+        name: Build Info
+        run: |
+         docker run -v $PWD:/home/builder -w/home/builder linux-${{ matrix.os }}:latest llvm-project/.github/scripts/builder-info.sh
+         cat build-info.txt
+      
+      ########################################
+      ## Build
+      ########################################
+      -
+        name: Build
+        run: |
+          docker run -v $PWD:/home/builder -w/home/builder \
+            -e BUGURL=${BUGURL} \
+            -e PKGVERS=${PKGVERS} \
+            -e BUILDNO=${BUILDNO} \
+            linux-${{ matrix.os }}:latest \
+            llvm-project/.github/scripts/build-riscv32-llvm.sh
+
+      ########################################
+      ## Package
+      ########################################
+      -
+        name: Package
+        run: |
+          tar -czf ${PKGVERS}.tar.gz --transform s/^install/${PKGVERS}/ install
+
+      ########################################
+      ## Deploy
+      ########################################
+      -
+        name: deploy-prepare
+        run: |
+          mkdir -p ~/.ssh/
+          echo "${SOURCEFORGE_SSH_PRIVATE_KEY}" > ${SOURCEFORGE_KEY}
+          sudo chmod 600 ${SOURCEFORGE_KEY}
+          echo "${SOURCEFORGE_HOST_SIGNATURE}" >> ~/.ssh/known_hosts
+      -
+        name: deploy-sourceforge
+        run: |
+          dstname=`echo ${PKGVERS} | rev | cut -d'-' -f 2- | rev`
+          scp -i ${SOURCEFORGE_KEY} ${PKGVERS}.tar.gz beeble42brox@frs.sourceforge.net:/home/frs/project/pulp-llvm-project/nightly/${dstname}.tar.gz

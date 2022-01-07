@@ -208,6 +208,19 @@ jobs:
         run: |
           git clone --depth 1 -b newlib-3.3.0 https://sourceware.org/git/newlib-cygwin.git newlib
       
+      
+      ########################################
+      ## Debug
+      ########################################
+      -
+        name: Debug
+        run: |
+          echo "PWD: `pwd`"
+          echo "PWD: ${PWD}"
+          echo "llvm-project: `ls -al llvm-project`"
+          echo "llvm-project/.github: `ls -al llvm-project/.github`"
+          echo "llvm-project/.github/docker: `ls -al llvm-project/.github/docker`"
+          echo "llvm-project/.github/scripts: `ls -al llvm-project/.github/scripts`"
       ########################################
       ## Build docker container
       ########################################

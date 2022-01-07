@@ -229,6 +229,8 @@ jobs:
         uses: docker/build-push-action@v2
         with:
           push: false
+          load: true
+          context: llvm-project/.github/docker
           file: llvm-project/.github/docker/linux-${{ matrix.os }}.Dockerfile
           tags: linux-${{ matrix.os }}:latest
       

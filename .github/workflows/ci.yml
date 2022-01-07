@@ -240,7 +240,7 @@ jobs:
       -
         name: Build Info
         run: |
-         docker run -v $PWD:/home/builder -w/home/builder linux-${{ matrix.os }}:latest ./builder-info.sh
+         docker run -v $PWD:/home/builder -w/home/builder linux-${{ matrix.os }}:latest llvm-project/.github/scripts/builder-info.sh
          cat build-info.txt
       
       ########################################

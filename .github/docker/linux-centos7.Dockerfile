@@ -24,13 +24,6 @@ RUN mkdir -p /tmp/cmake && cd /tmp/cmake && \
     make -j$(nproc) && make install && \
     cd /tmp && rm -rf cmake
 
-# Install new DejaGNU for more reliable test summary generation
-RUN mkdir -p /tmp/dejagnu && cd /tmp/dejagnu && \
-    wget https://ftp.gnu.org/gnu/dejagnu/dejagnu-1.6.2.tar.gz && \
-    tar xf dejagnu-1.6.2.tar.gz && cd dejagnu-1.6.2 && \
-    ./configure && make && make install && \
-    cd /tmp && rm -rf dejagnu
-
 # Install ninja 1.10.2
 RUN mkdir -p /tmp/ninja && cd /tmp/ninja && \
     git clone https://github.com/ninja-build/ninja.git -b v1.10.2 . && \

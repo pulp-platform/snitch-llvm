@@ -30,6 +30,7 @@ stages:
 
 tc-llvm:
   stage: build
+  needs: []
   script:
     - |
       if ! $CI_PROJECT_DIR/.gitlab-ci.d/memora_retry.sh lookup tc-llvm; then
@@ -42,6 +43,7 @@ tc-llvm:
 # Build most recent banshee and upload as artifact
 banshee:
   stage: build
+  needs: []
   before_script:
     - |
     - rustup toolchain install 1.50.0
@@ -70,6 +72,7 @@ banshee:
 # Re-build entire LLVM
 llvm-new:
   stage: test
+  needs: []
   before_script:
     - make -C ${CI_PROJECT_DIR}/.gitlab-ci.d tc-llvm
   script:
@@ -78,6 +81,9 @@ llvm-new:
 # Use the built TC to build the snitch runtime and test it on banshee
 snitch-runtime-banshee:
   stage: test
+  needs:
+    - banshee
+    - tc-llvm
   dependencies: 
     - banshee
   before_script:
@@ -97,6 +103,8 @@ snitch-runtime-banshee:
 
 dist:
   stage: package
+  needs:
+    - tc-llvm
   before_script:
     - export PKGVERS=${TRIPLE}-centos7-${LLVM_VERSION}-$(git rev-parse --short HEAD)
     - echo ${PKGVERS}
@@ -113,6 +121,7 @@ dist:
 
 github:
   stage: deploy
+  # no `needs` keyword means this job depends on all jobs from previous stages
   only:
     refs:
       - main

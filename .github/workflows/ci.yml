@@ -187,8 +187,8 @@ jobs:
       PKGVERS: riscv32-pulp-llvm-${{ matrix.os }}-${{ github.run_number }}
       BUGURL: https://github.com/pulp-platform/llvm-project/issues
       BUILDNO: ${{ github.run_number }}
-      SSH_PRIVATE_KEY: ${{secrets.SOURCEFORGE_SSH_PRIVATE_KEY}}
-      SSH_KNOWN_HOSTS: ${{secrets.SSH_KNOWN_HOSTS}}
+      SOURCEFORGE_SSH_PRIVATE_KEY: ${{secrets.SOURCEFORGE_SSH_PRIVATE_KEY}}
+      SOURCEFORGE_HOST_SIGNATURE: ${{secrets.SOURCEFORGE_HOST_SIGNATURE}}
       SOURCEFORGE_KEY: ${{ github.workspace }}/../private.key
     steps:
       ########################################
@@ -271,9 +271,9 @@ jobs:
         name: deploy-prepare
         run: |
           mkdir -p ~/.ssh/
-          echo "${SSH_PRIVATE_KEY}" > ${SOURCEFORGE_KEY}
+          echo "${SOURCEFORGE_SSH_PRIVATE_KEY}" > ${SOURCEFORGE_KEY}
           sudo chmod 600 ${SOURCEFORGE_KEY}
-          echo "${SSH_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          echo "${SOURCEFORGE_HOST_SIGNATURE}" >> ~/.ssh/known_hosts
       -
         name: deploy-sourceforge
         run: |

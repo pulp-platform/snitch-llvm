@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Build toolchain on release
-name: CI
+name: release
 on:
   release:
     types: [created]
@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-20.04
     env:
       LLVMTAG: ${GITHUB_REF/refs\/tags\//}
-      PKGVERS: riscv32-pulp-llvm-${{ matrix.os }}-${LLVMTAG}
+      PKGVERS: riscv32-pulp-llvm-${{ matrix.os }}-${{ env.LLVMTAG }}
       BUGURL: https://github.com/pulp-platform/llvm-project/issues
       BUILDNO: ${{ github.run_number }}
     steps:
@@ -60,6 +60,7 @@ jobs:
       -
         name: Build Info
         run: |
+          echo "LLVMTAG=${LLVMTAG}"
           echo "BUGURL=${BUGURL}"
           echo "PKGVERS=${PKGVERS}"
           echo "BUILDNO=${BUILDNO}"

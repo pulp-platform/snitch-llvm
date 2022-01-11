@@ -108,6 +108,30 @@ void __builtin_ssr_read(uint32_t DM, uint32_t dim, void* data);
 void __builtin_ssr_write(uint32_t DM, uint32_t dim, void* data);
 
 /**
+ * @brief Start an SSR read transfer. `DM` and `dim` must be constant. This method 
+ * lowers to a single `scfgwi` instruction as opposed to the non-immediate version which
+ * does address calculation first.
+ * @details Bound and stride can be configured using the respective methods
+ * 
+ * @param DM data mover ID
+ * @param dim Number of dimensions minus one
+ * @param data pointer to data
+ */
+void __builtin_ssr_read_imm(uint32_t DM, uint32_t dim, void* data);
+
+/**
+ * @brief Start an SSR write transfer. `DM` and `dim` must be constant. This method 
+ * lowers to a single `scfgwi` instruction as opposed to the non-immediate version which
+ * does address calculation first.
+ * @details Bound and stride can be configured using the respective methods
+ * 
+ * @param DM data mover ID
+ * @param dim Number of dimensions minus one
+ * @param data pointer to data
+ */
+void __builtin_ssr_write_imm(uint32_t DM, uint32_t dim, void* data);
+
+/**
  * @brief Configure repetition value
  * @details A value of 0 loads each datum once
  * 

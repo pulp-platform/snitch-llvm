@@ -1878,6 +1878,20 @@ let TargetPrefix = "riscv" in {
                   [llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty],
                   [IntrHasSideEffects]>,
         RISCVSSRIntrinsic;
+  def int_riscv_ssr_read_imm
+      : GCCBuiltin<"__builtin_ssr_read_imm">,
+        /* RetTypes, ParamTypes, Properties */
+        Intrinsic<[],
+                  [llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty],
+                  [IntrHasSideEffects, ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<1>>]>,
+        RISCVSSRIntrinsic;
+  def int_riscv_ssr_write_imm
+      : GCCBuiltin<"__builtin_ssr_write_imm">,
+        /* RetTypes, ParamTypes, Properties */
+        Intrinsic<[],
+                  [llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty],
+                  [IntrHasSideEffects, ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<1>>]>,
+        RISCVSSRIntrinsic;
 
   // The `Throws` attribute ensures that the push/pop don't get removed from loops
   // by the LICM pass

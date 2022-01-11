@@ -121,6 +121,14 @@ class SPseudoRW:
   let usesCustomInserter = 0;
 }
 
+class SPseudoRWImm:
+      Pseudo<(outs), (ins uimm5:$ssr, uimm5:$dim, GPR:$ptr),[]> {
+  let mayLoad = 1;
+  let mayStore = 1;
+  let hasSideEffects = 1;
+  let usesCustomInserter = 0;
+}
+
 class SPseudoEnDis:
       Pseudo<(outs), (ins),[]> {
   let mayLoad = 1;
@@ -149,6 +157,8 @@ let Predicates = [HasExtXssr] in {
   def PseudoSSRDisable  : SPseudoEnDis;
   def PseudoSSRRead     : SPseudoRW;
   def PseudoSSRWrite    : SPseudoRW;
+  def PseudoSSRReadImm  : SPseudoRWImm;
+  def PseudoSSRWriteImm : SPseudoRWImm;
   def PseudoSSRSetupRepetition   : SPseudoSetupRepetition;
   def PseudoSSRBarrier : SPseudoBarrier;
 
@@ -171,6 +181,10 @@ let Predicates = [HasExtXssr] in {
           (PseudoSSRRead GPR:$ssr, GPR:$dim, GPR:$ptr)>;
   def : Pat<(int_riscv_ssr_write GPR:$ssr, GPR:$dim, GPR:$ptr),
           (PseudoSSRWrite GPR:$ssr, GPR:$dim, GPR:$ptr)>;
+  def : Pat<(int_riscv_ssr_read_imm timm:$ssr, timm:$dim, GPR:$ptr),
+          (PseudoSSRReadImm timm:$ssr, timm:$dim, GPR:$ptr)>;
+  def : Pat<(int_riscv_ssr_write_imm timm:$ssr, timm:$dim, GPR:$ptr),
+          (PseudoSSRWriteImm timm:$ssr, timm:$dim, GPR:$ptr)>;
 
   def : Pat<(int_riscv_ssr_push timm:$ssr, FPR64:$val),
           (PseudoSSRPush timm:$ssr, FPR64:$val)>;

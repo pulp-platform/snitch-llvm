@@ -108,6 +108,8 @@ private:
                          MachineBasicBlock::iterator MBBI);
   bool expandSSR_ReadWrite(MachineBasicBlock &MBB,
                          MachineBasicBlock::iterator MBBI);
+  bool expandSSR_ReadWriteImm(MachineBasicBlock &MBB,
+                         MachineBasicBlock::iterator MBBI);
   bool expandSSR_BoundStride(MachineBasicBlock &MBB,
                          MachineBasicBlock::iterator MBBI);
   bool expandSSR_EnDis(MachineBasicBlock &MBB,
@@ -192,6 +194,9 @@ bool RISCVExpandSSR::expandMI(MachineBasicBlock &MBB,
   case RISCV::PseudoSSRRead:
   case RISCV::PseudoSSRWrite:
     return expandSSR_ReadWrite(MBB, MBBI);
+  case RISCV::PseudoSSRReadImm:
+  case RISCV::PseudoSSRWriteImm:
+    return expandSSR_ReadWriteImm(MBB, MBBI);
   case RISCV::PseudoSSRSetupBoundStride_1D:
   case RISCV::PseudoSSRSetupBoundStride_2D:
   case RISCV::PseudoSSRSetupBoundStride_3D:
@@ -320,6 +325,25 @@ bool RISCVExpandSSR::expandSSR_ReadWrite(MachineBasicBlock &MBB,
   // emit scfgwi at proper location
   Register PtrReg = MBBI->getOperand(2).getReg();
   BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGW)).addReg(PtrReg).addReg(dim_off2);
+
+  MBBI->eraseFromParent(); // The pseudo instruction is gone now.
+  return true;
+}
+
+bool RISCVExpandSSR::expandSSR_ReadWriteImm(MachineBasicBlock &MBB,
+                                          MachineBasicBlock::iterator MBBI) {
+  DebugLoc DL = MBBI->getDebugLoc();
+
+  bool read = MBBI->getOpcode() == RISCV::PseudoSSRReadImm;
+
+  // select streamer based on first argument
+  int dm_off = (int)MBBI->getOperand(0).getImm();
+  int dim = (int)MBBI->getOperand(1).getImm();
+  int ssr_reg = (((read ? 0x18 : 0x1c) + dim) << 5) + dm_off;
+  Register PtrReg = MBBI->getOperand(2).getReg();
+
+  // set read/write pointer
+  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(PtrReg).addImm(ssr_reg);
 
   MBBI->eraseFromParent(); // The pseudo instruction is gone now.
   return true;

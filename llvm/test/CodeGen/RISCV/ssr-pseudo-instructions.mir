@@ -9,6 +9,7 @@
   define i32 @outline_4(i32 %a, i32 %b) { ret i32 0 }
   define i32 @outline_5(i32 %a, i32 %b) { ret i32 0 }
   define i32 @outline_6(i32 %a, i32 %b) { ret i32 0 }
+  define i32 @outline_7(i32 %a, i32 %b) { ret i32 0 }
 ...
 ---
 name:            outline_0
@@ -124,5 +125,17 @@ body:             |
 
     PseudoSSRBarrier 1
 
+    PseudoRET
+...
+---
+name:            outline_7
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $x1, $x2
+    ; RV32-SSR: SCFGWI $x1, 800
+    ; RV32-SSR-NEXT: SCFGWI $x2, 961
+    PseudoSSRReadImm 0, 1, $x1 /* streamer, dim, ptr */
+    PseudoSSRWriteImm 1, 2, $x2 /* streamer, dim, ptr */
     PseudoRET
 ...

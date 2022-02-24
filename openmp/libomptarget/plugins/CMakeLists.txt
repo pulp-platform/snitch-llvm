@@ -75,7 +75,7 @@ add_subdirectory(ppc64le)
 add_subdirectory(ve)
 add_subdirectory(x86_64)
 add_subdirectory(remote)
-add_subdirectory(pulp)
+add_subdirectory(hero)
 
 # Make sure the parent scope can see the plugins that will be created.
 set(LIBOMPTARGET_SYSTEM_TARGETS "${LIBOMPTARGET_SYSTEM_TARGETS}" PARENT_SCOPE)

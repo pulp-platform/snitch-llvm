@@ -43,14 +43,14 @@
 #include "libgomp-plugin.h"
 #include "gomp-constants.h"
 
-#include "plugin-pulp-hero.h"
+#include "plugin-hero-dev.h"
 
 extern "C" const char *
 GOMP_OFFLOAD_get_name (void)
 {
   TRACE_FUNCTION();
 
-  return "pulp-hero";
+  return "hero-dev";
 }
 
 extern "C" unsigned int

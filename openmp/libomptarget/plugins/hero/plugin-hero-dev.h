@@ -27,7 +27,7 @@
  * <http://www.gnu.org/licenses/>.
  */
 
-#ifndef PLUGIN_PULP_HERO_H__
+#ifndef PLUGIN_HERO_DEV_H__
 
 #define PRINT_CYCLES_PLUGIN_PULP_HERO 1
 #define DEBUG_LEVEL_PLUGIN_PULP_HERO 0
@@ -55,16 +55,16 @@
 
 extern "C" {
 
-#include "pulp.h"
+#include "herodev.h"
 
-#define PULP_HERO_DEFAULT_CLUSTER_ID (0x1U)
-#define PULP_HERO_DEFAULT_FREQ (PULP_DEFAULT_FREQ_MHZ)
-#define PULP_HERO_DEFAULT_MEM_MODE (copy)
-#define PULP_HERO_DEFAULT_RAB_LEVEL (0x2U)
-#define PULP_HERO_DEFAULT_RAB_LOG_EN (0x0U)
-#define PULP_HERO_DEFAULT_INTR_RAB_MISS_DIS (0x1U)
-#define PULP_HERO_DEFAULT_ACP_EN (0x0U)
-#define PULP_HERO_DEFAULT_TIMEOUT (20U)
+#define HERO_DEV_DEFAULT_CLUSTER_ID (0x1U)
+#define HERO_DEV_DEFAULT_FREQ (HERO_DEV_DEFAULT_FREQ_MHZ)
+#define HERO_DEV_DEFAULT_MEM_MODE (copy)
+#define HERO_DEV_DEFAULT_RAB_LEVEL (0x2U)
+#define HERO_DEV_DEFAULT_RAB_LOG_EN (0x0U)
+#define HERO_DEV_DEFAULT_INTR_RAB_MISS_DIS (0x1U)
+#define HERO_DEV_DEFAULT_ACP_EN (0x0U)
+#define HERO_DEV_DEFAULT_TIMEOUT (20U)
 }
 
 /* Start/end addresses of functions and global variables on a device.  */
@@ -102,7 +102,7 @@ extern "C" int GOMP_OFFLOAD_hero_get_nb_rab_miss_handlers(void);
 extern "C" int GOMP_OFFLOAD_get_type(void) {
   TRACE_FUNCTION();
 
-  return OFFLOAD_TARGET_TYPE_PULP_HERO;
+  return OFFLOAD_TARGET_TYPE_HERO;
 }
 
 extern "C" int GOMP_OFFLOAD_get_num_devices(void) {
@@ -117,27 +117,27 @@ static void init_hero_device() {
   int currFreq = 0x0;
 
   pulp = &pulp_dev;
-  pulp->cluster_sel = PULP_HERO_DEFAULT_CLUSTER_ID;
+  pulp->cluster_sel = HERO_DEV_DEFAULT_CLUSTER_ID;
 
   // reserve virtual addresses overlapping with PULP's internal physical address
   // space
-  pulp_reserve_v_addr(pulp);
+  hero_dev_reserve_v_addr(pulp);
 
-  if (pulp_mmap(pulp) < 0) {
+  if (hero_dev_mmap(pulp) < 0) {
     TRACE("ERROR: cannot load device!");
   }
 
-  currFreq = pulp_clking_set_freq(pulp, PULP_HERO_DEFAULT_FREQ);
+  currFreq = hero_dev_clking_set_freq(pulp, HERO_DEV_DEFAULT_FREQ);
   if (currFreq > 0)
     TRACE("PULP HERO device running @ %d MHz.", currFreq);
   //  else
   //    GOMP_PLUGIN_fatal("PULP HERO device init failed!");
 
-  pulp_rab_free(pulp, 0x0);
-  pulp_reset(pulp, 0x1);
+  hero_dev_rab_free(pulp, 0x0);
+  hero_dev_reset(pulp, 0x1);
 
   // initialization of PULP, static RAB rules (mbox, L2, ...)
-  pulp_init(pulp);
+  hero_dev_init(pulp);
 
   // set up accelerator for RAB miss-handling
   // FIXME: reenable after fixing
@@ -160,20 +160,20 @@ extern "C" bool GOMP_OFFLOAD_init_device(int n __attribute__((unused))) {
 extern "C" bool GOMP_OFFLOAD_fini_device(int n __attribute__((unused))) {
   TRACE_FUNCTION();
 
-  pulp_mbox_write(pulp, PULP_STOP);
+  hero_dev_mbox_write(pulp, MBOX_DEVICE_STOP);
 
   TRACE("Waiting for EOC...");
-  pulp_exe_wait(pulp, PULP_HERO_DEFAULT_TIMEOUT);
+  hero_dev_exe_wait(pulp, HERO_DEV_DEFAULT_TIMEOUT);
 
-  pulp_exe_stop(pulp);
+  hero_dev_exe_stop(pulp);
 
   if (GOMP_OFFLOAD_get_caps() & GOMP_OFFLOAD_CAP_SHARED_MEM)
-    pulp_rab_soc_mh_disable(pulp);
+    hero_dev_rab_soc_mh_disable(pulp);
 
-  pulp_rab_free(pulp, 0);
-  pulp_free_v_addr(pulp);
+  hero_dev_rab_free(pulp, 0);
+  hero_dev_free_v_addr(pulp);
   sleep(1);
-  pulp_munmap(pulp);
+  hero_dev_munmap(pulp);
 
   return 1;
 }
@@ -187,7 +187,7 @@ static void get_target_table(int &num_funcs, int &num_vars, void **&table) {
   TRACE_FUNCTION();
 
   unsigned int nums[2];
-  pulp_mbox_read(pulp, nums, 2);
+  hero_dev_mbox_read(pulp, nums, 2);
 
   num_funcs = nums[0];
   num_vars = nums[1];
@@ -196,14 +196,14 @@ static void get_target_table(int &num_funcs, int &num_vars, void **&table) {
   table = new void *[table_size];
 
   if (num_funcs) {
-    pulp_mbox_read(pulp, (unsigned int *)&table[0], num_funcs);
+    hero_dev_mbox_read(pulp, (unsigned int *)&table[0], num_funcs);
     for (int i = 0; i < num_funcs; i++) {
       TRACE("Function %d @ %p", i, table[i]);
     }
   }
 
   if (num_vars) {
-    pulp_mbox_read(pulp, (unsigned int *)&table[num_funcs], num_vars);
+    hero_dev_mbox_read(pulp, (unsigned int *)&table[num_funcs], num_vars);
     for (int i = 0; i < num_vars; i++) {
       TRACE("Variable %d @ %p, size = %#x", i, table[num_funcs + i * 2],
             table[num_funcs + i * 2 + 1]);
@@ -240,11 +240,11 @@ static void offload_image(const void *target_image) {
 
   image->size = image_size;
   sprintf(image->name, "lib%010d.so", num_images++);
-  pulp_load_bin_from_mem(pulp, image_start, image->size);
+  hero_dev_load_bin_from_mem(pulp, image_start, image->size);
   TRACE("PULP target_image %s @ %p loaded, size = %#x", image->name,
         (void *)image_start, image->size);
 
-  pulp_exe_start(pulp);
+  hero_dev_exe_start(pulp);
 
   int num_funcs = 0;
   int num_vars = 0;
@@ -328,11 +328,11 @@ extern "C" void *GOMP_OFFLOAD_alloc(int n __attribute__((unused)),
   uintptr_t virt_ptr = (uintptr_t)NULL;
   DataDesc data_desc;
 
-  virt_ptr = (uintptr_t)pulp_l3_malloc(pulp, size, (uintptr_t *)&phy_ptr);
+  virt_ptr = (uintptr_t)hero_dev_l3_malloc(pulp, size, (uintptr_t *)&phy_ptr);
 
-  data_desc.sh_mem_ctrl = PULP_HERO_DEFAULT_MEM_MODE;
-  data_desc.cache_ctrl = PULP_HERO_DEFAULT_ACP_EN;
-  data_desc.rab_lvl = PULP_HERO_DEFAULT_RAB_LEVEL;
+  data_desc.sh_mem_ctrl = HERO_DEV_DEFAULT_MEM_MODE;
+  data_desc.cache_ctrl = HERO_DEV_DEFAULT_ACP_EN;
+  data_desc.rab_lvl = HERO_DEV_DEFAULT_RAB_LEVEL;
   data_desc.ptr_l3_v = (void *)virt_ptr;
   data_desc.ptr_l3_p = (void *)phy_ptr;
   data_desc.size = size;
@@ -358,7 +358,7 @@ extern "C" bool GOMP_OFFLOAD_free(int n __attribute__((unused)),
   uintptr_t phy_ptr = (uintptr_t)tgt_ptr;
   address_map->erase(phy_ptr);
 
-  pulp_l3_free(pulp, vir_ptr, phy_ptr);
+  hero_dev_l3_free(pulp, vir_ptr, phy_ptr);
 
   return 1;
 }
@@ -436,13 +436,13 @@ extern "C" void GOMP_OFFLOAD_run(int n __attribute__((unused)), void *tgt_fn,
 
   TRACE("tgt_fn @ %p, tgt_vars @ %p, nb_rab_miss_handlers %d", tgt_fn, tgt_vars,
         GOMP_OFFLOAD_hero_get_nb_rab_miss_handlers());
-  pulp_mbox_write(pulp, PULP_START);
-  pulp_mbox_write(pulp, (uint32_t)tgt_fn);
-  pulp_mbox_write(pulp, (uint32_t)tgt_vars);
-  pulp_mbox_write(pulp, (uint32_t)GOMP_OFFLOAD_hero_get_nb_rab_miss_handlers());
+  hero_dev_mbox_write(pulp, MBOX_DEVICE_START);
+  hero_dev_mbox_write(pulp, (uint32_t)tgt_fn);
+  hero_dev_mbox_write(pulp, (uint32_t)tgt_vars);
+  hero_dev_mbox_write(pulp, (uint32_t)GOMP_OFFLOAD_hero_get_nb_rab_miss_handlers());
 
-  pulp_mbox_read(pulp, (unsigned int *)&ret, 2);
-  if (PULP_DONE == ret[0])
+  hero_dev_mbox_read(pulp, (unsigned int *)&ret, 2);
+  if (MBOX_DEVICE_DONE == ret[0])
     TRACE("Execution done");
   else
     TRACE("Returned %#x", ret[0]);
@@ -458,4 +458,4 @@ void GOMP_OFFLOAD_async_run(int ord, void *tgt_fn, void *tgt_vars, void **args,
   // GOMP_PLUGIN_fatal("Not supported!");
 }
 
-#endif // PLUGIN_PULP_HERO_H__
+#endif // PLUGIN_HERO_DEV_H__

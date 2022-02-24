@@ -1,4 +1,4 @@
-//===----RTLs/cuda/src/rtl.cpp - Target RTLs Implementation ------- C++ -*-===//
+//===----RTLs/hero/rtl.cpp - Target RTLs Implementation ----------- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// RTL for CUDA machine
+// RTL for HERO device machine
 //
 //===----------------------------------------------------------------------===//
 
@@ -47,7 +47,7 @@ static int DebugLevel = 10;
 #include "omptarget.h"
 #include "Debug.h"
 #include "omptargetplugin.h"
-#include "plugin-pulp-hero.cpp"
+#include "plugin-hero-dev.cpp"
 
 #include "../common/elf_common/elf_common.h"
 #include <gelf.h>
@@ -321,7 +321,7 @@ bool load_and_execute_image(__tgt_device_image *image) {
     return false;
   }
 
-  pulp_exe_start(pulp);
+  hero_dev_exe_start(pulp);
   return true;
 }
 
@@ -353,7 +353,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
 
 #ifdef PREM_MODE
   // init channel
-  channel_virt = (void *)pulp_l3_malloc(pulp, sizeof(channel_t), (uintptr_t *)&channel_phys);
+  channel_virt = (void *)hero_dev_l3_malloc(pulp, sizeof(channel_t), (uintptr_t *)&channel_phys);
   voteopts = init_channel(channel_virt);
 #endif
 
@@ -482,11 +482,11 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
 
   // instruct PULP to run the offload function
   DP("Start offloading...\n");
-  pulp_mbox_write(pulp, PULP_START);
-  pulp_mbox_write(pulp, (uint32_t)tgt_entry_ptr);
-  pulp_mbox_write(pulp, (uint32_t)dev_arg_buf);
+  hero_dev_mbox_write(pulp, MBOX_DEVICE_START);
+  hero_dev_mbox_write(pulp, (uint32_t)tgt_entry_ptr);
+  hero_dev_mbox_write(pulp, (uint32_t)dev_arg_buf);
   const uint32_t num_miss_handler_threads = (device_id == BIGPULP_SVM) ? 1 : 0;
-  pulp_mbox_write(pulp, num_miss_handler_threads);
+  hero_dev_mbox_write(pulp, num_miss_handler_threads);
 
 #ifdef PREM_MODE
   // synchronize with CMUX
@@ -497,15 +497,15 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
 #endif
 
   uint32_t ret[2];
-  while (pulp_mbox_read(pulp, (unsigned int *)&ret[0], 1));
+  while (hero_dev_mbox_read(pulp, (unsigned int *)&ret[0], 1));
   assert(ret[0] == 4 /* PULP_DONE */ &&
          "Software mailbox protocol failure: Expected PULP_DONE.");
-  while (pulp_mbox_read(pulp, (unsigned int *)&ret[1], 1));
+  while (hero_dev_mbox_read(pulp, (unsigned int *)&ret[1], 1));
 
-  for (unsigned i = 0; i < ARCHI_CLUSTER_NB_PE; ++i) {
+  for (unsigned i = 0; i < hero_dev_get_nb_pe(pulp); ++i) {
     const size_t stdout_buf_size = 1024*1024; // FIXME: this should be defined in the same place as
                                               // for PULP
-    const size_t stdout_offset_per_core = stdout_buf_size / ARCHI_CLUSTER_NB_PE;
+    const size_t stdout_offset_per_core = stdout_buf_size / hero_dev_get_nb_pe(pulp);
     const volatile char* ptr = (char*)pulp->l3_mem.v_addr + stdout_offset_per_core * i;
     const volatile char* const end = ptr + stdout_offset_per_core;
     if (!*ptr)

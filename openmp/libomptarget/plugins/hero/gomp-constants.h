@@ -175,7 +175,7 @@ enum gomp_map_kind
 #define GOMP_DEVICE_NVIDIA_PTX		5
 #define GOMP_DEVICE_INTEL_MIC		6
 #define GOMP_DEVICE_HSA			7
-#define GOMP_DEVICE_PULP_HERO		42
+#define GOMP_DEVICE_HERO		42
 
 #define GOMP_DEVICE_ICV			-1
 #define GOMP_DEVICE_HOST_FALLBACK	-2

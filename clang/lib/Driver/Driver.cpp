@@ -43,6 +43,7 @@
 #include "ToolChains/PPCLinux.h"
 #include "ToolChains/PS4CPU.h"
 #include "ToolChains/HeroPULP.h"
+#include "ToolChains/HeroSnitch.h"
 #include "ToolChains/HeroHost.h"
 #include "ToolChains/RISCVToolchain.h"
 #include "ToolChains/SPIRV.h"

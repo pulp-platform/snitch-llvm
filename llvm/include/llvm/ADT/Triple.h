@@ -158,6 +158,7 @@ public:
     Mesa,
     SUSE,
     HERO,
+    Snitch,
     OpenEmbedded,
     LastVendorType = OpenEmbedded
   };

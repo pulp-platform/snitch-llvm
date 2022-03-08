@@ -9,6 +9,7 @@
 
 #include "HeroHost.h"
 #include "CommonArgs.h"
+#include "Arch/RISCV.h"
 #include "clang/Driver/InputInfo.h"
 #include "clang/Driver/Compilation.h"
 #include "clang/Driver/Options.h"
@@ -127,6 +128,7 @@ void HeroHost::Linker::ConstructJob(Compilation &C, const JobAction &JA,
                                  const char *LinkingOutput) const {
   const ToolChain &ToolChain = getToolChain();
   const Driver &D = ToolChain.getDriver();
+  const llvm::Triple &Triple = ToolChain.getTriple();
   ArgStringList CmdArgs;
 
   std::string Linker = getToolChain().GetProgramPath((ToolChain.getTriple().getTriple() + "-" + getShortName()).c_str());
@@ -177,14 +179,27 @@ void HeroHost::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   //       important changes in https://github.com/llvm/llvm-project/commit/a0d83768f10849e5cf230391fac949dc5118c0a6
   //AddOpenMPLinkerScript(ToolChain, C, Output, Inputs, Args, CmdArgs, JA);
 
-  std::string DynamicLinker = std::string("-dynamic-linker /lib/ld-linux-");
-  DynamicLinker += ToolChain.getTriple().getArchName();
-  // FIXME: retrieve proper ABI
-  if(ToolChain.getTriple().getArch() == llvm::Triple::riscv64) {
-    DynamicLinker += "-lp64";
+  // dynamic linker, snipped from ToolChains/Linux.cpp
+  std::string LibDir;
+  std::string Loader;
+  switch (Triple.getArch()) {
+  default:
+    llvm_unreachable("unsupported architecture");
+  case llvm::Triple::aarch64:
+    LibDir = "lib";
+    Loader = "ld-linux-aarch64.so.1";
+    break;
+  case llvm::Triple::riscv64:  {
+    StringRef ABIName = tools::riscv::getRISCVABI(Args, Triple);
+    LibDir = "lib";
+    Loader = ("ld-linux-riscv64-" + ABIName + ".so.1").str();
+    break;
   }
-  DynamicLinker += ".so.1";
-  CmdArgs.push_back(Args.MakeArgString(DynamicLinker));
+  }
+  std::string DynamicLinker = "/" + LibDir + "/" + Loader;
+  CmdArgs.push_back("-dynamic-linker");
+  CmdArgs.push_back(Args.MakeArgString(Twine(D.DyldPrefix) +
+                                        DynamicLinker));
 
   CmdArgs.push_back("-o");
   CmdArgs.push_back(Output.getFilename());

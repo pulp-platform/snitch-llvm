@@ -38,6 +38,16 @@ HeroHostToolChain::HeroHostToolChain(const Driver &D, const llvm::Triple &Triple
     getProgramPaths().push_back(
         (GCCInstallation.getParentLibPath() + "/../bin").str());
   }
+
+  // Fix cross compilation when not specifying --sysroot. Search in
+  // <target-triple>/sysroot/usr/lib for libraries
+  if (getDriver().SysRoot.empty() && GCCInstallation.isValid()) {
+    SmallString<128> SrDir(D.Dir); // = [...]/instal/bin
+    llvm::sys::path::append(SrDir, "../" + GCCInstallation.getTriple().str() + "/sysroot/usr/lib");
+    llvm::dbgs() << "[HeroHostToolChain::HeroHostToolChain] StringRef(D.Dir): "<<StringRef(D.Dir)<<"\n";
+    llvm::dbgs() << "[HeroHostToolChain::HeroHostToolChain] fixup add: "<<SrDir<<"\n";
+    getFilePaths().push_back(SrDir.str().str());
+  }
 }
 
 Tool *HeroHostToolChain::buildLinker() const {

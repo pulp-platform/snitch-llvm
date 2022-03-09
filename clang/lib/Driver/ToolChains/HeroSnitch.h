@@ -44,6 +44,8 @@ protected:
 
 private:
   std::string computeSysRoot() const override;
+  // Store the target tirple
+  llvm::Triple Triple;
 };
 
 } // end namespace toolchains

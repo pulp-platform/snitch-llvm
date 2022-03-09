@@ -32,6 +32,8 @@ using namespace llvm::opt;
 HeroSnitchToolChain::HeroSnitchToolChain(const Driver &D, const llvm::Triple &Triple,
                                const ArgList &Args)
     : Generic_ELF(D, Triple, Args) {
+  this->Triple = Triple;
+  llvm::dbgs() << "[HeroSnitchToolChain::HeroSnitchToolChain] Triple: " << Triple.str() << "\n";
   GCCInstallation.init(Triple, Args);
 
 
@@ -67,6 +69,20 @@ void HeroSnitchToolChain::addClangTargetOptions(
   // FIXME: extra argument for target to allow dynamic datalayout
   CC1Args.push_back("-D__host=__attribute((address_space(1)))");
   CC1Args.push_back("-D__device=__attribute((address_space(0)))");
+  // TODO: Remove
+  SmallString<128> SrDir("random-dir-addClangTargetOptions");
+  addSystemInclude(DriverArgs, CC1Args, SrDir.str());
+
+  // Fix cross compilation when not specifying --sysroot. Search in
+  // <target-triple>/sysroot/usr/include for headers
+  const Driver &D = getDriver();
+  if (D.SysRoot.empty() && GCCInstallation.isValid()) {
+    SmallString<128> SrDir(D.Dir); // = [...]/instal/bin
+    llvm::sys::path::append(SrDir, "../" + GCCInstallation.getTriple().str() + "/sysroot/usr/include");
+    llvm::dbgs() << "[HeroSnitchToolChain::AddClangSystemIncludeArgs::3] StringRef(D.Dir): "<<StringRef(D.Dir)<<"\n";
+    llvm::dbgs() << "[HeroSnitchToolChain::AddClangSystemIncludeArgs::3] fixup add: "<<SrDir<<"\n";
+    addSystemInclude(DriverArgs, CC1Args, SrDir.str());
+  }
 }
 
 void HeroSnitchToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
@@ -76,6 +92,10 @@ void HeroSnitchToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
   llvm::dbgs() << "[HeroSnitchToolChain::AddClangSystemIncludeArgs] Adding system include "<<SysRootDir.str()<<"\n";
   llvm::dbgs() << "[HeroSnitchToolChain::AddClangSystemIncludeArgs] call to addSystemInclude()\n";
   addSystemInclude(DriverArgs, CC1Args, SysRootDir.str());
+
+  // TODO: Remove
+  SmallString<128> SrDir("random-dir-AddClangSystemIncludeArgs");
+  addSystemInclude(DriverArgs, CC1Args, SrDir.str());
 }
 
 llvm::opt::DerivedArgList *HeroSnitchToolChain::TranslateArgs(const llvm::opt::DerivedArgList &Args,
@@ -104,42 +124,14 @@ llvm::opt::DerivedArgList *HeroSnitchToolChain::TranslateArgs(const llvm::opt::D
 }
 
 std::string HeroSnitchToolChain::computeSysRoot() const {
-    
-  // llvm::dbgs()<<"[HeroSnitchToolChain::computeSysRoot()] (0) getDriver().getTriple():"<<getDriver().getTriple()<<"\n";
-  llvm::dbgs()<<"[HeroSnitchToolChain::computeSysRoot()] (0) getDriver().getTargetTriple():"<<getDriver().getTargetTriple()<<"\n";
-  
-  if (!getDriver().SysRoot.empty()) {
-    // The Driver's sysroot might be set to HeroHost, we don't want that
-    llvm::dbgs()<<"[HeroSnitchToolChain::computeSysRoot()] (1) IGNORE Driver SysRootDir:"<<getDriver().SysRoot + SelectedMultilib.osSuffix()<<"\n";
-    // return getDriver().SysRoot + SelectedMultilib.osSuffix();
-  }
+  llvm::dbgs()<<"[HeroSnitchToolChain::computeSysRoot()] getDriver().Dir: "<<getDriver().Dir<<"\n";
+  llvm::dbgs()<<"[HeroSnitchToolChain::computeSysRoot()] getDriver().getTargetTriple(): "<<getDriver().getTargetTriple()<<"\n";
+  llvm::dbgs()<<"[HeroSnitchToolChain::computeSysRoot()] SelectedMultilib.osSuffix(): "<<SelectedMultilib.osSuffix()<<"\n";
 
   SmallString<128> SysRootDir;
-  llvm::sys::path::append(SysRootDir, getDriver().Dir, "../lib/clang-runtimes",
-                          getDriver().getTargetTriple());
-
-  SysRootDir += SelectedMultilib.osSuffix();
-  llvm::dbgs()<<"[HeroSnitchToolChain::computeSysRoot()] (2) SysRootDir:"<<SysRootDir<<"\n";
+  llvm::sys::path::append(SysRootDir, getDriver().Dir, "../", Triple.str());
+  llvm::dbgs()<<"[HeroSnitchToolChain::computeSysRoot()] returning sysroot: "<<SysRootDir<<"\n";
   return std::string(SysRootDir);
-
-  // FIXME: ignore standard sysroot as it is not updated during offloading,
-  // and determine the sysroot from the computed GCC toolchain instead
-
-  // if (!GCCInstallation.isValid())
-  //   return std::string();
-
-  // llvm::dbgs()<<"[HeroSnitchToolChain::computeSysRoot()] GCCInstallation.isValid()\n";
-  // StringRef LibDir = GCCInstallation.getParentLibPath();
-  // StringRef TripleStr = GCCInstallation.getTriple().str();
-  // std::string SysRootDir = LibDir.str() + "/../" + TripleStr.str();
-
-  // llvm::dbgs()<<"  LibDir: "<<LibDir<<"\n";
-  // llvm::dbgs()<<"  TripleStr: "<<TripleStr<<"\n";
-  // llvm::dbgs()<<"  SysRootDir: "<<SysRootDir<<"\n";
-  // if (!llvm::sys::fs::exists(SysRootDir))
-  //   return std::string();
-
-  // return SysRootDir;
 }
 
 HeroSnitch::Linker::Linker(const ToolChain &TC) : Tool("HeroSnitch::Linker", "ld.lld", TC) {

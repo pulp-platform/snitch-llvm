@@ -63,11 +63,21 @@ void HeroHostToolChain::addClangTargetOptions(
   //CC1Args.push_back("-fuse-init-array");
   CC1Args.push_back("-D__host=__attribute((address_space(1)))");
   CC1Args.push_back("-D__device=__attribute((address_space(0)))");
+
+  // Fix cross compilation when not specifying --sysroot. Search in
+  // <target-triple>/sysroot/usr/include for headers
+  const Driver &D = getDriver();
+  if (D.SysRoot.empty() && GCCInstallation.isValid()) {
+    SmallString<128> SrDir(D.Dir); // = [...]/instal/bin
+    llvm::sys::path::append(SrDir, "../" + GCCInstallation.getTriple().str() + "/sysroot/usr/include");
+    llvm::dbgs() << "[HeroHostToolChain::AddClangSystemIncludeArgs::3] StringRef(D.Dir): "<<StringRef(D.Dir)<<"\n";
+    llvm::dbgs() << "[HeroHostToolChain::AddClangSystemIncludeArgs::3] fixup add: "<<SrDir<<"\n";
+    addSystemInclude(DriverArgs, CC1Args, SrDir.str());
+  }
 }
 
 void HeroHostToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
                                                    ArgStringList &CC1Args) const {
-  const Driver &D = getDriver();
   if (DriverArgs.hasArg(options::OPT_nostdinc))
     return;
 
@@ -82,16 +92,6 @@ void HeroHostToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
   SmallString<128> UsrDir(SysRoot);
   llvm::sys::path::append(UsrDir, "usr/include");
   addSystemInclude(DriverArgs, CC1Args, UsrDir.str());
-
-  // Fix cross compilation when not specifying --sysroot. Search in
-  // <target-triple>/sysroot/usr/include for headers
-  if (getDriver().SysRoot.empty() && GCCInstallation.isValid()) {
-    SmallString<128> SrDir(D.Dir); // = [...]/instal/bin
-    llvm::sys::path::append(SrDir, "../" + GCCInstallation.getTriple().str() + "/sysroot/usr/include");
-    llvm::dbgs() << "[HeroHostToolChain::AddClangSystemIncludeArgs::3] StringRef(D.Dir): "<<StringRef(D.Dir)<<"\n";
-    llvm::dbgs() << "[HeroHostToolChain::AddClangSystemIncludeArgs::3] fixup add: "<<SrDir<<"\n";
-    addSystemInclude(DriverArgs, CC1Args, SrDir.str());
-  }
 }
 
 void HeroHostToolChain::addLibStdCxxIncludePaths(

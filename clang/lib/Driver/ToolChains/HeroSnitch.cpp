@@ -135,13 +135,13 @@ std::string HeroSnitchToolChain::computeSysRoot() const {
 }
 
 HeroSnitch::Linker::Linker(const ToolChain &TC) : Tool("HeroSnitch::Linker", "ld.lld", TC) {
-  llvm::Optional<std::string> SnRuntimeInstallDir =
-        llvm::sys::Process::GetEnv("SNRUNTIME_INSTALL");
-  if (SnRuntimeInstallDir.hasValue()) {
-    this->SnRuntimeInstallDir = SnRuntimeInstallDir.getValue();
-  } else {
-    TC.getDriver().Diag(diag::err_missing_snitch_sdk);
-  }
+  // llvm::Optional<std::string> SnRuntimeInstallDir =
+  //       llvm::sys::Process::GetEnv("SNRUNTIME_INSTALL");
+  // if (SnRuntimeInstallDir.hasValue()) {
+  //   this->SnRuntimeInstallDir = SnRuntimeInstallDir.getValue();
+  // } else {
+  //   TC.getDriver().Diag(diag::err_missing_snitch_sdk);
+  // }
 }
 
 static void Add64BitLinkerMode(Compilation &C, const InputInfo &Output,
@@ -184,10 +184,15 @@ void HeroSnitch::Linker::ConstructJob(Compilation &C, const JobAction &JA,
                                  const InputInfoList &Inputs,
                                  const ArgList &Args,
                                  const char *LinkingOutput) const {
-  const ToolChain &ToolChain = getToolChain();
+  const ToolChain &TC = getToolChain();
+  const Driver &D = C.getDriver();
   ArgStringList CmdArgs;
 
-  std::string Linker = getToolChain().GetProgramPath((ToolChain.getTriple().getTriple() + "-" + getShortName()).c_str());
+  // Force using lld
+  SmallString<128> Linker(D.Dir);
+  llvm::sys::path::append(Linker, "ld.lld");
+  llvm::dbgs() << "[HeroSnitch::Linker::ConstructJob] Linker: " << Linker << "\n";
+  
   CmdArgs.push_back("-melf32lriscv");
   
   // from snRuntime
@@ -201,7 +206,7 @@ void HeroSnitch::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   // llvm::Optional<std::string> SnitchSdkInstallDir =
   //       llvm::sys::Process::GetEnv("PULP_CURRENT_CONFIG");
   // if(!PulpSdkInstallDir.hasValue()) {
-  //   ToolChain.getDriver().Diag(diag::err_missing_pulp_config);
+  //   TC.getDriver().Diag(diag::err_missing_pulp_config);
   // }
   // llvm::Regex ConfigRegex("^(.+)@.+");
   // auto ConfigName = ConfigRegex.sub("\\1", PulpSdkInstallDir.getValue());
@@ -231,7 +236,7 @@ void HeroSnitch::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   CmdArgs.push_back(Args.MakeArgString(ArgStr));
 
   Args.AddAllArgs(CmdArgs, options::OPT_L);
-  ToolChain.AddFilePathLibArgs(Args, CmdArgs);
+  TC.AddFilePathLibArgs(Args, CmdArgs);
   Args.AddAllArgs(CmdArgs,
                   {options::OPT_T_Group, options::OPT_e, options::OPT_s,
                    options::OPT_t, options::OPT_Z_Flag, options::OPT_r});
@@ -254,7 +259,7 @@ void HeroSnitch::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     }
     FinalInputs.push_back(Input);
   }
-  AddLinkerInputs(ToolChain, FinalInputs, Args, CmdArgs, JA);
+  AddLinkerInputs(TC, FinalInputs, Args, CmdArgs, JA);
 
   ArgStr.clear();
   // ArgStr.append("-T");

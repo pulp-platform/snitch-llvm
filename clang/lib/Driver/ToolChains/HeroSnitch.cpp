@@ -33,28 +33,14 @@ HeroSnitchToolChain::HeroSnitchToolChain(const Driver &D, const llvm::Triple &Tr
                                const ArgList &Args)
     : Generic_ELF(D, Triple, Args) {
   this->Triple = Triple;
-  llvm::dbgs() << "[HeroSnitchToolChain::HeroSnitchToolChain] Triple: " << Triple.str() << "\n";
   GCCInstallation.init(Triple, Args);
 
-
-  llvm::dbgs() << "[HeroSnitchToolChain::HeroSnitchToolChain] getFilePaths() pre" << "\n";
-  for (auto &P : getFilePaths()) {
-    llvm::dbgs() << "-x- " << P << "\n";
-  }
-
   auto SysRoot = computeSysRoot();
-  llvm::dbgs() << "[HeroSnitchToolChain::HeroSnitchToolChain] SysRoot: " << SysRoot << "\n";
-  llvm::dbgs() << "[HeroSnitchToolChain::HeroSnitchToolChain] GCCInstallation.isValid(): " << GCCInstallation.isValid() << "\n";
   getFilePaths().push_back(SysRoot + "/lib");
   if (GCCInstallation.isValid()) {
     getFilePaths().push_back(GCCInstallation.getInstallPath().str());
     getProgramPaths().push_back(
         (GCCInstallation.getParentLibPath() + "/../bin").str());
-  }
-
-  llvm::dbgs() << "[HeroSnitchToolChain::HeroSnitchToolChain] getFilePaths() post" << "\n";
-  for (auto &P : getFilePaths()) {
-    llvm::dbgs() << "-x- " << P << "\n";
   }
 }
 
@@ -79,8 +65,6 @@ void HeroSnitchToolChain::addClangTargetOptions(
   if (D.SysRoot.empty() && GCCInstallation.isValid()) {
     SmallString<128> SrDir(D.Dir); // = [...]/instal/bin
     llvm::sys::path::append(SrDir, "../" + GCCInstallation.getTriple().str() + "/sysroot/usr/include");
-    llvm::dbgs() << "[HeroSnitchToolChain::AddClangSystemIncludeArgs::3] StringRef(D.Dir): "<<StringRef(D.Dir)<<"\n";
-    llvm::dbgs() << "[HeroSnitchToolChain::AddClangSystemIncludeArgs::3] fixup add: "<<SrDir<<"\n";
     addSystemInclude(DriverArgs, CC1Args, SrDir.str());
   }
 }
@@ -89,8 +73,6 @@ void HeroSnitchToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
                                                ArgStringList &CC1Args) const {
   SmallString<128> SysRootDir(computeSysRoot());
   llvm::sys::path::append(SysRootDir, "include");
-  llvm::dbgs() << "[HeroSnitchToolChain::AddClangSystemIncludeArgs] Adding system include "<<SysRootDir.str()<<"\n";
-  llvm::dbgs() << "[HeroSnitchToolChain::AddClangSystemIncludeArgs] call to addSystemInclude()\n";
   addSystemInclude(DriverArgs, CC1Args, SysRootDir.str());
 
   // TODO: Remove
@@ -112,11 +94,7 @@ llvm::opt::DerivedArgList *HeroSnitchToolChain::TranslateArgs(const llvm::opt::D
 
   // Append all other args
   for (auto& arg : Args) {
-    if(arg->getOption().getName() == "sysroot=") {
-      llvm::dbgs() << "    skipp appending sysroot!\n";
-    } else {
-      llvm::dbgs() << "[HeroSnitchToolChain::TranslateArgs] appending: \n";
-      arg->print(llvm::dbgs());
+    if(arg->getOption().getName() != "sysroot=") {
       DAL->append(arg);
     }
   }
@@ -124,13 +102,8 @@ llvm::opt::DerivedArgList *HeroSnitchToolChain::TranslateArgs(const llvm::opt::D
 }
 
 std::string HeroSnitchToolChain::computeSysRoot() const {
-  llvm::dbgs()<<"[HeroSnitchToolChain::computeSysRoot()] getDriver().Dir: "<<getDriver().Dir<<"\n";
-  llvm::dbgs()<<"[HeroSnitchToolChain::computeSysRoot()] getDriver().getTargetTriple(): "<<getDriver().getTargetTriple()<<"\n";
-  llvm::dbgs()<<"[HeroSnitchToolChain::computeSysRoot()] SelectedMultilib.osSuffix(): "<<SelectedMultilib.osSuffix()<<"\n";
-
   SmallString<128> SysRootDir;
   llvm::sys::path::append(SysRootDir, getDriver().Dir, "../", Triple.str());
-  llvm::dbgs()<<"[HeroSnitchToolChain::computeSysRoot()] returning sysroot: "<<SysRootDir<<"\n";
   return std::string(SysRootDir);
 }
 
@@ -191,7 +164,6 @@ void HeroSnitch::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   // Force using lld
   SmallString<128> Linker(D.Dir);
   llvm::sys::path::append(Linker, "ld.lld");
-  llvm::dbgs() << "[HeroSnitch::Linker::ConstructJob] Linker: " << Linker << "\n";
   
   CmdArgs.push_back("-melf32lriscv");
   
@@ -246,7 +218,6 @@ void HeroSnitch::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   for(auto& Input : Inputs) {
     if(Input.isInputArg()) {
       const llvm::opt::Arg& Arg = Input.getInputArg();
-      llvm::dbgs() << "+++ input " << Arg.getValue() << "\n";
       if(Arg.getSpelling() == "-l" && Arg.getNumValues() > 0) {
         // Libraries might be host-only
         // FIXME: use host suffix for now to detect host-only libraries

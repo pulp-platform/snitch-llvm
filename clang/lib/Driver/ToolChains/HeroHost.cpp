@@ -45,8 +45,6 @@ HeroHostToolChain::HeroHostToolChain(const Driver &D, const llvm::Triple &Triple
   if (getDriver().SysRoot.empty() && GCCInstallation.isValid()) {
     SmallString<128> SrDir(D.Dir); // = [...]/instal/bin
     llvm::sys::path::append(SrDir, "../" + GCCInstallation.getTriple().str() + "/sysroot/usr/lib");
-    llvm::dbgs() << "[HeroHostToolChain::HeroHostToolChain] StringRef(D.Dir): "<<StringRef(D.Dir)<<"\n";
-    llvm::dbgs() << "[HeroHostToolChain::HeroHostToolChain] fixup add: "<<SrDir<<"\n";
     getFilePaths().push_back(SrDir.str().str());
   }
 }
@@ -70,8 +68,6 @@ void HeroHostToolChain::addClangTargetOptions(
   if (D.SysRoot.empty() && GCCInstallation.isValid()) {
     SmallString<128> SrDir(D.Dir); // = [...]/instal/bin
     llvm::sys::path::append(SrDir, "../" + GCCInstallation.getTriple().str() + "/sysroot/usr/include");
-    llvm::dbgs() << "[HeroHostToolChain::AddClangSystemIncludeArgs::3] StringRef(D.Dir): "<<StringRef(D.Dir)<<"\n";
-    llvm::dbgs() << "[HeroHostToolChain::AddClangSystemIncludeArgs::3] fixup add: "<<SrDir<<"\n";
     addSystemInclude(DriverArgs, CC1Args, SrDir.str());
   }
 }

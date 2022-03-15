@@ -46,6 +46,7 @@ private:
   std::string computeSysRoot() const override;
   // Store the target tirple
   llvm::Triple Triple;
+  std::string SnRtInstallDir;
 };
 
 } // end namespace toolchains
@@ -63,7 +64,7 @@ public:
                     const char *LinkingOutput) const override;
 
 private:
-  std::string SnRuntimeInstallDir;
+  std::string SnRtInstallDir;
 };
 } // end namespace HeroSnitch
 } // end namespace tools

@@ -35,6 +35,15 @@ HeroSnitchToolChain::HeroSnitchToolChain(const Driver &D, const llvm::Triple &Tr
   this->Triple = Triple;
   GCCInstallation.init(Triple, Args);
 
+  // Include directory of snRuntime
+  llvm::Optional<std::string> SnRtInstallDir =
+        llvm::sys::Process::GetEnv("SNRT_INSTALL");
+  if (SnRtInstallDir.hasValue()) {
+    this->SnRtInstallDir = SnRtInstallDir.getValue();
+  } else {
+    D.Diag(diag::err_missing_snitch_sdk);
+  }
+
   auto SysRoot = computeSysRoot();
   getFilePaths().push_back(SysRoot + "/lib");
   if (GCCInstallation.isValid()) {
@@ -52,6 +61,7 @@ void HeroSnitchToolChain::addClangTargetOptions(
     const llvm::opt::ArgList &DriverArgs,
     llvm::opt::ArgStringList &CC1Args,
     Action::OffloadKind) const {
+  CC1Args.push_back("-D__HERO_DEV");
   // FIXME: extra argument for target to allow dynamic datalayout
   CC1Args.push_back("-D__host=__attribute((address_space(1)))");
   CC1Args.push_back("-D__device=__attribute((address_space(0)))");
@@ -67,6 +77,9 @@ void HeroSnitchToolChain::addClangTargetOptions(
     llvm::sys::path::append(SrDir, "../" + GCCInstallation.getTriple().str() + "/sysroot/usr/include");
     addSystemInclude(DriverArgs, CC1Args, SrDir.str());
   }
+
+  // snitch runtime include directory
+  addSystemInclude(DriverArgs, CC1Args, this->SnRtInstallDir + "/include");
 }
 
 void HeroSnitchToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
@@ -108,13 +121,14 @@ std::string HeroSnitchToolChain::computeSysRoot() const {
 }
 
 HeroSnitch::Linker::Linker(const ToolChain &TC) : Tool("HeroSnitch::Linker", "ld.lld", TC) {
-  // llvm::Optional<std::string> SnRuntimeInstallDir =
-  //       llvm::sys::Process::GetEnv("SNRUNTIME_INSTALL");
-  // if (SnRuntimeInstallDir.hasValue()) {
-  //   this->SnRuntimeInstallDir = SnRuntimeInstallDir.getValue();
-  // } else {
-  //   TC.getDriver().Diag(diag::err_missing_snitch_sdk);
-  // }
+  // Include directory of snRuntime
+  llvm::Optional<std::string> SnRtInstallDir =
+        llvm::sys::Process::GetEnv("SNRT_INSTALL");
+  if (SnRtInstallDir.hasValue()) {
+    this->SnRtInstallDir = SnRtInstallDir.getValue();
+  } else {
+    TC.getDriver().Diag(diag::err_missing_snitch_sdk);
+  }
 }
 
 static void Add64BitLinkerMode(Compilation &C, const InputInfo &Output,
@@ -164,9 +178,9 @@ void HeroSnitch::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   // Force using lld
   SmallString<128> Linker(D.Dir);
   llvm::sys::path::append(Linker, "ld.lld");
-  
+
   CmdArgs.push_back("-melf32lriscv");
-  
+
   // from snRuntime
   CmdArgs.push_back("-plugin-opt=mcpu=snitch");
   // CmdArgs.push_back("-nostartfiles");

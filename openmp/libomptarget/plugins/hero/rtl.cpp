@@ -27,22 +27,7 @@
 #ifndef TARGET_NAME
 #define TARGET_NAME HERO_DEV
 #endif
-
-#ifdef OMPTARGET_DEBUG
-static int DebugLevel = 10;
-
-#define GETNAME2(name) #name
-#define GETNAME(name) GETNAME2(name)
-#define DP(...)                                                                \
-  do {                                                                         \
-    if (DebugLevel > 0) {                                                      \
-      DEBUGP("Target " GETNAME(TARGET_NAME) " RTL", __VA_ARGS__);              \
-    }                                                                          \
-  } while (false)
-#else // OMPTARGET_DEBUG
-#define DP(...)                                                                \
-  {}
-#endif // OMPTARGET_DEBUG
+#define DEBUG_PREFIX "Target " GETNAME(TARGET_NAME) " RTL"
 
 #include "omptarget.h"
 #include "Debug.h"
@@ -224,19 +209,19 @@ bool map_to_mem(__tgt_device_image *image, void **target, size_t *size) {
 
   struct MemTarget {
     HeroSubDev *dev;
-    size_t vaddr;
+    size_t paddr;
     const char *name;
   };
 
   MemTarget devs[] = {
-      {&hd->clusters, 0x10000000, "L1"},
-      {&hd->clusters, 0x1b000000, "alias"},
-      {&hd->l2_mem, 0x1c000000, "L2"},
+      {&hd->clusters, hd->clusters.p_addr, "L1"},
+      {&hd->clusters, hd->clusters.p_addr, "alias"},
+      {&hd->l2_mem, hd->l2_mem.p_addr, "L2"},
   };
   size_t dev_count = 3;
 
   for (size_t j = 0; j < dev_count; j++) {
-    size_t dev_lo = devs[j].vaddr;
+    size_t dev_lo = devs[j].paddr;
     size_t dev_hi = dev_lo + devs[j].dev->size;
 
     DP("Device %s: [" DPxMOD ", " DPxMOD "]\n", devs[j].name, DPxPTR(dev_lo),
@@ -270,7 +255,7 @@ bool map_to_mem(__tgt_device_image *image, void **target, size_t *size) {
     for (size_t j = 0; j < dev_count; j++) {
       MemTarget &tgt = devs[j];
 
-      size_t dev_lo = tgt.vaddr;
+      size_t dev_lo = tgt.paddr;
       size_t dev_hi = dev_lo + tgt.dev->size;
 
       if (sc_lo >= dev_lo && sc_hi <= dev_hi) {

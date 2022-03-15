@@ -25,7 +25,7 @@
 #endif
 
 #ifndef TARGET_NAME
-#define TARGET_NAME PULP
+#define TARGET_NAME HERO_DEV
 #endif
 
 #ifdef OMPTARGET_DEBUG
@@ -61,7 +61,7 @@ void *dev_arg_buf;
 voteopts_t voteopts;
 // address of channel in our address space; can be written to in this process
 volatile channel_t *channel_virt;
-// address of the pointer in the physical address space, can be written to by PULP
+// address of the pointer in the physical address space, can be written to by HERO device
 void *channel_phys;
 #endif
 
@@ -72,8 +72,8 @@ extern "C" {
 
 static int initialized = 0;
 // Fixed device ids to initialize
-#define BIGPULP_SVM 0
-#define BIGPULP_MEMCPY 1
+#define HERODEV_SVM 0
+#define HERODEV_MEMCPY 1
 
 int32_t __tgt_rtl_is_valid_binary(__tgt_device_image *image) {
   DP("__tgt_rtl_is_valid_binary(" DPxMOD ") = 1\n", DPxPTR(image));
@@ -92,9 +92,9 @@ void __tgt_register_requires(int64_t flags) {
 
 int32_t __tgt_rtl_init_device(int32_t device_id) {
   DP("__tgt_rtl_init_device(%d)\n", device_id);
-  if (device_id != BIGPULP_SVM && device_id != BIGPULP_MEMCPY) {
-    DP("PULP plugin should have device id %d (memcpy) or %d (svm)\n",
-       BIGPULP_MEMCPY, BIGPULP_SVM);
+  if (device_id != HERODEV_SVM && device_id != HERODEV_MEMCPY) {
+    DP("HERO Device plugin should have device id %d (memcpy) or %d (svm)\n",
+       HERODEV_MEMCPY, HERODEV_SVM);
     return OFFLOAD_FAIL;
   }
   if (!initialized) {
@@ -223,15 +223,15 @@ bool map_to_mem(__tgt_device_image *image, void **target, size_t *size) {
   }
 
   struct MemTarget {
-    PulpSubDev *dev;
+    HeroSubDev *dev;
     size_t vaddr;
     const char *name;
   };
 
   MemTarget devs[] = {
-      {&pulp->clusters, 0x10000000, "L1"},
-      {&pulp->clusters, 0x1b000000, "alias"},
-      {&pulp->l2_mem, 0x1c000000, "L2"},
+      {&hd->clusters, 0x10000000, "L1"},
+      {&hd->clusters, 0x1b000000, "alias"},
+      {&hd->l2_mem, 0x1c000000, "L2"},
   };
   size_t dev_count = 3;
 
@@ -321,7 +321,7 @@ bool load_and_execute_image(__tgt_device_image *image) {
     return false;
   }
 
-  hero_dev_exe_start(pulp);
+  hero_dev_exe_start(hd);
   return true;
 }
 
@@ -346,14 +346,14 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
 
   // init argument buffers
   host_arg_buf.reserve(ARG_BUF_SIZE); // memory leak
-  if (device_id == BIGPULP_MEMCPY) {
+  if (device_id == HERODEV_MEMCPY) {
     dev_arg_buf = __tgt_rtl_data_alloc(
         device_id, ARG_BUF_SIZE * sizeof(uint64_t), host_arg_buf.data());
   }
 
 #ifdef PREM_MODE
   // init channel
-  channel_virt = (void *)hero_dev_l3_malloc(pulp, sizeof(channel_t), (uintptr_t *)&channel_phys);
+  channel_virt = (void *)hero_dev_l3_malloc(hd, sizeof(channel_t), (uintptr_t *)&channel_phys);
   voteopts = init_channel(channel_virt);
 #endif
 
@@ -385,7 +385,7 @@ void *__tgt_rtl_data_alloc(int32_t device_id, int64_t size, void *hst_ptr) {
   DP("__tgt_rtl_data_alloc(device_id=%d, size=%lld, hst_ptr=" DPxMOD ")\n",
      device_id, size, DPxPTR(hst_ptr));
   void *ptr = nullptr;
-  if (device_id == BIGPULP_SVM) {
+  if (device_id == HERODEV_SVM) {
     ptr = hst_ptr;
   } else {
     ptr = GOMP_OFFLOAD_alloc(device_id, size);
@@ -398,7 +398,7 @@ int32_t __tgt_rtl_data_submit(int32_t device_id, void *tgt_ptr, void *hst_ptr,
   DP("__tgt_rtl_data_submit(device_id=%d, tgt_ptr=" DPxMOD ", hst_ptr=" DPxMOD
      ", size=%lld\n",
      device_id, DPxPTR(tgt_ptr), DPxPTR(hst_ptr), size);
-  if (device_id == BIGPULP_SVM) {
+  if (device_id == HERODEV_SVM) {
     assert(hst_ptr == tgt_ptr);
     return OFFLOAD_SUCCESS;
   }
@@ -412,7 +412,7 @@ int32_t __tgt_rtl_data_retrieve(int32_t device_id, void *hst_ptr, void *tgt_ptr,
   DP("__tgt_rtl_data_retrieve(device_id=%d, hst_ptr=" DPxMOD ", tgt_ptr=" DPxMOD
      ", size=%lld\n",
      device_id, DPxPTR(hst_ptr), DPxPTR(tgt_ptr), size);
-  if (device_id == BIGPULP_SVM) {
+  if (device_id == HERODEV_SVM) {
     assert(hst_ptr == tgt_ptr);
     return OFFLOAD_SUCCESS;
   }
@@ -424,7 +424,7 @@ int32_t __tgt_rtl_data_retrieve(int32_t device_id, void *hst_ptr, void *tgt_ptr,
 int32_t __tgt_rtl_data_delete(int32_t device_id, void *tgt_ptr) {
   DP("__tgt_rtl_data_delete(device_id=%d, tgt_ptr=" DPxMOD ")\n", device_id,
      DPxPTR(tgt_ptr));
-  if (device_id == BIGPULP_SVM) {
+  if (device_id == HERODEV_SVM) {
     return OFFLOAD_SUCCESS;
   }
   return GOMP_OFFLOAD_free(device_id, tgt_ptr) ? OFFLOAD_SUCCESS : OFFLOAD_FAIL;
@@ -468,7 +468,7 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
 #endif
 
   void *host_buf = host_arg_buf.data();
-  if (device_id == BIGPULP_SVM) {
+  if (device_id == HERODEV_SVM) {
     // FIXME: assumes the host buf is in 32-bit range for now
     dev_arg_buf = host_buf;
   } else {
@@ -480,13 +480,13 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     __tgt_rtl_data_submit(device_id, dev_arg_buf, host_buf, size);
   }
 
-  // instruct PULP to run the offload function
+  // instruct HERO Device to run the offload function
   DP("Start offloading...\n");
-  hero_dev_mbox_write(pulp, MBOX_DEVICE_START);
-  hero_dev_mbox_write(pulp, (uint32_t)tgt_entry_ptr);
-  hero_dev_mbox_write(pulp, (uint32_t)dev_arg_buf);
-  const uint32_t num_miss_handler_threads = (device_id == BIGPULP_SVM) ? 1 : 0;
-  hero_dev_mbox_write(pulp, num_miss_handler_threads);
+  hero_dev_mbox_write(hd, MBOX_DEVICE_START);
+  hero_dev_mbox_write(hd, (uint32_t)tgt_entry_ptr);
+  hero_dev_mbox_write(hd, (uint32_t)dev_arg_buf);
+  const uint32_t num_miss_handler_threads = (device_id == HERODEV_SVM) ? 1 : 0;
+  hero_dev_mbox_write(hd, num_miss_handler_threads);
 
 #ifdef PREM_MODE
   // synchronize with CMUX
@@ -497,16 +497,16 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
 #endif
 
   uint32_t ret[2];
-  while (hero_dev_mbox_read(pulp, (unsigned int *)&ret[0], 1));
-  assert(ret[0] == 4 /* PULP_DONE */ &&
-         "Software mailbox protocol failure: Expected PULP_DONE.");
-  while (hero_dev_mbox_read(pulp, (unsigned int *)&ret[1], 1));
+  while (hero_dev_mbox_read(hd, (unsigned int *)&ret[0], 1));
+  assert(ret[0] == 4 /* HERODEV_DONE */ &&
+         "Software mailbox protocol failure: Expected HERODEV_DONE.");
+  while (hero_dev_mbox_read(hd, (unsigned int *)&ret[1], 1));
 
-  for (unsigned i = 0; i < hero_dev_get_nb_pe(pulp); ++i) {
+  for (unsigned i = 0; i < hero_dev_get_nb_pe(hd); ++i) {
     const size_t stdout_buf_size = 1024*1024; // FIXME: this should be defined in the same place as
-                                              // for PULP
-    const size_t stdout_offset_per_core = stdout_buf_size / hero_dev_get_nb_pe(pulp);
-    const volatile char* ptr = (char*)pulp->l3_mem.v_addr + stdout_offset_per_core * i;
+                                              // for HERO Device
+    const size_t stdout_offset_per_core = stdout_buf_size / hero_dev_get_nb_pe(hd);
+    const volatile char* ptr = (char*)hd->l3_mem.v_addr + stdout_offset_per_core * i;
     const volatile char* const end = ptr + stdout_offset_per_core;
     if (!*ptr)
       continue;

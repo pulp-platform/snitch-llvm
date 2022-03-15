@@ -5226,9 +5226,6 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
           TC = std::make_unique<toolchains::HeroSnitchToolChain>(*this, Target, Args);
           break;
         }
-        else
-          TC = std::make_unique<toolchains::BareMetal>(*this, Target, Args);
-        break;
       case llvm::Triple::riscv64:
         if (toolchains::RISCVToolChain::hasGCCToolchain(*this, Args))
           TC =

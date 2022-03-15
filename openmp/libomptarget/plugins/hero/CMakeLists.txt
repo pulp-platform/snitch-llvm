@@ -29,7 +29,7 @@ add_definitions(-DTARGET_NAME=HERO)
 set(CMAKE_CXX_FLAGS "-fpermissive")
 #set(CMAKE_CXX_FLAGS "-fms-extensions -Wno-error=reserved-user-defined-literal")
 
-# set flags (FIXME: include with idirafter to prevent problems with using accelerator definitions of pulp.h)
+# set flags (FIXME: include with idirafter to prevent problems with using accelerator definitions of herodev.h)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} $ENV{LIBGOMP_PLUGIN_HERO_DEV_CPPFLAGS} -lpthread -idirafter $ENV{HERO_DEV_INC_DIR}")
 set(CMAKE_LD_FLAGS "${CMAKE_LD_FLAGS} $ENV{LIBGOMP_PLUGIN_HERO_DEV_LDFLAGS} -lpthread")
 
@@ -65,14 +65,26 @@ else()
   )
 endif()
 
-# runtime library?
-# if(EXISTS $ENV{HERO_LIBHERODEV_DIR}/lib/libherodev.so)
-#   target_link_libraries(omptarget.rtl.herodev
-#       $ENV{HERO_LIBHERODEV_DIR}/lib/libherodev.so)
-# else()
-#   target_link_libraries(omptarget.rtl.herodev
-#       libherodev.so)
-# endif()
+# runtime library, device dependent
+if(EQUAL ${LIBOMPTARGET_HERO_DEV_TYPE} "PULP")
+  if(EXISTS $ENV{HERO_LIBPULP_DIR}/lib/libpulp.so)
+    target_link_libraries(omptarget.rtl.pulp
+        $ENV{HERO_LIBPULP_DIR}/lib/libpulp.so)
+  else()
+    target_link_libraries(omptarget.rtl.pulp
+        libpulp.so)
+  endif()
+endif()
+
+if(EQUAL ${LIBOMPTARGET_HERO_DEV_TYPE} "Snitch")
+  if(EXISTS $ENV{HERO_LIBSNITCH_DIR}/lib/libsnitch.so)
+    target_link_libraries(omptarget.rtl.herodev
+        $ENV{HERO_LIBSNITCH_DIR}/lib/libsnitch.so)
+  else()
+    target_link_libraries(omptarget.rtl.herodev
+        libsnitch.so)
+  endif()
+endif()
 
 # Report to the parent scope that we are building a plugin for HERO.
 set(LIBOMPTARGET_SYSTEM_TARGETS "${LIBOMPTARGET_SYSTEM_TARGETS} hero" PARENT_SCOPE)

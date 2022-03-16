@@ -65,9 +65,6 @@ void HeroSnitchToolChain::addClangTargetOptions(
   // FIXME: extra argument for target to allow dynamic datalayout
   CC1Args.push_back("-D__host=__attribute((address_space(1)))");
   CC1Args.push_back("-D__device=__attribute((address_space(0)))");
-  // TODO: Remove
-  SmallString<128> SrDir("random-dir-addClangTargetOptions");
-  addSystemInclude(DriverArgs, CC1Args, SrDir.str());
 
   // Fix cross compilation when not specifying --sysroot. Search in
   // <target-triple>/sysroot/usr/include for headers
@@ -87,10 +84,6 @@ void HeroSnitchToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
   SmallString<128> SysRootDir(computeSysRoot());
   llvm::sys::path::append(SysRootDir, "include");
   addSystemInclude(DriverArgs, CC1Args, SysRootDir.str());
-
-  // TODO: Remove
-  SmallString<128> SrDir("random-dir-AddClangSystemIncludeArgs");
-  addSystemInclude(DriverArgs, CC1Args, SrDir.str());
 }
 
 llvm::opt::DerivedArgList *HeroSnitchToolChain::TranslateArgs(const llvm::opt::DerivedArgList &Args,
@@ -174,6 +167,7 @@ void HeroSnitch::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   const ToolChain &TC = getToolChain();
   const Driver &D = C.getDriver();
   ArgStringList CmdArgs;
+  SmallString<128> ArgStr;
 
   // Force using lld
   SmallString<128> Linker(D.Dir);
@@ -183,49 +177,34 @@ void HeroSnitch::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   // from snRuntime
   CmdArgs.push_back("-plugin-opt=mcpu=snitch");
-  // CmdArgs.push_back("-nostartfiles");
-  // CmdArgs.push_back("-fuse-ld=lld");
+  CmdArgs.push_back("-plugin-opt=thinlto");
   // CmdArgs.push_back("-z norelro");
-  CmdArgs.push_back("--gc-sections");
-  CmdArgs.push_back("--no-relax");
 
-  // llvm::Optional<std::string> SnitchSdkInstallDir =
-  //       llvm::sys::Process::GetEnv("PULP_CURRENT_CONFIG");
-  // if(!PulpSdkInstallDir.hasValue()) {
-  //   TC.getDriver().Diag(diag::err_missing_pulp_config);
-  // }
-  // llvm::Regex ConfigRegex("^(.+)@.+");
-  // auto ConfigName = ConfigRegex.sub("\\1", PulpSdkInstallDir.getValue());
-
-  // SmallString<128> InstallDir(this->PulpSdkInstallDir);
-  // InstallDir.append("/hero/");
-  // InstallDir.append(ConfigName);
-  // SmallString<128> LibDir(this->PulpSdkInstallDir);
-  // LibDir.append("/lib/");
-  // LibDir.append(ConfigName);
-
-  // SmallString<128> Crt0(LibDir);
-  // llvm::sys::path::append(Crt0, "rt/crt0.o");
-  // CmdArgs.push_back(Args.MakeArgString(Crt0));
-
-  // SmallString<128> RtConf(InstallDir);
-  // llvm::sys::path::append(RtConf, "rt_conf.o");
-  // CmdArgs.push_back(Args.MakeArgString(RtConf));
-
-  CmdArgs.push_back("-nostdlib");
-  // CmdArgs.push_back("-nostartfiles");
-  CmdArgs.push_back("--gc-sections");
-
-  SmallString<128> ArgStr;
-  // ArgStr.append("-L");
-  // ArgStr.append(LibDir);
-  CmdArgs.push_back(Args.MakeArgString(ArgStr));
+  SmallString<128> InstallDir(this->SnRtInstallDir);
+  SmallString<128> LibDir(this->SnRtInstallDir);
+  LibDir.append("/lib/static");
 
   Args.AddAllArgs(CmdArgs, options::OPT_L);
   TC.AddFilePathLibArgs(Args, CmdArgs);
   Args.AddAllArgs(CmdArgs,
                   {options::OPT_T_Group, options::OPT_e, options::OPT_s,
                    options::OPT_t, options::OPT_Z_Flag, options::OPT_r});
+
+  // Add linker script
+  ArgStr.clear();
+  ArgStr.append("-T");
+  ArgStr.append(InstallDir);
+  llvm::sys::path::append(ArgStr, "/lib/common.ld");
+  CmdArgs.push_back(Args.MakeArgString(ArgStr));
+
+  CmdArgs.push_back("--gc-sections");
+  CmdArgs.push_back("--no-relax");
+
+  ArgStr.clear();
+  ArgStr.append("-L");
+  ArgStr.append(LibDir);
+  CmdArgs.push_back(Args.MakeArgString(ArgStr));
+  CmdArgs.push_back("-lsnRuntime-hero");
 
   // Clean inputs to linker
   InputInfoList FinalInputs;
@@ -246,32 +225,19 @@ void HeroSnitch::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   }
   AddLinkerInputs(TC, FinalInputs, Args, CmdArgs, JA);
 
-  ArgStr.clear();
-  // ArgStr.append("-T");
-  // ArgStr.append(InstallDir);
-  // llvm::sys::path::append(ArgStr, "config.ld");
-  CmdArgs.push_back(Args.MakeArgString(ArgStr));
-
   Add64BitLinkerMode(C, Output, CmdArgs);
-
-  ArgStr.clear();
-  // ArgStr.append("-T");
-  // ArgStr.append(InstallDir);
-  // llvm::sys::path::append(ArgStr, "../omptarget.ld");
-  CmdArgs.push_back(Args.MakeArgString(ArgStr));
 
   // Currently no support for C++, otherwise add C++ includes and libs if compiling C++.
 
-  // CmdArgs.push_back("-lomptarget-snitch");
-  // CmdArgs.push_back("-lhero-target");
-  // CmdArgs.push_back("-lomp");
-  // CmdArgs.push_back("-lvmm");
-  // CmdArgs.push_back("-larchi_host");
-  // CmdArgs.push_back("-lrt"); // can call into `librtio`
-  // CmdArgs.push_back("-lrtio"); // calls into `librt`
-  // CmdArgs.push_back("-lm");
-  // CmdArgs.push_back("-lgcc");
-  // CmdArgs.push_back("-lc");
+  // standard libraries
+  CmdArgs.push_back("-lm");
+  CmdArgs.push_back("--start-group");
+  CmdArgs.push_back("-lc");
+  CmdArgs.push_back("-lgloss");
+  CmdArgs.push_back("--end-group");
+  // clang runtime (compiler-rt)
+  CmdArgs.push_back(Args.MakeArgString(
+    D.ResourceDir + "/lib/libclang_rt.builtins-" + TC.getTriple().getArchName() + ".a"));
 
   CmdArgs.push_back("-o");
   CmdArgs.push_back(Output.getFilename());

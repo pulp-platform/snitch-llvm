@@ -111,9 +111,10 @@ extern "C" int GOMP_OFFLOAD_get_num_devices(void) {
   return 1;
 }
 
-static void init_hero_device() {
+static int init_hero_device() {
   TRACE_FUNCTION();
 
+  int ret;
   int currFreq = 0x0;
 
   hd = &hero_dev;
@@ -123,8 +124,10 @@ static void init_hero_device() {
   // space
   hero_dev_reserve_v_addr(hd);
 
-  if (hero_dev_mmap(hd) < 0) {
+  ret = hero_dev_mmap(hd);
+  if (ret < 0) {
     TRACE("ERROR: cannot load device!");
+    return ret;
   }
 
   currFreq = hero_dev_clking_set_freq(hd, HERO_DEV_DEFAULT_FREQ);
@@ -147,6 +150,7 @@ static void init_hero_device() {
   address_map = new AddrVectMap;
   num_devices = 1;
   num_images = 0;
+  return 0;
 }
 
 extern "C" bool GOMP_OFFLOAD_init_device(int n __attribute__((unused))) {

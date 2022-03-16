@@ -83,8 +83,10 @@ int32_t __tgt_rtl_init_device(int32_t device_id) {
     return OFFLOAD_FAIL;
   }
   if (!initialized) {
-    init_hero_device();
-    initialized = true;
+    if(init_hero_device() == 0)
+      initialized = true;
+    else
+      return OFFLOAD_FAIL;
   }
   // init hero does not return failure
   return OFFLOAD_SUCCESS;

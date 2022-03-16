@@ -217,8 +217,9 @@ bool map_to_mem(__tgt_device_image *image, void **target, size_t *size) {
       {&hd->clusters, hd->clusters.p_addr, "L1"},
       {&hd->clusters, hd->clusters.p_addr, "alias"},
       {&hd->l2_mem, hd->l2_mem.p_addr, "L2"},
+      {&hd->l3_mem, hd->l3_mem.p_addr, "L3"},
   };
-  size_t dev_count = 3;
+  size_t dev_count = sizeof(devs) / sizeof(devs[0]);
 
   for (size_t j = 0; j < dev_count; j++) {
     size_t dev_lo = devs[j].paddr;

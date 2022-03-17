@@ -197,7 +197,9 @@ void HeroSnitch::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   llvm::sys::path::append(ArgStr, "/lib/common.ld");
   CmdArgs.push_back(Args.MakeArgString(ArgStr));
 
-  CmdArgs.push_back("--gc-sections");
+  // don't gc-sections. This discards the offload function
+  // CmdArgs.push_back("--gc-sections");
+
   CmdArgs.push_back("--no-relax");
 
   ArgStr.clear();

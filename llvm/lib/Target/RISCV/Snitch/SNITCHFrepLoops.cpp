@@ -1447,7 +1447,7 @@ void SNITCHFrepLoops::insertFPUBarrier(MachineLoop *L, MachineBasicBlock *MBB) {
   DebugLoc DL;
   if(InsertPos == MBB->end()) {
     // MBB does not contain any non-PHI instructions, place builder at start of block
-    InsertPos == MBB->begin();
+    InsertPos = MBB->begin();
   }
   else {
     DL = InsertPos->getDebugLoc();

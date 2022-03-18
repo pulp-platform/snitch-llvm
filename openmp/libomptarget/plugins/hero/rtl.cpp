@@ -501,6 +501,7 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
          "Software mailbox protocol failure: Expected HERODEV_DONE.");
   while (hero_dev_mbox_read(hd, (unsigned int *)&ret[1], 1));
 
+#if defined(LIBOMPTARGET_HERO_DEV_TYPE_PULP)
   for (unsigned i = 0; i < hero_dev_get_nb_pe(hd); ++i) {
     const size_t stdout_buf_size = 1024*1024; // FIXME: this should be defined in the same place as
                                               // for HERO Device
@@ -516,6 +517,7 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     }
     printf("<<< END OF BUFFER\n");
   }
+#endif // defined(LIBOMPTARGET_HERO_DEV_TYPE_PULP)
 
   printf("Done offloading, cycles to execute kernel: %d!\n", (int)ret[1]);
 

@@ -482,7 +482,6 @@ bool RISCVExpandSSR::expandSSR_Barrier(MachineBasicBlock &MBB,
 void RISCVExpandSSR::mergePushPop(MachineBasicBlock &MBB) {
   SmallSet<Register, 8> virtRegs[NUM_SSR];
   const TargetRegisterInfo *TRI = MBB.getParent()->getRegInfo().getTargetRegisterInfo();
-  // bool inSSRRegion = false;
 
   Register ssr_regs[NUM_SSR];
   for(unsigned ssr_no = 0; ssr_no < NUM_SSR; ++ssr_no) ssr_regs[ssr_no] = getSSRFtReg(ssr_no);

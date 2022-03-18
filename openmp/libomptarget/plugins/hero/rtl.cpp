@@ -92,6 +92,17 @@ int32_t __tgt_rtl_init_device(int32_t device_id) {
   return OFFLOAD_SUCCESS;
 }
 
+// Optional symbol used to de-init the device
+int32_t __tgt_rtl_unregister_lib(__tgt_bin_desc *Desc) {
+  DP("__tgt_rtl_unregister_lib\n");
+  if (initialized) {
+    deinit_hero_device();
+    initialized = false;
+  }
+  return OFFLOAD_SUCCESS;
+}
+
+
 bool satisfy_requested_symbols(
     __tgt_device_image *image,
     std::map<std::string, __tgt_offload_entry> &syms) {

@@ -67,6 +67,7 @@ endif()
 
 # runtime library, device dependent
 if(${LIBOMPTARGET_HERO_DEV_TYPE} STREQUAL "PULP")
+  add_definitions(-DLIBOMPTARGET_HERO_DEV_TYPE_PULP)
   if(EXISTS $ENV{HERO_LIBPULP_DIR}/lib/libpulp.so)
     target_link_libraries(omptarget.rtl.pulp
         $ENV{HERO_LIBPULP_DIR}/lib/libpulp.so)
@@ -77,6 +78,7 @@ if(${LIBOMPTARGET_HERO_DEV_TYPE} STREQUAL "PULP")
 endif()
 
 if(${LIBOMPTARGET_HERO_DEV_TYPE} STREQUAL "Snitch")
+  add_definitions(-DLIBOMPTARGET_HERO_DEV_TYPE_SNITCH)
   if(EXISTS $ENV{HERO_LIBSNITCH_DIR}/lib/libsnitch.so)
     target_link_libraries(omptarget.rtl.herodev
         $ENV{HERO_LIBSNITCH_DIR}/lib/libsnitch.so)

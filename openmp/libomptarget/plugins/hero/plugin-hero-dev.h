@@ -153,6 +153,10 @@ static int init_hero_device() {
   return 0;
 }
 
+static int deinit_hero_device() {
+  hero_dev_munmap(hd);
+}
+
 extern "C" bool GOMP_OFFLOAD_init_device(int n __attribute__((unused))) {
   TRACE_FUNCTION();
 

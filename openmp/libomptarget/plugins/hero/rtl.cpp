@@ -497,8 +497,8 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
 
   uint32_t ret[2];
   while (hero_dev_mbox_read(hd, (unsigned int *)&ret[0], 1));
-  assert(ret[0] == 4 /* HERODEV_DONE */ &&
-         "Software mailbox protocol failure: Expected HERODEV_DONE.");
+  assert(ret[0] == MBOX_DEVICE_DONE &&
+         "Software mailbox protocol failure: Expected MBOX_DEVICE_DONE.");
   while (hero_dev_mbox_read(hd, (unsigned int *)&ret[1], 1));
 
 #if defined(LIBOMPTARGET_HERO_DEV_TYPE_PULP)
@@ -519,7 +519,7 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
   }
 #endif // defined(LIBOMPTARGET_HERO_DEV_TYPE_PULP)
 
-  printf("Done offloading, cycles to execute kernel: %d!\n", (int)ret[1]);
+  DP("Done offloading, cycles to execute kernel: %d!\n", (int)ret[1]);
 
   return OFFLOAD_SUCCESS;
 }

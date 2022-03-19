@@ -10,6 +10,23 @@
 //
 //===----------------------------------------------------------------------===//
 
+// tuimm12 predicate - same ass uimm, but use TargetConstant (TImmLeaf)
+// instead of Constant (ImmLeaf)
+// FIXME: factor common code between uimm12 and tuimm12
+def tuimm12 : Operand<XLenVT>, TImmLeaf<XLenVT, [{return isUInt<12>(Imm);}]> {
+  let ParserMatchClass = UImmAsmOperand<12>;
+  let EncoderMethod = "getImmOpValue";
+  let DecoderMethod = "decodeUImmOperand<12>";
+  let MCOperandPredicate = [{
+    int64_t Imm;
+    if (MCOp.evaluateAsConstantImm(Imm))
+      return isUInt<12>(Imm);
+    return MCOp.isBareSymbolRef();
+  }];
+  let OperandType = "OPERAND_UIMM12";
+  let OperandNamespace = "RISCVOp";
+}
+
 //===----------------------------------------------------------------------===//
 // Instruction class templates
 //===----------------------------------------------------------------------===//
@@ -2055,19 +2072,22 @@ def : Pat<(int_riscv_pulp_OffsetedWriteByte GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SB
 def : Pat<(int_riscv_pulp_read_base_off GPR:$rs1, GPR:$rs2), (P_LW_rr GPR:$rs1, GPR:$rs2)>;
 def : Pat<(int_riscv_pulp_write_base_off GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SW_rr GPR:$rs2, GPR:$rs1, GPR:$rs3)>;
 
-// CSR intrinsic patterns have been changed:
-// (CSRRS csr_sysreg:$imm12, X0) -> (CSRRS uimm12:$imm12, X0)
-// The former leads to a correct MachineInstruction selection but
-// breaks the RISCV ASM printer trying to deal with the selected MCInst.
-// TODO: make the following patterns work with the csr_sysreg class
-def : Pat<(int_riscv_pulp_spr_read_vol uimm12:$imm12), (CSRRS uimm12:$imm12, X0)>;
-def : Pat<(int_riscv_pulp_spr_read uimm12:$imm12), (CSRRS uimm12:$imm12, X0)>;
-def : Pat<(int_riscv_pulp_spr_write uimm12:$imm12, GPR:$rd), (CSRRW uimm12:$imm12, GPR:$rd)>;
-def : Pat<(int_riscv_pulp_spr_bit_set uimm12:$imm12, GPR:$rd), (CSRRS uimm12:$imm12, GPR:$rd)>;
-def : Pat<(int_riscv_pulp_spr_bit_clr uimm12:$imm12, GPR:$rd), (CSRRC uimm12:$imm12, GPR:$rd)>;
-def : Pat<(int_riscv_pulp_read_then_spr_write uimm12:$imm12, GPR:$rs1), (CSRRW uimm12:$imm12, GPR:$rs1)>;
-def : Pat<(int_riscv_pulp_read_then_spr_bit_set uimm12:$imm12, GPR:$rs1), (CSRRS uimm12:$imm12, GPR:$rs1)>;
-def : Pat<(int_riscv_pulp_read_then_spr_bit_clr uimm12:$imm12, GPR:$rs1), (CSRRC uimm12:$imm12, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_spr_read tuimm12:$csr),
+          (CSRRS csr_sysreg:$csr, X0)>;
+def : Pat<(int_riscv_pulp_spr_read_vol tuimm12:$csr),
+          (CSRRS csr_sysreg:$csr, X0)>;
+def : Pat<(int_riscv_pulp_spr_write tuimm12:$csr, GPR:$rd),
+          (CSRRW csr_sysreg:$csr, GPR:$rd)>;
+def : Pat<(int_riscv_pulp_spr_bit_set tuimm12:$csr, GPR:$rd),
+          (CSRRS csr_sysreg:$csr, GPR:$rd)>;
+def : Pat<(int_riscv_pulp_spr_bit_clr tuimm12:$csr, GPR:$rd),
+          (CSRRC csr_sysreg:$csr, GPR:$rd)>;
+def : Pat<(int_riscv_pulp_read_then_spr_write tuimm12:$csr, GPR:$rs1),
+          (CSRRW csr_sysreg:$csr, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_read_then_spr_bit_set tuimm12:$csr, GPR:$rs1),
+          (CSRRS csr_sysreg:$csr, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_read_then_spr_bit_clr tuimm12:$csr, GPR:$rs1),
+          (CSRRC csr_sysreg:$csr, GPR:$rs1)>;
 
 // TODO the *_v versions should have side effects
 def : Pat<(int_riscv_pulp_read_base_off_v GPR:$rs1, GPR:$rs2), (P_LW_rr GPR:$rs1, GPR:$rs2)>;

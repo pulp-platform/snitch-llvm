@@ -406,7 +406,10 @@ bool PULPHardwareLoops::findInductionRegister(MachineLoop *L,
   // Check that the exit branch can be analyzed.
   // AnalyzeBranch returns true if it fails to analyze branch.
   bool NotAnalyzed = TII->analyzeBranch(*ExitingBlock, TB, FB, Cond, false);
-  if (NotAnalyzed || Cond.empty()) {
+  if (NotAnalyzed
+      // The rest of this function is based on the assumption that we have
+      // 2x terminators, so bail out if this is not the case:
+      || Cond.size() != 2) {
     return false;
   }
   

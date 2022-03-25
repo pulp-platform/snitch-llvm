@@ -27,6 +27,16 @@ def tuimm12 : Operand<XLenVT>, TImmLeaf<XLenVT, [{return isUInt<12>(Imm);}]> {
   let OperandNamespace = "RISCVOp";
 }
 
+// tuimm12 predicate - same ass uimm, but use TargetConstant (TImmLeaf)
+// instead of Constant (ImmLeaf)
+// FIXME: factor common code between uimm5 and tuimm5
+def tuimm5 : Operand<XLenVT>, TImmLeaf<XLenVT, [{return isUInt<5>(Imm);}]> {
+  let ParserMatchClass = UImmAsmOperand<5>;
+  let DecoderMethod = "decodeUImmOperand<5>";
+  let OperandType = "OPERAND_UIMM5";
+  let OperandNamespace = "RISCVOp";
+}
+
 //===----------------------------------------------------------------------===//
 // Instruction class templates
 //===----------------------------------------------------------------------===//
@@ -1042,13 +1052,13 @@ let Predicates = [IsRV32, HasPULPExtV2],
 
 // Pattern Fragments
 
-def powerOf2Minus1      : ImmLeaf<XLenVT, [{ return isPowerOf2_32(Imm+1);   }]>;
-def negativePowerOf2    : ImmLeaf<XLenVT, [{ return isPowerOf2_32(-Imm);    }]>;
-def powerOf2            : ImmLeaf<XLenVT, [{ return isPowerOf2_32(Imm);     }]>;
-def mask                : ImmLeaf<XLenVT, [{ return isMask_32(Imm);         }]>;
-def flippedMask         : ImmLeaf<XLenVT, [{ return isMask_32(~Imm);        }]>;
-def shiftedMask         : ImmLeaf<XLenVT, [{ return isShiftedMask_32(Imm);  }]>;
-def shiftedFlippedMask  : ImmLeaf<XLenVT, [{ return isShiftedMask_32(~Imm); }]>;
+def powerOf2Minus1      : TImmLeaf<XLenVT, [{ return isPowerOf2_32(Imm+1);   }]>;
+def negativePowerOf2    : TImmLeaf<XLenVT, [{ return isPowerOf2_32(-Imm);    }]>;
+def powerOf2            : TImmLeaf<XLenVT, [{ return isPowerOf2_32(Imm);     }]>;
+def mask                : TImmLeaf<XLenVT, [{ return isMask_32(Imm);         }]>;
+def flippedMask         : TImmLeaf<XLenVT, [{ return isMask_32(~Imm);        }]>;
+def shiftedMask         : TImmLeaf<XLenVT, [{ return isShiftedMask_32(Imm);  }]>;
+def shiftedFlippedMask  : TImmLeaf<XLenVT, [{ return isShiftedMask_32(~Imm); }]>;
 
 
 def between
@@ -2046,8 +2056,8 @@ def : Pat<(int_riscv_pulp_bextractu GPR:$rs1, uimm5:$size, uimm5:$shift),
 def : PatGprGpr<int_riscv_pulp_bextractu_r, P_EXTRACTUR>;
 
 def : Pat<(int_riscv_pulp_binsert GPR:$rd, shiftedFlippedMask,
-                                  GPR:$rs1, shiftedMask:$srcMask, uimm5:$shift),
-          (P_INSERT GPR:$rd, GPR:$rs1, (maskWidthMinus1 imm:$srcMask), uimm5:$shift)>;
+                                  GPR:$rs1, shiftedMask:$srcMask, tuimm5:$shift),
+          (P_INSERT GPR:$rd, GPR:$rs1, (maskWidthMinus1 imm:$srcMask), tuimm5:$shift)>;
 def : Pat<(int_riscv_pulp_binsert_r GPR:$rd, GPR:$rs1, GPR:$rs2),
           (P_INSERTR GPR:$rd, GPR:$rs1, GPR:$rs2)>;
 

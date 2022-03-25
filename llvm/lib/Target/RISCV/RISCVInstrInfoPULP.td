@@ -524,7 +524,7 @@ def : Pat<(post_loadi32u GPR:$Rs1, GPR:$Rs2),
 //===----------------------------------------------------------------------===//
 //===----------------------------------------------------------------------===//
 
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0, Predicates = [HasPULPExtV2] in {
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, Predicates = [IsRV32, HasPULPExtV2] in {
 class Pulp_ALU_r<bits<7> funct7, bits<3> funct3,
                  RISCVOpcode opcode, string opcodestr>
     : RVInstR<funct7, funct3, opcode, (outs GPR:$rd), (ins GPR:$rs1),
@@ -685,7 +685,7 @@ def P_SUBRNR :  Pulp_ALU_rr_wb<0b0100000, 0b111, OPC_OP, "p.subrnr">;
 def P_SUBURNR : Pulp_ALU_rr_wb<0b1100000, 0b111, OPC_OP, "p.suburnr">;
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0,
-    isBranch = 1, isTerminator = 1, Predicates = [HasPULPExtV2] in
+    isBranch = 1, isTerminator = 1, Predicates = [IsRV32, HasPULPExtV2] in
 class Pulp_Immediate_Branch<bits<3> funct3, string opcodestr>
       : RVInstB<funct3, OPC_BRANCH, (outs),
                 (ins GPR:$rs1, simm5:$rs2, simm13_lsb0:$imm12),
@@ -739,7 +739,7 @@ def uimm6 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<6>(Imm);}]> {
 }
 
 
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0, Predicates = [HasPULPExtV2] in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, Predicates = [IsRV32, HasPULPExtV2] in
 class Pulp_ALU_vsci<bits<5> funct5, bit F, bits<3> funct3, string opcodestr,
                     RegisterClass vec, Operand sci, RegisterClass res = vec>
     : RVInst<(outs res:$rd), (ins vec:$rs1, sci:$Imm6), opcodestr,
@@ -759,7 +759,7 @@ class Pulp_ALU_vsci<bits<5> funct5, bit F, bits<3> funct3, string opcodestr,
   let Opcode = 0b1010111;
 }
 
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0, Predicates = [HasPULPExtV2] in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, Predicates = [IsRV32, HasPULPExtV2] in
 class Pulp_ALU_vsci_wb<bits<5> funct5, bit F, bits<3> funct3, string opcodestr,
                     RegisterClass vec, Operand sci, RegisterClass res = vec>
     : RVInst<(outs res:$rd_wb), (ins res:$rd, vec:$rs1, sci:$Imm6), opcodestr,
@@ -828,7 +828,7 @@ defm PV_XOR  : SC_SCI_H_B<0b01100, 0, simm6, "xor">;
 defm PV_AND  : SC_SCI_H_B<0b01101, 0, simm6, "and">;
 
 let hasSideEffects = 0, mayStore = 0, mayLoad = 0,
-    Predicates = [HasPULPExtV2], rs2 = 0 in {
+    Predicates = [IsRV32, HasPULPExtV2], rs2 = 0 in {
   def PV_ABS_H : RVInstR<0b0111000, 0b000, OPC_OP_V,
                          (outs PulpV2:$rd), (ins PulpV2:$rs1),
                          "pv.abs.h", "$rd, $rs1">, Sched<[WriteIALU, ReadIALU]>;
@@ -883,7 +883,7 @@ defm PV_CMPLTU : SC_SCI_H_B<0b01000, 1, uimm6, "cmpltu">;
 defm PV_CMPLEU : SC_SCI_H_B<0b01001, 1, uimm6, "cmpleu">;
 
 
-let hasSideEffects = 0, mayLoad = 1, mayStore = 0, Predicates = [HasPULPExtV2] in
+let hasSideEffects = 0, mayLoad = 1, mayStore = 0, Predicates = [IsRV32, HasPULPExtV2] in
 multiclass Pulp_Load<bits<7> funct7, bits<3> funct3, string opcodestr> {
 
   def _ri_PostIncrement
@@ -911,7 +911,7 @@ defm P_LHU : Pulp_Load<0b0101000, 0b101, "p.lhu">, Sched<[WriteLDH, ReadMemBase]
 defm P_LW  : Pulp_Load<0b0010000, 0b010, "p.lw">,  Sched<[WriteLDW, ReadMemBase]>;
 
 
-let hasSideEffects = 0, mayLoad = 0, mayStore = 1, Predicates = [HasPULPExtV2] in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 1, Predicates = [IsRV32, HasPULPExtV2] in
 multiclass Pulp_Store<bits<2> funct2, string opcodestr> {
 
     def _ri_PostIncrement
@@ -975,7 +975,7 @@ def uimm6_lsb0 : Operand<OtherVT>,
 
 def OPC_PULP_LOOP : RISCVOpcode<"LP", 0b1111011>;
 
-let Predicates = [HasPULPExtV2],
+let Predicates = [IsRV32, HasPULPExtV2],
     hasSideEffects = 1, mayLoad = 0, mayStore = 0 in {
   def LP_STARTI : RVInstI<0b000, OPC_PULP_LOOP, (outs),
                           (ins uimm1:$L, uimm13_lsb0:$imm12),
@@ -1195,7 +1195,7 @@ def maskWidthMinus1 : SDNodeXForm<imm, [{
 
 
 
-let Predicates = [HasPULPExtV2] in {
+let Predicates = [IsRV32, HasPULPExtV2] in {
 // Patterns for bit manipulation operations
 
 // extract
@@ -1422,7 +1422,7 @@ def machhu : PatFrag<(ops node:$rd, node:$rs1, node:$rs2),
                      (add node:$rd, (mulhhu node:$rs1, node:$rs2))>;
 
 
-let Predicates = [HasPULPExtV2] in {
+let Predicates = [IsRV32, HasPULPExtV2] in {
 
 def : Pat<(add GPR:$rd, (mul GPR:$rs1, GPR:$rs2)),
           (P_MAC GPR:$rd, GPR:$rs1, GPR:$rs2)>;
@@ -1531,7 +1531,7 @@ class vec_avg<ValueType vectype, SDNode shiftOp>
                        (vectype (splat_vector (i32 1))))>;
 
 
-let Predicates = [HasPULPExtV2] in {
+let Predicates = [IsRV32, HasPULPExtV2] in {
 
 defm : GeneralSVectorPattern<add, "ADD">;
 defm : GeneralSVectorPattern<sub, "SUB">;
@@ -1659,7 +1659,7 @@ class dotp_sc_b<PatFrag extractOp>
 def dotup_sc_b : dotp_sc_b<ubextract>;
 def dotsp_sc_b : dotp_sc_b<sbextract>;
 
-let Predicates = [HasPULPExtV2] in {
+let Predicates = [IsRV32, HasPULPExtV2] in {
 
 def : PatV2V2<dotup_h, PV_DOTUP_H>;
 

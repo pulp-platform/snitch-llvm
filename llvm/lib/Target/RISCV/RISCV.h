@@ -54,6 +54,8 @@ void initializeRISCVCleanupVSETVLIPass(PassRegistry &);
 FunctionPass *createRISCVExpandSSRPass();
 void initializeRISCVExpandSSRPass(PassRegistry &);
 
+//TODO : reference function pass for auto SSR inference here (+ add to CMakeLists.txt)
+
 FunctionPass *createRISCVExpandSDMAPass();
 void initializeRISCVExpandSDMAPass(PassRegistry &);
 

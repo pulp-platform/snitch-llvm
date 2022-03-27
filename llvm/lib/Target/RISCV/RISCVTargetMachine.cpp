@@ -221,6 +221,8 @@ void RISCVPassConfig::addPreRegAlloc() {
   if (TM->getOptLevel() != CodeGenOpt::None) {
     addPass(createRISCVMergeBaseOffsetOptPass());
     addPass(createRISCVCleanupVSETVLIPass());
+    //TODO add pass that automatically inserts SSR instructions here
+    //addPass(createRISCVExpandSSRPass());
     addPass(createPULPHardwareLoops());
   }
 }

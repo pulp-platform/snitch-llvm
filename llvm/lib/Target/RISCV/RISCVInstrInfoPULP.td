@@ -27,7 +27,7 @@ def tuimm12 : Operand<XLenVT>, TImmLeaf<XLenVT, [{return isUInt<12>(Imm);}]> {
   let OperandNamespace = "RISCVOp";
 }
 
-// tuimm12 predicate - same ass uimm, but use TargetConstant (TImmLeaf)
+// tuimm5 predicate - same ass uimm, but use TargetConstant (TImmLeaf)
 // instead of Constant (ImmLeaf)
 // FIXME: factor common code between uimm5 and tuimm5
 def tuimm5 : Operand<XLenVT>, TImmLeaf<XLenVT, [{return isUInt<5>(Imm);}]> {

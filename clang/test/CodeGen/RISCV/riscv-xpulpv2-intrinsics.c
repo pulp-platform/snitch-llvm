@@ -1,5 +1,5 @@
-// RUN: %clang --target=riscv32 -march=rv32imafcxpulpv2 -S -emit-llvm -o - %s \
-// RUN:  | FileCheck %s
+// RUN: %clang_cc1 -triple riscv32 -target-feature +xpulpv -emit-llvm %s -o - \
+// RUN:     | FileCheck %s
 
 #include <stdint.h>
 

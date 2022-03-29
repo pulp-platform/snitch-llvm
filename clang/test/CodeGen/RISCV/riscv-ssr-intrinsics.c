@@ -1,4 +1,4 @@
-// RUN: %clang -march=rv32ifd_xssr1 -S -emit-llvm -o - %s \
+// RUN: %clang --target=riscv32 -march=rv32ifd_xssr1 -S -emit-llvm -o - %s \
 // RUN:  | FileCheck %s --check-prefix=CHECK --check-prefix=CHECK-RISCV
 
 #include <stdint.h>

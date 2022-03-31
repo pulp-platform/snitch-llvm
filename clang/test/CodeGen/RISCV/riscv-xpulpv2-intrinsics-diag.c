@@ -1,3 +1,4 @@
+// REQUIRES: riscv-registered-target
 // RUN: %clang_cc1 %s -triple=riscv32 -verify -S -o -
 
 #include <stdint.h>

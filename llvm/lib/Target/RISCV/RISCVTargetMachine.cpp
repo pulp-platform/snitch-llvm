@@ -170,6 +170,7 @@ TargetPassConfig *RISCVTargetMachine::createPassConfig(PassManagerBase &PM) {
 
 void RISCVPassConfig::addIRPasses() {
   addPass(createAtomicExpandPass());
+  //TODO: add pass for auto SSR Inference here?
   TargetPassConfig::addIRPasses();
 }
 
@@ -221,8 +222,6 @@ void RISCVPassConfig::addPreRegAlloc() {
   if (TM->getOptLevel() != CodeGenOpt::None) {
     addPass(createRISCVMergeBaseOffsetOptPass());
     addPass(createRISCVCleanupVSETVLIPass());
-    //TODO add pass that automatically inserts SSR instructions here
-    //addPass(createRISCVExpandSSRPass());
     addPass(createPULPHardwareLoops());
   }
 }

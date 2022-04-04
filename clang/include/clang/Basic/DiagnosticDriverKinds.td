@@ -507,7 +507,7 @@ def err_missing_pulp_config : Error<
   "PULP config not found! Please set the environment variable PULP_CURRENT_CONFIG by sourcing the PULP environment.">;
 
 def err_missing_snitch_sdk : Error<
-  "Snitch Runtime install directory not found! Please set the environment variable SNRUNTIME_INSTALL.">;
+  "Snitch Runtime install directory not found! Please set the environment variable SNRT_INSTALL.">;
 
 def warn_drv_darwin_sdk_invalid_settings : Warning<
   "SDK settings were ignored as 'SDKSettings.json' could not be parsed">,

@@ -2047,12 +2047,12 @@ def : Pat<(int_riscv_pulp_bset GPR:$rs1, shiftedMask:$mask),
           (P_BSET GPR:$rs1, (maskWidthMinus1 imm:$mask), (trailing0s imm:$mask))>;
 def : PatGprGpr<int_riscv_pulp_bset_r, P_BSETR>;
 
-def : Pat<(int_riscv_pulp_bextract GPR:$rs1, uimm5:$size, uimm5:$shift),
-          (P_EXTRACT GPR:$rs1, uimm5:$size, uimm5:$shift)>;
+def : Pat<(int_riscv_pulp_bextract GPR:$rs1, tuimm5:$size, tuimm5:$shift),
+          (P_EXTRACT GPR:$rs1, tuimm5:$size, tuimm5:$shift)>;
 def : PatGprGpr<int_riscv_pulp_bextract_r, P_EXTRACTR>;
 
-def : Pat<(int_riscv_pulp_bextractu GPR:$rs1, uimm5:$size, uimm5:$shift),
-          (P_EXTRACTU GPR:$rs1, uimm5:$size, uimm5:$shift)>;
+def : Pat<(int_riscv_pulp_bextractu GPR:$rs1, tuimm5:$size, tuimm5:$shift),
+          (P_EXTRACTU GPR:$rs1, tuimm5:$size, tuimm5:$shift)>;
 def : PatGprGpr<int_riscv_pulp_bextractu_r, P_EXTRACTUR>;
 
 def : Pat<(int_riscv_pulp_binsert GPR:$rd, shiftedFlippedMask,

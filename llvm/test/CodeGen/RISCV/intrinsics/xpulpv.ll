@@ -678,7 +678,7 @@ define i32 @test_llvm_riscv_pulp_OffsetedRead(i32* %data) {
 
 declare void @llvm.riscv.pulp.OffsetedWrite(i32, i32*, i32)
 define void @test_llvm_riscv_pulp_OffsetedWrite(i32* %data) {
-; CHECK-LABEL: @@test_llvm_riscv_pulp_OffsetedWrite
+; CHECK-LABEL: @test_llvm_riscv_pulp_OffsetedWrite
 ; CHECK:       # %bb.0:
 ;
   call void @llvm.riscv.pulp.OffsetedWrite(i32 1, i32* %data, i32 4)
@@ -696,7 +696,7 @@ define i32 @test_llvm_riscv_pulp_OffsetedReadHalf(i16* %data) {
 
 declare void @llvm.riscv.pulp.OffsetedWriteHalf(i32, i16*, i32)
 define void @test_llvm_riscv_pulp_OffsetedWriteHalf(i16* %data) {
-; CHECK-LABEL: @@test_llvm_riscv_pulp_OffsetedWriteHalf
+; CHECK-LABEL: @test_llvm_riscv_pulp_OffsetedWriteHalf
 ; CHECK:       # %bb.0:
 ;
   call void @llvm.riscv.pulp.OffsetedWriteHalf(i32 1, i16* %data, i32 4)
@@ -714,7 +714,7 @@ define i32 @test_llvm_riscv_pulp_OffsetedReadByte(i8* %data) {
 
 declare void @llvm.riscv.pulp.OffsetedWriteByte(i32, i8*, i32)
 define void @test_llvm_riscv_pulp_OffsetedWriteByte(i8* %data) {
-; CHECK-LABEL: @@test_llvm_riscv_pulp_OffsetedWriteByte
+; CHECK-LABEL: @test_llvm_riscv_pulp_OffsetedWriteByte
 ; CHECK:       # %bb.0:
 ;
   call void @llvm.riscv.pulp.OffsetedWriteByte(i32 1, i8* %data, i32 4)

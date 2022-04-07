@@ -246,36 +246,28 @@ let TargetPrefix = "riscv" in {
                                  [llvm_v2i16_ty, llvm_v2i16_ty, llvm_v2i16_ty],
                                  [IntrNoMem]>;
 
-  defm bclr
-      : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
+  defm bclr : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+                            [IntrNoMem, ImmArg<ArgIndex<1>>]>;
   defm bclr_r : PulpBinary32;
-  defm bset
-      : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
+  defm bset : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty],
+                            [IntrNoMem, ImmArg<ArgIndex<1>>]>;
   defm bset_r : PulpBinary32;
-  defm bextract
-      : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-                      [IntrNoMem]>;
+  defm bextract : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                                [IntrNoMem, ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
   defm bextract_r : PulpBinary32;
-  defm bextractu
-      : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-                      [IntrNoMem]>;
+  defm bextractu : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                                 [IntrNoMem, ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
   defm bextractu_r : PulpBinary32;
-  defm binsert
-      : PulpIntrinsic<
-            [llvm_i32_ty],
-            [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-            [IntrNoMem, ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<3>>,
-            ImmArg<ArgIndex<4>>]>;
-  defm binsert_r
-      : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-                      [IntrNoMem]>;
-  defm clip
-      : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-                      [IntrNoMem, ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  defm binsert : PulpIntrinsic<[llvm_i32_ty],
+                               [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                               [IntrNoMem, ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<3>>, ImmArg<ArgIndex<4>>]>;
+  defm binsert_r : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                                 [IntrNoMem]>;
+  defm clip : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                            [IntrNoMem, ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
   defm clip_r : PulpBinary32;
-  defm clipu
-      : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
-                      [IntrNoMem, ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
+  defm clipu : PulpIntrinsic<[llvm_i32_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
+                             [IntrNoMem, ImmArg<ArgIndex<1>>, ImmArg<ArgIndex<2>>]>;
   defm clipu_r : PulpBinary32;
 
   // PULP Memory Intrinsics

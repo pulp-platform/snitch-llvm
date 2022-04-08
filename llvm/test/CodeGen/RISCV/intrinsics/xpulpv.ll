@@ -720,3 +720,120 @@ define void @test_llvm_riscv_pulp_OffsetedWriteByte(i8* %data) {
   call void @llvm.riscv.pulp.OffsetedWriteByte(i32 1, i8* %data, i32 4)
   ret void
 }
+
+declare i32 @llvm.riscv.pulp.read.base.off(i32* %data, i32)
+define i32 @test_llvm_riscv_pulp_read_base_off(i32* %data) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_read_base_off
+; CHECK:       # %bb.0:
+;
+  %1 = call i32 @llvm.riscv.pulp.read.base.off(i32* %data, i32 15)
+  ret i32 %1
+}
+
+declare void @llvm.riscv.pulp.write.base.off(i32, i32*, i32)
+define void @test_llvm_riscv_pulp_write_base_off(i32* %data) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_write_base_off
+; CHECK:       # %bb.0:
+;
+  call void @llvm.riscv.pulp.write.base.off(i32 1, i32* %data, i32 15)
+  ret void
+}
+
+declare i32 @llvm.riscv.pulp.read.base.off.v(i32*, i32)
+define i32 @test_llvm_riscv_pulp_read_base_off_v(i32* %data) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_read_base_off_v
+; CHECK:       # %bb.0:
+;
+  %1 = call i32 @llvm.riscv.pulp.read.base.off.v(i32* %data, i32 15)
+  ret i32 %1
+}
+
+declare void @llvm.riscv.pulp.write.base.off.v(i32, i32*, i32)
+define void @test_llvm_riscv_pulp_write_base_off_v(i32* %data) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_write_base_off_v
+; CHECK:       # %bb.0:
+;
+  call void @llvm.riscv.pulp.write.base.off.v(i32 1, i32* %data, i32 15)
+  ret void
+}
+
+declare i32 @llvm.riscv.pulp.read.then.spr.bit.clr(i32, i32)
+define i32 @test_llvm_riscv_pulp_read_then_spr_bit_clr() {
+; CHECK-LABEL: @test_llvm_riscv_pulp_read_then_spr_bit_clr
+; CHECK:       # %bb.0:
+;
+  %1 = call i32 @llvm.riscv.pulp.read.then.spr.bit.clr(i32 3860, i32 8)
+  ret i32 %1
+}
+
+declare i32 @llvm.riscv.pulp.read.then.spr.bit.set(i32, i32)
+define i32 @test_llvm_riscv_pulp_read_then_spr_bit_set() {
+; CHECK-LABEL: @test_llvm_riscv_pulp_read_then_spr_bit_set
+; CHECK:       # %bb.0:
+;
+  %1 = call i32 @llvm.riscv.pulp.read.then.spr.bit.set(i32 3860, i32 8)
+  ret i32 %1
+}
+
+declare i32 @llvm.riscv.pulp.read.then.spr.write(i32, i32)
+define i32 @test_llvm_riscv_pulp_read_then_spr_write() {
+; CHECK-LABEL: @test_llvm_riscv_pulp_read_then_spr_write
+; CHECK:       # %bb.0:
+;
+  %1 = call i32 @llvm.riscv.pulp.read.then.spr.write(i32 3860, i32 8)
+  ret i32 %1
+}
+
+declare void @llvm.riscv.pulp.spr.bit.clr(i32, i32)
+define void @test_llvm_riscv_pulp_spr_bit_clr() {
+; CHECK-LABEL: @test_llvm_riscv_pulp_spr_bit_clr
+; CHECK:       # %bb.0:
+;
+  call void @llvm.riscv.pulp.spr.bit.clr(i32 3860, i32 8)
+  ret void
+}
+
+declare void @llvm.riscv.pulp.spr.bit.set(i32, i32)
+define void @test_llvm_riscv_pulp_spr_bit_set() {
+; CHECK-LABEL: @test_llvm_riscv_pulp_spr_bit_set
+; CHECK:       # %bb.0:
+;
+  call void @llvm.riscv.pulp.spr.bit.set(i32 3860, i32 8)
+  ret void
+}
+
+declare i32 @llvm.riscv.pulp.spr.read(i32)
+define i32 @test_llvm_riscv_pulp_spr_read() {
+; CHECK-LABEL: @
+; CHECK:       # %bb.0:
+;
+  %1 = call i32 @llvm.riscv.pulp.spr.read(i32 3860)
+  ret i32 %1
+}
+
+declare i32 @llvm.riscv.pulp.spr.read.vol(i32)
+define i32 @test_llvm_riscv_pulp_spr_read_vol() {
+; CHECK-LABEL: @test_llvm_riscv_pulp_spr_read_vol
+; CHECK:       # %bb.0:
+;
+  %1 = call i32 @llvm.riscv.pulp.spr.read.vol(i32 3860)
+  ret i32 %1
+}
+
+declare void @llvm.riscv.pulp.spr.write(i32, i32)
+define void @test_llvm_riscv_pulp_spr_write() {
+; CHECK-LABEL: @test_llvm_riscv_pulp_spr_write
+; CHECK:       # %bb.0:
+;
+  call void @llvm.riscv.pulp.spr.write(i32 3860, i32 8)
+  ret void
+}
+
+declare i32 @llvm.riscv.pulp.event.unit.read(i32*, i32)
+define i32 @test_llvm_riscv_pulp_event_unit_read(i32* %data) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_event_unit_read
+; CHECK:       # %bb.0:
+;
+  %1 = call i32 @llvm.riscv.pulp.event.unit.read(i32* %data, i32 8)
+  ret i32 %1
+}

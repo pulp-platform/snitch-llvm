@@ -1,4 +1,4 @@
-# RUN: llc -x mir -mcpu=snitch -run-pass=riscv-expand-sdma < %s \
+# RUN: llc -x mir -march=riscv32 -mattr=+xdma -run-pass=riscv-expand-sdma < %s \
 # RUN: | FileCheck -check-prefix=RV32-SDMA %s
 
 --- |

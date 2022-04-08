@@ -1,6 +1,6 @@
-# RUN: llc -x mir -mcpu=snitch -run-pass=riscv-expand-ssr < %s \
+# RUN: llc -x mir -march=riscv32 -mattr=+xdma -run-pass=riscv-expand-ssr < %s \
 # RUN: | FileCheck -check-prefix=SSR-MERGE %s
-# RUN: llc -x mir -mcpu=snitch --ssr-noregmerge -run-pass=riscv-expand-ssr < %s \
+# RUN: llc -x mir -march=riscv32 -mattr=+xdma --ssr-noregmerge -run-pass=riscv-expand-ssr < %s \
 # RUN: | FileCheck -check-prefix=SSR-NOMERGE %s
 
 --- |

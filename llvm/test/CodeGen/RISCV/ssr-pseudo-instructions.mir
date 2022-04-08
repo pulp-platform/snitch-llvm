@@ -1,4 +1,4 @@
-# RUN: llc -x mir -mcpu=snitch -run-pass=riscv-expand-ssr < %s \
+# RUN: llc -x mir -march=riscv32 -mattr=+xssr -run-pass=riscv-expand-ssr < %s \
 # RUN: | FileCheck -check-prefix=RV32-SSR %s
 
 --- |

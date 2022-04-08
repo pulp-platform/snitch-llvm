@@ -83,5 +83,18 @@ void test_builtin_pulp_diag(int32_t *data) {
   __builtin_pulp_OffsetedWrite(1, data, 4); // expected-error {{'__builtin_pulp_OffsetedWrite' needs target feature xpulpv}}
   __builtin_pulp_OffsetedWriteHalf(1, (int16_t *) data, 4); // expected-error {{'__builtin_pulp_OffsetedWriteHalf' needs target feature xpulpv}}
   __builtin_pulp_OffsetedWriteByte(1, (char *) data, 4); // expected-error {{'__builtin_pulp_OffsetedWriteByte' needs target feature xpulpv}}
+  (void) __builtin_pulp_read_base_off(data, 0xF); // expected-error {{'__builtin_pulp_read_base_off' needs target feature xpulpv}}
+  __builtin_pulp_write_base_off(0x1, data, 0xF); // expected-error {{'__builtin_pulp_write_base_off' needs target feature xpulpv}}
+  (void) __builtin_pulp_read_base_off_v(data, 0xF); // expected-error {{'__builtin_pulp_read_base_off_v' needs target feature xpulpv}}
+  __builtin_pulp_write_base_off_v(0x1, data, 0xF); // expected-error {{'__builtin_pulp_write_base_off_v' needs target feature xpulpv}}
+  (void) __builtin_pulp_read_then_spr_bit_clr(0xF14, 0x8); // expected-error {{'__builtin_pulp_read_then_spr_bit_clr' needs target feature xpulpv}}
+  (void) __builtin_pulp_read_then_spr_bit_set(0xF14, 0x8); // expected-error {{'__builtin_pulp_read_then_spr_bit_set' needs target feature xpulpv}}
+  (void) __builtin_pulp_read_then_spr_write(0xF14, 8); // expected-error {{'__builtin_pulp_read_then_spr_write' needs target feature xpulpv}}
+  __builtin_pulp_spr_bit_clr(0xF14, 0x8); // expected-error {{'__builtin_pulp_spr_bit_clr' needs target feature xpulpv}}
+  __builtin_pulp_spr_bit_set(0xF14, 0x8); // expected-error {{'__builtin_pulp_spr_bit_set' needs target feature xpulpv}}
+  (void) __builtin_pulp_spr_read(0xF14); // expected-error {{'__builtin_pulp_spr_read' needs target feature xpulpv}}
+  (void) __builtin_pulp_spr_read_vol(0xF14); // expected-error {{'__builtin_pulp_spr_read_vol' needs target feature xpulpv}}
+  __builtin_pulp_spr_write(0xF14, 0x8); // expected-error {{'__builtin_pulp_spr_write' needs target feature xpulpv}}
+  (void) __builtin_pulp_event_unit_read(data, 0x8); // expected-error {{'__builtin_pulp_event_unit_read' needs target feature xpulpv}}
   // clang-format on
 }

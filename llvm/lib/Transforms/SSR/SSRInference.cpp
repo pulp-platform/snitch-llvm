@@ -13,6 +13,9 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/InstrTypes.h"
+#include "llvm/IR/IRBuilder.h"
+
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
 
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
@@ -22,13 +25,40 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/Casting.h"
 
-#include <deque>
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/IntrinsicsRISCV.h"
+
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/TinyPtrVector.h"
+#include "llvm/ADT/ilist.h"
+
+#include <array>
 
 using namespace llvm;
 
 namespace{
 
+struct SSRStream{
+  BasicBlock *preheader;
+  BasicBlock *exit;
+  
+  BasicBlock *setupInsts;
+  SmallVector<Instruction *, 1> moveInsts; //likely to be just one or maybe two load/store insts
+
+  bool isStore;
+
+  unsigned dim;
+  Value *data;
+  Value *bound;
+  Value *stride;
+
+  unsigned dm; //"color"
+  SmallVector<SSRStream> conflicts; //"edges" to conflicting SSRStreams
+};
+
 Value *SCEVtoValues(const SCEV *scev, BasicBlock *block){
+  //FIXME: ugly because instructions are already inserted! => use IRBuilder or sth.
   assert(scev && block && "arguments should not be null");
   switch (scev->getSCEVType())
   {
@@ -93,6 +123,78 @@ Value *SCEVtoValues(const SCEV *scev, BasicBlock *block){
   }
 }
 
+ConstantInt *SCEVtoConstStep(const SCEV *scev, const SCEV *init, Loop *L){
+  //FIXME: lots to do better here
+  errs()<<"trying to find stepsize\n";
+  scev->dump();
+  if(const SCEVAddRecExpr *rec = dyn_cast<SCEVAddRecExpr>(scev)){
+    errs()<<"add-rec-expr at root\n";
+    if (rec->getLoop() == L && rec->getOperand(0) == init){
+      errs()<<"loop and init match\n";
+      if (const SCEVConstant *c = dyn_cast<SCEVConstant>(rec->getOperand(1))){
+        return dyn_cast<ConstantInt>(c->getValue());
+      }
+    }
+  }
+  return nullptr;
+}
+
+void GenerateSSRInstructions(const SSRStream &stream){
+  Module *mod = stream.preheader->getModule(); //module for function declarations, TODO: is this the correct one?
+  IntegerType *i32 = IntegerType::getInt32Ty(stream.preheader->getContext());
+
+  Instruction *point = stream.preheader->getTerminator();
+
+  //add all setup instructions to preheader
+  for (Instruction &I : *stream.setupInsts){
+    I.removeFromParent();
+    I.insertBefore(point);
+  }
+  stream.setupInsts->eraseFromParent(); //not needed anymore ==> delete
+
+  IRBuilder<> builder(point);
+
+  ConstantInt *dm = ConstantInt::get(i32, stream.dm); //datamover id, ty=i32
+  ConstantInt *dim = ConstantInt::get(i32, stream.dim - 1); //dimension - 1, ty=i32
+  // data pointer, ty=i8*
+  Function *SSRReadSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_read_imm); //can take _imm bc dm and dim are constant
+  std::array<Value *, 3> args = {dm, dim, stream.data};
+  builder.CreateCall(SSRReadSetup->getFunctionType(), SSRReadSetup, ArrayRef<Value *>(args), "ssr.read.setup");
+
+  ConstantInt *rep; //repetition - 1, ty=i32
+  rep = ConstantInt::get(i32, stream.moveInsts.size());
+  Function *SSRRepetitionSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_setup_repetition);
+  std::array<Value *, 2> repargs = {dm, rep};
+  builder.CreateCall(SSRRepetitionSetup->getFunctionType(), SSRRepetitionSetup, ArrayRef<Value *>(repargs), "ssr.rep.setup");
+
+  //bound - 1, ty=i32, relative stride, ty=i32
+  Function *SSRBoundStrideSetup1D = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_setup_bound_stride_1d);
+  std::array<Value *, 3> bsargs = {dm, stream.bound, stream.stride};
+  builder.CreateCall(SSRBoundStrideSetup1D->getFunctionType(), SSRBoundStrideSetup1D, ArrayRef<Value *>(bsargs), "ssr.bound.stride.setup");
+
+  std::array<Value *, 0> emptyargs = {};
+  Function *SSREnable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_enable);
+  builder.CreateCall(SSREnable->getFunctionType(), SSREnable, ArrayRef<Value *>(emptyargs), "ssr.enable");
+  Function *SSRDisable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_disable);
+  builder.SetInsertPoint(&stream.exit->front());
+  builder.CreateCall(SSRDisable->getFunctionType(), SSRDisable, ArrayRef<Value *>(emptyargs), "ssr.disable");
+
+  if (stream.isStore){
+    errs()<<"store not done yet \n";
+  }else{
+    Function *SSRPop = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_pop);
+    std::array<Value *, 1> poparg = {dm};
+    for (Instruction *I : stream.moveInsts){
+      builder.SetInsertPoint(I);
+      Value *v = builder.CreateCall(SSRPop->getFunctionType(), SSRPop, ArrayRef<Value *>(poparg), "ssr.pop");
+      BasicBlock::iterator ii(I);
+      ReplaceInstWithValue(I->getParent()->getInstList(), ii, v);
+    }
+  }
+
+  return;
+}
+
 bool runOnLoop(
     Loop *L, AAResults *AA, LoopInfo *LI, DominatorTree *DT,
     BlockFrequencyInfo *BFI, TargetLibraryInfo *TLI, TargetTransformInfo *TTI,
@@ -143,14 +245,61 @@ bool runOnLoop(
   errs()<<"backedge taken SCEV is:\n";
   bt->dump(); errs()<<"\n";
 
-  Value *v = SCEVtoValues(bt, preheader);
-  if (!v){
-    errs()<<"SCEV to Value/Instructions conversion failed\n";
-    return false;
-  }
-  v->dump();
+  BasicBlock *insts = BasicBlock::Create(preheader->getContext(), "insts", preheader->getParent());
+  
+  Value *repcount = SCEVtoValues(bt, insts);
+  assert(repcount && "scev 'bt' should be convertible to values/instructions!");
 
   bool Changed = false;
+
+  errs()<<"instructions with SSR replacement potential\n";
+  unsigned dmid = 0;
+  for (BasicBlock *BB : L->blocks()){
+    //FIXME: check whether block is on all paths from header to itself
+    for (auto &I : *BB){
+      if (dmid == 3) break;//TODO: make better
+      if (LoadInst *load = dyn_cast<LoadInst>(&I)){
+        if (!load->getType()->isFloatingPointTy()) continue;
+        Value *addr = load->getOperand(0);
+        const SCEV *addrScev = SE->getSCEV(addr);
+        if (SE->hasComputableLoopEvolution(addrScev, L)){
+          errs()<<"load instr, addr instr, and scev of address:\n";
+          load->dump(); addr->dump(); addrScev->dump();
+
+          auto split = SE->SplitIntoInitAndPostInc(L, addrScev);
+          const SCEV *init = split.first;
+          //const SCEV *step = split.second;
+
+          Value *baseAddr = SCEVtoValues(init, insts);
+          assert(baseAddr && "some weird SCEV in init SCEV");
+          errs()<<"init and it's value:\n";
+          init->dump(); baseAddr->dump();
+
+          ConstantInt *stepsize = SCEVtoConstStep(addrScev, init, L);
+          if (!stepsize){
+            errs()<<"failed to compute stepsize\n";
+            return false;
+          }
+          errs()<<"step value:\n";
+          stepsize->dump();
+
+          SSRStream s;
+          s.dm = 0;
+          s.dim = 1;
+          s.preheader = preheader;
+          s.exit = exit;
+          s.setupInsts = insts;
+          s.moveInsts.push_back(load);          
+          s.stride = stepsize;
+          s.data = CastInst::CreatePointerCast(addr, Type::getInt8PtrTy(preheader->getContext()), "data.cast", insts);
+          Value *bd = BinaryOperator::CreateMul(repcount, stepsize, "ssr.bound", insts);
+          s.bound = CastInst::CreateIntegerCast(bd, IntegerType::getInt32Ty(preheader->getContext()), false, "bound.cast", insts);
+        }
+      }else if(StoreInst *store = dyn_cast<StoreInst>(&I)){
+        store->dump();
+      }
+    }
+  }
   
   if (Changed){
     SE->forgetLoop(L); //TODO: maybe use SE->forgetValue instead

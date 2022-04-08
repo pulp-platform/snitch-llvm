@@ -849,7 +849,9 @@ declare void @llvm.riscv.pulp.write.base.off.v(i32, i32*, i32)
 define void @test_llvm_riscv_pulp_write_base_off_v(i32* %data) {
 ; CHECK-LABEL: @test_llvm_riscv_pulp_write_base_off_v
 ; CHECK:       # %bb.0:
-
+; CHECK-DAG:     addi [[OFFSET:a[0-9]+]], zero, 15
+; CHECK-DAG:     addi [[VALUE:a[0-9]+]], zero, 1
+; CHECK:         p.sw [[VALUE]], [[OFFSET]]({{a[0-9]+}})
 ;
   call void @llvm.riscv.pulp.write.base.off.v(i32 1, i32* %data, i32 15)
   ret void

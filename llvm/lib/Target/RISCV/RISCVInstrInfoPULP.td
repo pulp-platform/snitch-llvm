@@ -1146,17 +1146,9 @@ def shiftedMask_shiftImmediate : PatFrag<(ops node:$widthMinus1, node:$flippedMa
   return (2U << countTrailingZeros(flippedMask)) == shiftedBit;
 }]>;
 
-
-
-
-
-
-
-
-
-
-
+//
 // SDNode transform functions
+//
 
 def trailing1sPlus1 : SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant(
@@ -1203,10 +1195,19 @@ def maskWidthMinus1 : SDNodeXForm<imm, [{
                           SDLoc(N), N->getValueType(0));
 }]>;
 
+// // Converts an immediate offset into an immediate mask with
+// // only one bit set in the position specified by the offset
+// // value itself (aka: at an offset from the lsb)
+// def offsetMask : SDNodeXForm<timm, [{
+//   return CurDAG->getTargetConstant(0x1u << N->getSExtValue(),
+//                                    SDLoc(N), N->getValueType(0));
+// }]>;
 
 
 let Predicates = [IsRV32, HasPULPExtV2] in {
+//
 // Patterns for bit manipulation operations
+//
 
 // extract
 // widthMinus1 and shift immediates
@@ -1337,8 +1338,9 @@ def : Pat<(ctlz_zero_undef (xor GPR:$rs1, (sra GPR:$rs1, (i32 31)))), (P_CLB GPR
 def : Pat<(ctpop GPR:$rs1), (P_CNT GPR:$rs1)>;
 def : PatGprGpr<rotr, P_ROR>;
 
-
+//
 // Patterns for general ALU operations
+//
 
 def : Pat<(abs GPR:$rs1), (P_ABS GPR:$rs1)>;
 def : PatGprGpr<setle, P_SLET>;
@@ -2088,16 +2090,16 @@ def : Pat<(int_riscv_pulp_spr_read_vol tuimm12:$csr),
           (CSRRS csr_sysreg:$csr, X0)>;
 def : Pat<(int_riscv_pulp_spr_write tuimm12:$csr, GPR:$rd),
           (CSRRW csr_sysreg:$csr, GPR:$rd)>;
-def : Pat<(int_riscv_pulp_spr_bit_set tuimm12:$csr, GPR:$rd),
-          (CSRRS csr_sysreg:$csr, GPR:$rd)>;
-def : Pat<(int_riscv_pulp_spr_bit_clr tuimm12:$csr, GPR:$rd),
-          (CSRRC csr_sysreg:$csr, GPR:$rd)>;
 def : Pat<(int_riscv_pulp_read_then_spr_write tuimm12:$csr, GPR:$rs1),
           (CSRRW csr_sysreg:$csr, GPR:$rs1)>;
-def : Pat<(int_riscv_pulp_read_then_spr_bit_set tuimm12:$csr, GPR:$rs1),
-          (CSRRS csr_sysreg:$csr, GPR:$rs1)>;
-def : Pat<(int_riscv_pulp_read_then_spr_bit_clr tuimm12:$csr, GPR:$rs1),
-          (CSRRC csr_sysreg:$csr, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_spr_bit_set tuimm12:$csr, tuimm5:$offset),
+          (CSRRSI csr_sysreg:$csr, tuimm5:$offset)>;
+def : Pat<(int_riscv_pulp_spr_bit_clr tuimm12:$csr, tuimm5:$offset),
+          (CSRRCI csr_sysreg:$csr, tuimm5:$offset)>;
+def : Pat<(int_riscv_pulp_read_then_spr_bit_set tuimm12:$csr, tuimm5:$offset),
+          (CSRRSI csr_sysreg:$csr, tuimm5:$offset)>;
+def : Pat<(int_riscv_pulp_read_then_spr_bit_clr tuimm12:$csr, tuimm5:$offset),
+          (CSRRCI csr_sysreg:$csr, tuimm5:$offset)>;
 
 // TODO the *_v versions should have side effects
 def : Pat<(int_riscv_pulp_read_base_off_v GPR:$rs1, GPR:$rs2), (P_LW_rr GPR:$rs1, GPR:$rs2)>;

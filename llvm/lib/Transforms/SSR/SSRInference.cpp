@@ -8,6 +8,7 @@
 
 #include "llvm/Transforms/SSR/SSRInference.h"
 #include "llvm/InitializePasses.h"
+#include "llvm/Passes/PassBuilder.h"
 
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
@@ -39,6 +40,9 @@
 #define SSR_NUM_DMS 3
 
 using namespace llvm;
+
+static cl::opt<bool> EnableSSRInference("ssr-inference", cl::Hidden, cl::init(false),
+                     cl::desc("inference of SSR intrinsics"));
 
 SSRStream::SSRStream(Loop *L, ilist<Instruction> *setup, ArrayRef<Instruction *> insts, 
     unsigned dim, Value *data, Value *bound, Value *stride, bool isStore) 
@@ -99,13 +103,6 @@ void SSRStream::GenerateSSRInstructions(){
 
   errs()<<"generated ssr_setup_bound_stride_1d \n";
 
-  std::array<Value *, 0> emptyargs = {};
-  Function *SSREnable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_enable);
-  builder.CreateCall(SSREnable->getFunctionType(), SSREnable, ArrayRef<Value *>(emptyargs));
-  Function *SSRDisable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_disable);
-  builder.SetInsertPoint(L->getExitBlock()->getTerminator());
-  builder.CreateCall(SSRDisable->getFunctionType(), SSRDisable, ArrayRef<Value *>(emptyargs));
-
   if (isStore){
     errs()<<"store not done yet \n";
   }else{
@@ -126,8 +123,9 @@ void SSRStream::GenerateSSRInstructions(){
 namespace{
 
 Value *SCEVtoValues(const SCEV *scev, ilist<Instruction> *insns){
-  //FIXME: ugly because instructions are already inserted! => use IRBuilder or sth.
   assert(scev && insns && "arguments should not be null");
+  errs()<<"\t";
+  scev->dump();
   switch (scev->getSCEVType())
   {
     case SCEVTypes::scConstant: 
@@ -282,10 +280,11 @@ bool runOnLoop(
         auto split = SE->SplitIntoInitAndPostInc(L, addrScev);
         const SCEV *init = split.first;
         //const SCEV *step = split.second;
-
+        
         ilist<Instruction> *setup = new iplist<Instruction>();
-
+        
         Value *baseAddr = SCEVtoValues(init, setup);
+        
         assert(baseAddr && "some weird SCEV in init SCEV");
         errs()<<"init and it's value:\n";
         init->dump(); baseAddr->dump();
@@ -334,6 +333,17 @@ bool runOnLoop(
       c->insertBefore(&*preheader->begin());
       c = c_;
     }
+
+    //add SSRenable and -disable calls in preheader and exit
+    IRBuilder<> builder(preheader->getTerminator());
+    Module *mod = preheader->getModule();
+    std::array<Value *, 0> emptyargs = {};
+    Function *SSREnable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_enable);
+    builder.CreateCall(SSREnable->getFunctionType(), SSREnable, ArrayRef<Value *>(emptyargs));
+    Function *SSRDisable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_disable);
+    builder.SetInsertPoint(L->getExitBlock()->getTerminator());
+    builder.CreateCall(SSRDisable->getFunctionType(), SSRDisable, ArrayRef<Value *>(emptyargs));
+
   }else{
     while(!insns->empty()){
       insns->pop_back(); //delete instructions from back to from to not get live Use when Def is deleted
@@ -349,9 +359,10 @@ bool runOnLoop(
 } //end of namespace
 
 PreservedAnalyses SSRInferencePass::run(Loop &L, LoopAnalysisManager &AM, LoopStandardAnalysisResults &AR, LPMUpdater &){
+  //if (!EnableSSRInference) return PreservedAnalyses::all(); //if flag is not set, skip
   errs()<<"# =============== SSR Inference =============== #\n";
   if(!runOnLoop(&L, &AR.AA, &AR.LI, &AR.DT, AR.BFI, &AR.TLI, &AR.TTI, &AR.SE, AR.MSSA)){
-    return PreservedAnalyses::all();
+    //return PreservedAnalyses::all();
   }
   return PreservedAnalyses::none();
 }

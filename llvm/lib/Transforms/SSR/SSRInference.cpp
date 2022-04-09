@@ -34,16 +34,13 @@
 #include "llvm/ADT/ilist.h"
 
 #include <array>
+#include <vector>
 
 #define SSR_NUM_DMS 3
 
 using namespace llvm;
 
-namespace{
-
-class SSRStream{
-public:
-  SSRStream(Loop *L, BasicBlock *setup, ArrayRef<Instruction *> insts, 
+SSRStream::SSRStream(Loop *L, ilist<Instruction> *setup, ArrayRef<Instruction *> insts, 
     unsigned dim, Value *data, Value *bound, Value *stride, bool isStore) 
     : L(L), setup(setup), moveInsts(), isStore(isStore), _isgen(false), 
     dim(dim), data(data), bound(bound), stride(stride), dm(-1), conflicts() 
@@ -56,89 +53,77 @@ public:
       assert(stride->getType() == Type::getInt32Ty(L->getHeader()->getContext()));
     }
 
-  int getDM() { return dm; }
-  void setDM(int dmId) { dm = dmId; }
+int SSRStream::getDM() { return dm; }
+void SSRStream::setDM(int dmId) { dm = dmId; }
 
-  void GenerateSSRInstructions(){
-    assert(!_isgen && "this stream has not generated its instructions yet");
-    this->_isgen = true;
-    assert(this->dm >= 0 && this->dm < SSR_NUM_DMS && "stream has valid dm id");
+void SSRStream::GenerateSSRInstructions(){
+  assert(!_isgen && "this stream has not generated its instructions yet");
+  this->_isgen = true;
+  assert(this->dm >= 0 && this->dm < SSR_NUM_DMS && "stream has valid dm id");
 
-    Module *mod = L->getHeader()->getModule(); //module for function declarations, TODO: is this the correct one?
-    IntegerType *i32 = IntegerType::getInt32Ty(L->getHeader()->getContext());
+  Module *mod = L->getHeader()->getModule(); //module for function declarations, TODO: is this the correct one?
+  IntegerType *i32 = IntegerType::getInt32Ty(L->getHeader()->getContext());
 
-    //TODO: add branch from setup to header?
+  Instruction *point = L->getLoopPreheader()->getTerminator();
 
-    Instruction *point = setup->getTerminator();
-
-    IRBuilder<> builder(point);
-
-    ConstantInt *dm = ConstantInt::get(i32, this->dm); //datamover id, ty=i32
-    ConstantInt *dim = ConstantInt::get(i32, this->dim - 1); //dimension - 1, ty=i32
-    // data pointer, ty=i8*
-    Function *SSRReadSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_read_imm); //can take _imm bc dm and dim are constant
-    std::array<Value *, 3> args = {dm, dim, data};
-    builder.CreateCall(SSRReadSetup->getFunctionType(), SSRReadSetup, ArrayRef<Value *>(args));
-
-    errs()<<"generated ssr_read_imm \n";
-
-    ConstantInt *rep; //repetition - 1, ty=i32
-    rep = ConstantInt::get(i32, moveInsts.size());
-    Function *SSRRepetitionSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_setup_repetition);
-    std::array<Value *, 2> repargs = {dm, rep};
-    builder.CreateCall(SSRRepetitionSetup->getFunctionType(), SSRRepetitionSetup, ArrayRef<Value *>(repargs));
-
-    errs()<<"generated ssr_setup_repetitions \n";
-
-    //bound - 1, ty=i32, relative stride, ty=i32
-    Function *SSRBoundStrideSetup1D = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_setup_bound_stride_1d);
-    std::array<Value *, 3> bsargs = {dm, bound, stride};
-    builder.CreateCall(SSRBoundStrideSetup1D->getFunctionType(), SSRBoundStrideSetup1D, ArrayRef<Value *>(bsargs));
-
-    errs()<<"generated ssr_setup_bound_stride_1d \n";
-
-    std::array<Value *, 0> emptyargs = {};
-    Function *SSREnable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_enable);
-    builder.CreateCall(SSREnable->getFunctionType(), SSREnable, ArrayRef<Value *>(emptyargs));
-    Function *SSRDisable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_disable);
-    builder.SetInsertPoint(&L->getExitBlock()->front());
-    builder.CreateCall(SSRDisable->getFunctionType(), SSRDisable, ArrayRef<Value *>(emptyargs));
-
-    if (isStore){
-      errs()<<"store not done yet \n";
-    }else{
-      Function *SSRPop = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_pop);
-      std::array<Value *, 1> poparg = {dm};
-      for (Instruction *I : moveInsts){
-        builder.SetInsertPoint(I);
-        Value *v = builder.CreateCall(SSRPop->getFunctionType(), SSRPop, ArrayRef<Value *>(poparg), "ssr.pop");
-        BasicBlock::iterator ii(I);
-        ReplaceInstWithValue(I->getParent()->getInstList(), ii, v);
-      }
-    }
-
-    return;
+  Instruction *i = &setup->front();
+  while(i){
+    Instruction *iNext = setup->getNextNode(*i);
+    i->insertBefore(point);
+    i = iNext;
   }
 
-private:
-  Loop *L;
-  BasicBlock *setup;
+  IRBuilder<> builder(point);
 
-  SmallVector<Instruction *, 1> moveInsts; //likely to be just one or maybe two load/store insts
+  ConstantInt *dm = ConstantInt::get(i32, this->dm); //datamover id, ty=i32
+  ConstantInt *dim = ConstantInt::get(i32, this->dim - 1); //dimension - 1, ty=i32
+  // data pointer, ty=i8*
+  Function *SSRReadSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_read_imm); //can take _imm bc dm and dim are constant
+  std::array<Value *, 3> args = {dm, dim, data};
+  builder.CreateCall(SSRReadSetup->getFunctionType(), SSRReadSetup, ArrayRef<Value *>(args));
 
-  bool isStore;
+  errs()<<"generated ssr_read_imm \n";
 
-  bool _isgen;
+  ConstantInt *rep; //repetition - 1, ty=i32
+  rep = ConstantInt::get(i32, moveInsts.size());
+  Function *SSRRepetitionSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_setup_repetition);
+  std::array<Value *, 2> repargs = {dm, rep};
+  builder.CreateCall(SSRRepetitionSetup->getFunctionType(), SSRRepetitionSetup, ArrayRef<Value *>(repargs));
 
-  unsigned dim;
-  Value *data;
-  Value *bound;
-  Value *stride;
+  errs()<<"generated ssr_setup_repetitions \n";
 
-  int dm; //"color"
-  SmallVector<SSRStream *> conflicts; //"edges" to conflicting SSRStreams
-};
+  //bound - 1, ty=i32, relative stride, ty=i32
+  Function *SSRBoundStrideSetup1D = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_setup_bound_stride_1d);
+  std::array<Value *, 3> bsargs = {dm, bound, stride};
+  builder.CreateCall(SSRBoundStrideSetup1D->getFunctionType(), SSRBoundStrideSetup1D, ArrayRef<Value *>(bsargs));
 
+  errs()<<"generated ssr_setup_bound_stride_1d \n";
+
+  std::array<Value *, 0> emptyargs = {};
+  Function *SSREnable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_enable);
+  builder.CreateCall(SSREnable->getFunctionType(), SSREnable, ArrayRef<Value *>(emptyargs));
+  Function *SSRDisable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_disable);
+  builder.SetInsertPoint(L->getExitBlock()->getTerminator());
+  builder.CreateCall(SSRDisable->getFunctionType(), SSRDisable, ArrayRef<Value *>(emptyargs));
+
+  if (isStore){
+    errs()<<"store not done yet \n";
+  }else{
+    Function *SSRPop = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_pop);
+    std::array<Value *, 1> poparg = {dm};
+    for (Instruction *I : moveInsts){
+      builder.SetInsertPoint(I);
+      Value *v = builder.CreateCall(SSRPop->getFunctionType(), SSRPop, ArrayRef<Value *>(poparg), "ssr.pop");
+      BasicBlock::iterator ii(I);
+      ReplaceInstWithValue(I->getParent()->getInstList(), ii, v);
+    }
+  }
+
+  return;
+}
+
+
+namespace{
 
 Value *SCEVtoValues(const SCEV *scev, ilist<Instruction> *insns){
   //FIXME: ugly because instructions are already inserted! => use IRBuilder or sth.
@@ -271,68 +256,74 @@ bool runOnLoop(
   }
 
   const SCEV *bt = SE->getBackedgeTakenCount(L);
-  errs()<<"backedge taken SCEV is:\n";
-  bt->dump(); errs()<<"\n";
 
   ilist<Instruction> *insns = new iplist<Instruction>();
   
   Value *repcount = SCEVtoValues(bt, insns);
 
-  bool Changed = false;
-
-  /*
+  std::vector<SSRStream *> streams;
+  
   errs()<<"instructions with SSR replacement potential\n";
-  unsigned dmid = 0;
   for (BasicBlock *BB : L->blocks()){
     //FIXME: check whether block is on all paths from header to itself
     for (auto &I : *BB){
-      if (dmid == 3) break;//TODO: make better
       if (LoadInst *load = dyn_cast<LoadInst>(&I)){
         if (load->getType() != Type::getDoubleTy(preheader->getContext())) continue;
         Value *addr = load->getOperand(0);
         const SCEV *addrScev = SE->getSCEV(addr);
-        if (SE->hasComputableLoopEvolution(addrScev, L)){
-          errs()<<"load instr, addr instr, and scev of address:\n";
-          load->dump(); addr->dump(); addrScev->dump();
-
-          auto split = SE->SplitIntoInitAndPostInc(L, addrScev);
-          const SCEV *init = split.first;
-          //const SCEV *step = split.second;
-
-          BasicBlock *insts = BasicBlock::Create(preheader->getContext(), "ssr.setup", preheader->getParent());
-
-          Value *baseAddr = SCEVtoValues(init, insts);
-          assert(baseAddr && "some weird SCEV in init SCEV");
-          errs()<<"init and it's value:\n";
-          init->dump(); baseAddr->dump();
-
-          ConstantInt *stepsize = SCEVtoConstStep(addrScev, init, L);
-          if (!stepsize){
-            errs()<<"failed to compute stepsize\n";
-            return false;
-          }
-          errs()<<"step value:\n";
-          stepsize->dump();
-
-          Instruction *data = CastInst::CreatePointerCast(addr, Type::getInt8PtrTy(preheader->getContext()), "data.cast", insts);
-          Instruction *bound = CastInst::CreateIntegerCast(repcount, IntegerType::getInt32Ty(preheader->getContext()), false, "bound.cast", insts);
-          Instruction *stride = CastInst::CreateIntegerCast(stepsize, IntegerType::getInt32Ty(preheader->getContext()), false, "stride.cast", insts);
-          SSRStream s(L, insts, ArrayRef<Instruction *>(load), 1, data, bound, stride, false);
-          errs()<<"constructed SSRStream \n";
-
-          //for now
-          s.setDM(dmid++);
-          s.GenerateSSRInstructions();
-          Changed = true;
-
-          errs()<<"done \n";
+        if (!SE->hasComputableLoopEvolution(addrScev, L)) {
+          errs()<<"addrScev has no computable loop evolution:\n"; 
+          addrScev->dump();
+          continue;
         }
+        errs()<<"load instr, addr instr, and scev of address:\n";
+        load->dump(); addr->dump(); addrScev->dump();
+
+        auto split = SE->SplitIntoInitAndPostInc(L, addrScev);
+        const SCEV *init = split.first;
+        //const SCEV *step = split.second;
+
+        ilist<Instruction> *setup = new iplist<Instruction>();
+
+        Value *baseAddr = SCEVtoValues(init, setup);
+        assert(baseAddr && "some weird SCEV in init SCEV");
+        errs()<<"init and it's value:\n";
+        init->dump(); baseAddr->dump();
+
+        ConstantInt *stepsize = SCEVtoConstStep(addrScev, init, L);
+        if (!stepsize){
+          errs()<<"failed to compute stepsize\n";
+          return false;
+        }
+        errs()<<"step value:\n";
+        stepsize->dump();
+
+        Instruction *data = CastInst::CreatePointerCast(baseAddr, Type::getInt8PtrTy(preheader->getContext()), "data.cast");
+        setup->push_back(data);
+        Instruction *bound = CastInst::CreateIntegerCast(repcount, IntegerType::getInt32Ty(preheader->getContext()), false, "bound.cast");
+        setup->push_back(bound);
+        Instruction *stride = CastInst::CreateIntegerCast(stepsize, IntegerType::getInt32Ty(preheader->getContext()), false, "stride.cast");
+        setup->push_back(stride);
+        SSRStream *s = new SSRStream(L, setup, ArrayRef<Instruction *>(load), 1, data, bound, stride, false);        
+        streams.push_back(s);
+        errs()<<"constructed SSRStream \n";
       }else if(StoreInst *store = dyn_cast<StoreInst>(&I)){
         store->dump();
       }
     }
-  }*/
-  
+  }
+
+  bool Changed = false;
+
+  unsigned dmid = 0;
+
+  for (SSRStream *s : streams){
+    if (dmid >= SSR_NUM_DMS) break;
+    s->setDM(dmid++);
+    s->GenerateSSRInstructions();
+    Changed = true;
+  }
+
   if (Changed){
     //SE->forgetLoop(L); //TODO: maybe use SE->forgetValue instead
     errs()<<"inserting insns into preheader:\n";
@@ -354,51 +345,6 @@ bool runOnLoop(
 
   return Changed;
 }
-
-/*
-  InductionDescriptor IndDesc;
-  if(!L->getInductionDescriptor(*SE, IndDesc)){
-    errs()<<"no loop induction variable found\n";
-    return false;
-  }
-  if(IndDesc.getKind() != InductionDescriptor::IK_IntInduction){
-    //TODO: could allow with addresses too
-    errs()<<"induction not on integer\n";
-    return false;
-  }
-  Value *tc = findTripCount(L, &IndDesc);
-  if (!tc){
-    errs()<<"trip count not found\n";
-    return false;
-  }
-*/
-
-/*
-Value *findTripCount(Loop *L, InductionDescriptor *IndDesc){
-  ConstantInt *step = IndDesc->getConstIntStepValue();
-  if (!step){
-    errs()<<"step is not const\n";
-    return nullptr;
-  }
-  BasicBlock *exiting = L->getExitingBlock();
-  if (!exiting){
-    errs()<<"no, or multiple latches \n";
-    return nullptr;
-  }
-  BasicBlock *header = L->getHeader();
-  errs()<<"InductionBinOP = "<<IndDesc->getInductionBinOp()->getNameOrAsOperand()<<"\n";
-  for (User *U : IndDesc->getInductionBinOp()->users()){ //for all users of induction variable
-    if(ICmpInst *cmp = dyn_cast<ICmpInst>(U)){
-      if(cmp->getParent() != exiting) continue; //looking for integer-comparisons in exiting block
-      for (User *Ucmp : cmp->users()){
-        if(BranchInst *br = dyn_cast<BranchInst>(Ucmp)){
-          //if (br->isConditional() && ((br->get) || ()))
-        }
-      }
-    }
-  }
-  return nullptr;
-}*/
 
 } //end of namespace
 

@@ -9,52 +9,20 @@
 #ifndef LLVM_TRANSFORMS_SSR_SSRINFERENCE_H
 #define LLVM_TRANSFORMS_SSR_SSRINFERENCE_H
 
-#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Support/CommandLine.h"
-#include "llvm/Transforms/Scalar/LoopPassManager.h"
-
-#include "llvm/IR/Value.h"
-#include "llvm/IR/Instruction.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/ilist.h"
 
 namespace llvm {
 
 class SSRInferencePass : public PassInfoMixin<SSRInferencePass> {
 public:
-  PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM, LoopStandardAnalysisResults &AR, LPMUpdater &);
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
 };
 
-class SSRStream{
+class SSRGenerationPass : PassInfoMixin<SSRGenerationPass>{
 public:
-  SSRStream(Loop *L, ilist<Instruction> *setup, ArrayRef<Instruction *> insts, 
-    unsigned dim, Value *data, Value *bound, Value *stride, bool isStore);
-
-  int getDM();
-  void setDM(int dmId);
-
-  void GenerateSSRInstructions();
-
-private:
-  Loop *L;
-  ilist<Instruction> *setup;
-
-  SmallVector<Instruction *, 1> moveInsts; //likely to be just one or maybe two load/store insts
-
-  bool isStore;
-
-  bool _isgen;
-
-  unsigned dim;
-  Value *data;
-  Value *bound;
-  Value *stride;
-
-  int dm; //"color"
-  SmallVector<SSRStream *> conflicts; //"edges" to conflicting SSRStreams
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
 };
-
 
 } // namespace llvm
 

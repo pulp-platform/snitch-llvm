@@ -16,6 +16,7 @@
 
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/Analysis/AffineAccessAnalysis.h"
 #include "llvm/Analysis/AliasAnalysisEvaluator.h"
 #include "llvm/Analysis/AliasSetTracker.h"
 #include "llvm/Analysis/AssumptionCache.h"
@@ -565,8 +566,6 @@ PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
   LPM1.addPass(LICMPass(PTO.LicmMssaOptCap, PTO.LicmMssaNoAccForPromotionCap));
   LPM1.addPass(SimpleLoopUnswitchPass());
 
-  LPM1.addPass(SSRInferencePass());
-
   LPM2.addPass(LoopIdiomRecognizePass());
   LPM2.addPass(IndVarSimplifyPass());
 
@@ -597,6 +596,9 @@ PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
       DebugLogging));
   FPM.addPass(SimplifyCFGPass());
   FPM.addPass(InstCombinePass());
+
+  FPM.addPass(SSRInferencePass());
+
   if (EnableLoopFlatten)
     FPM.addPass(LoopFlattenPass());
   // The loop passes in LPM2 (LoopFullUnrollPass) do not preserve MemorySSA.
@@ -761,6 +763,9 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
       DebugLogging));
   FPM.addPass(SimplifyCFGPass());
   FPM.addPass(InstCombinePass());
+
+  FPM.addPass(SSRInferencePass());
+
   if (EnableLoopFlatten)
     FPM.addPass(LoopFlattenPass());
   // The loop passes in LPM2 (LoopIdiomRecognizePass, IndVarSimplifyPass,

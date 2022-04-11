@@ -9,6 +9,7 @@
 #include "llvm/Transforms/SSR/SSRInference.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Passes/PassBuilder.h"
+#include "llvm/Target/TargetMachine.h"
 
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
@@ -20,6 +21,8 @@
 
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
+#include "llvm/Analysis/AffineAccessAnalysis.h"
+#include "llvm/Transforms/Utils/ScalarEvolutionExpander.h"
 
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -44,83 +47,30 @@ using namespace llvm;
 static cl::opt<bool> EnableSSRInference("ssr-inference", cl::Hidden, cl::init(false),
                      cl::desc("inference of SSR intrinsics"));
 
-SSRStream::SSRStream(Loop *L, ilist<Instruction> *setup, ArrayRef<Instruction *> insts, 
-    unsigned dim, Value *data, Value *bound, Value *stride, bool isStore) 
-    : L(L), setup(setup), moveInsts(), isStore(isStore), _isgen(false), 
-    dim(dim), data(data), bound(bound), stride(stride), dm(-1), conflicts() 
-    {
-      moveInsts.append<ArrayRef<Instruction *>::iterator>(insts.begin(), insts.end());
-      assert(L && setup && "input not null");
-      assert(dim > 0 && "correct dimension");
-      assert(data->getType() == Type::getInt8PtrTy(L->getHeader()->getContext()));
-      assert(bound->getType() == Type::getInt32Ty(L->getHeader()->getContext()));
-      assert(stride->getType() == Type::getInt32Ty(L->getHeader()->getContext()));
-    }
+PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &FAM){
+  AffineAccess &AF = FAM.getResult<AffineAccessAnalysis>(F);
 
-int SSRStream::getDM() { return dm; }
-void SSRStream::setDM(int dmId) { dm = dmId; }
-
-void SSRStream::GenerateSSRInstructions(){
-  assert(!_isgen && "this stream has not generated its instructions yet");
-  this->_isgen = true;
-  assert(this->dm >= 0 && this->dm < SSR_NUM_DMS && "stream has valid dm id");
-
-  Module *mod = L->getHeader()->getModule(); //module for function declarations, TODO: is this the correct one?
-  IntegerType *i32 = IntegerType::getInt32Ty(L->getHeader()->getContext());
-
-  Instruction *point = L->getLoopPreheader()->getTerminator();
-
-  Instruction *i = &setup->front();
-  while(i){
-    Instruction *iNext = setup->getNextNode(*i);
-    i->insertBefore(point);
-    i = iNext;
+  for (auto A : AF.getAll()){
+    A.dump();
   }
 
-  IRBuilder<> builder(point);
+  return PreservedAnalyses::none();
+}
 
-  ConstantInt *dm = ConstantInt::get(i32, this->dm); //datamover id, ty=i32
-  ConstantInt *dim = ConstantInt::get(i32, this->dim - 1); //dimension - 1, ty=i32
-  // data pointer, ty=i8*
-  Function *SSRReadSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_read_imm); //can take _imm bc dm and dim are constant
-  std::array<Value *, 3> args = {dm, dim, data};
-  builder.CreateCall(SSRReadSetup->getFunctionType(), SSRReadSetup, ArrayRef<Value *>(args));
-
-  errs()<<"generated ssr_read_imm \n";
-
-  ConstantInt *rep; //repetition - 1, ty=i32
-  rep = ConstantInt::get(i32, moveInsts.size());
-  Function *SSRRepetitionSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_setup_repetition);
-  std::array<Value *, 2> repargs = {dm, rep};
-  builder.CreateCall(SSRRepetitionSetup->getFunctionType(), SSRRepetitionSetup, ArrayRef<Value *>(repargs));
-
-  errs()<<"generated ssr_setup_repetitions \n";
-
-  //bound - 1, ty=i32, relative stride, ty=i32
-  Function *SSRBoundStrideSetup1D = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_setup_bound_stride_1d);
-  std::array<Value *, 3> bsargs = {dm, bound, stride};
-  builder.CreateCall(SSRBoundStrideSetup1D->getFunctionType(), SSRBoundStrideSetup1D, ArrayRef<Value *>(bsargs));
-
-  errs()<<"generated ssr_setup_bound_stride_1d \n";
-
-  if (isStore){
-    errs()<<"store not done yet \n";
-  }else{
-    Function *SSRPop = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_pop);
-    std::array<Value *, 1> poparg = {dm};
-    for (Instruction *I : moveInsts){
-      builder.SetInsertPoint(I);
-      Value *v = builder.CreateCall(SSRPop->getFunctionType(), SSRPop, ArrayRef<Value *>(poparg), "ssr.pop");
-      BasicBlock::iterator ii(I);
-      ReplaceInstWithValue(I->getParent()->getInstList(), ii, v);
-    }
-  }
-
-  return;
+PreservedAnalyses SSRInferencePass::run(Function &F, FunctionAnalysisManager &FAM){
+  FunctionPassManager FPM(true);
+  FPM.addPass(LoopSimplifyPass()); //need this before AffineAccessAnalysis in SSRGenerationPass
+  FPM.addPass(SSRGenerationPass());
+  return FPM.run(F, FAM);
 }
 
 
-namespace{
+/*
+  const SCEV *bt = SE->getBackedgeTakenCount(L);
+  SCEVExpander ex(*SE, L->getHeader()->getModule()->getDataLayout(), "backedge.taken");
+  ex.setInsertPoint(L->getLoopPreheader()->getTerminator());
+  Value *v = ex.expandCodeFor(bt);
+  v->dump();
 
 Value *SCEVtoValues(const SCEV *scev, ilist<Instruction> *insns){
   assert(scev && insns && "arguments should not be null");
@@ -207,59 +157,8 @@ ConstantInt *SCEVtoConstStep(const SCEV *scev, const SCEV *init, Loop *L){
   return nullptr;
 }
 
-bool runOnLoop(
-    Loop *L, AAResults *AA, LoopInfo *LI, DominatorTree *DT,
-    BlockFrequencyInfo *BFI, TargetLibraryInfo *TLI, TargetTransformInfo *TTI,
-    ScalarEvolution *SE, MemorySSA *MSSA) {
-  L->dump();
 
-  if (!L->isInnermost() || !L->isLCSSAForm(*DT)){
-    errs()<<"loop not innermost or not LCSSA\n";
-    return false;
-  }
-
-  BasicBlock *preheader = L->getLoopPreheader();
-  if (!preheader){
-    //TODO: can alleviate this by adding one if SSR setup needed
-    errs()<<"loop has no preheader\n";
-    return false;
-  }
-
-  BasicBlock *exit = L->getExitBlock();
-  if (!exit){
-    errs()<<"loop has no or multiple exits\n";
-    return false;
-  }
-
-  BasicBlock *exiting = L->getExitingBlock();
-  if (!exiting){
-    errs()<<"no, or multiple exiting blocks \n";
-    return false;
-  }
-
-  if (!L->hasDedicatedExits()){
-    //TODO: relatively easily fixable ==> add block before single exit block
-    errs()<<"exit block is not dedicated \n";
-    return false;
-  }
-
-  if (L->getNumBackEdges() != 1){
-    errs()<<"# of back-edges is not 1 \n";
-    return false;
-  }
-
-  if (!SE->hasLoopInvariantBackedgeTakenCount(L)){
-    errs()<<"back-edge taken count is not loop-inv\n";
-    return false;
-  }
-
-  const SCEV *bt = SE->getBackedgeTakenCount(L);
-
-  ilist<Instruction> *insns = new iplist<Instruction>();
-  
-  Value *repcount = SCEVtoValues(bt, insns);
-
-  std::vector<SSRStream *> streams;
+std::vector<SSRStream *> streams;
   
   errs()<<"instructions with SSR replacement potential\n";
   for (BasicBlock *BB : L->blocks()){
@@ -353,7 +252,179 @@ bool runOnLoop(
   errs()<<"done with loop:\n";
   L->dump();
 
-  return Changed;
+class SSRStream{
+public:
+  SSRStream(Loop *L, ilist<Instruction> *setup, ArrayRef<Instruction *> insts, 
+    unsigned dim, Value *data, Value *bound, Value *stride, bool isStore);
+
+  int getDM();
+  void setDM(int dmId);
+
+  void GenerateSSRInstructions();
+
+private:
+  Loop *L;
+  ilist<Instruction> *setup;
+
+  SmallVector<Instruction *, 1> moveInsts; //likely to be just one or maybe two load/store insts
+
+  bool isStore;
+
+  bool _isgen;
+
+  unsigned dim;
+  Value *data;
+  Value *bound;
+  Value *stride;
+
+  int dm; //"color"
+  SmallVector<SSRStream *> conflicts; //"edges" to conflicting SSRStreams
+};
+
+SSRStream::SSRStream(Loop *L, ilist<Instruction> *setup, ArrayRef<Instruction *> insts, 
+    unsigned dim, Value *data, Value *bound, Value *stride, bool isStore) 
+    : L(L), setup(setup), moveInsts(), isStore(isStore), _isgen(false), 
+    dim(dim), data(data), bound(bound), stride(stride), dm(-1), conflicts() 
+    {
+      moveInsts.append<ArrayRef<Instruction *>::iterator>(insts.begin(), insts.end());
+      assert(L && setup && "input not null");
+      assert(dim > 0 && "correct dimension");
+      assert(data->getType() == Type::getInt8PtrTy(L->getHeader()->getContext()));
+      assert(bound->getType() == Type::getInt32Ty(L->getHeader()->getContext()));
+      assert(stride->getType() == Type::getInt32Ty(L->getHeader()->getContext()));
+    }
+
+int SSRStream::getDM() { return dm; }
+void SSRStream::setDM(int dmId) { dm = dmId; }
+
+void SSRStream::GenerateSSRInstructions(){
+  assert(!_isgen && "this stream has not generated its instructions yet");
+  this->_isgen = true;
+  assert(this->dm >= 0 && this->dm < SSR_NUM_DMS && "stream has valid dm id");
+
+  Module *mod = L->getHeader()->getModule(); //module for function declarations, TODO: is this the correct one?
+  IntegerType *i32 = IntegerType::getInt32Ty(L->getHeader()->getContext());
+
+  Instruction *point = L->getLoopPreheader()->getTerminator();
+
+  Instruction *i = &setup->front();
+  while(i){
+    Instruction *iNext = setup->getNextNode(*i);
+    i->insertBefore(point);
+    i = iNext;
+  }
+
+  IRBuilder<> builder(point);
+
+  ConstantInt *dm = ConstantInt::get(i32, this->dm); //datamover id, ty=i32
+  ConstantInt *dim = ConstantInt::get(i32, this->dim - 1); //dimension - 1, ty=i32
+  // data pointer, ty=i8*
+  Function *SSRReadSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_read_imm); //can take _imm bc dm and dim are constant
+  std::array<Value *, 3> args = {dm, dim, data};
+  builder.CreateCall(SSRReadSetup->getFunctionType(), SSRReadSetup, ArrayRef<Value *>(args));
+
+  errs()<<"generated ssr_read_imm \n";
+
+  ConstantInt *rep; //repetition - 1, ty=i32
+  rep = ConstantInt::get(i32, moveInsts.size());
+  Function *SSRRepetitionSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_setup_repetition);
+  std::array<Value *, 2> repargs = {dm, rep};
+  builder.CreateCall(SSRRepetitionSetup->getFunctionType(), SSRRepetitionSetup, ArrayRef<Value *>(repargs));
+
+  errs()<<"generated ssr_setup_repetitions \n";
+
+  //bound - 1, ty=i32, relative stride, ty=i32
+  Function *SSRBoundStrideSetup1D = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_setup_bound_stride_1d);
+  std::array<Value *, 3> bsargs = {dm, bound, stride};
+  builder.CreateCall(SSRBoundStrideSetup1D->getFunctionType(), SSRBoundStrideSetup1D, ArrayRef<Value *>(bsargs));
+
+  errs()<<"generated ssr_setup_bound_stride_1d \n";
+
+  if (isStore){
+    errs()<<"store not done yet \n";
+  }else{
+    Function *SSRPop = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_pop);
+    std::array<Value *, 1> poparg = {dm};
+    for (Instruction *I : moveInsts){
+      builder.SetInsertPoint(I);
+      Value *v = builder.CreateCall(SSRPop->getFunctionType(), SSRPop, ArrayRef<Value *>(poparg), "ssr.pop");
+      BasicBlock::iterator ii(I);
+      ReplaceInstWithValue(I->getParent()->getInstList(), ii, v);
+    }
+  }
+
+  return;
+}
+
+
+namespace{
+
+/// guarantees: 
+/// L has 1 preheader and 1 dedicated exit
+/// L has 1 backedge and 1 exiting block
+/// bt SCEV can be expanded to instructions at insertionsPoint
+bool checkLoop(const Loop *L, DominatorTree *DT, ScalarEvolution *SE, Instruction *InsertionPoint){
+  if (!L->isLCSSAForm(*DT) || !L->getLoopPreheader() || !L->getExitBlock() 
+    || !L->getExitBlock() || !L->hasDedicatedExits() || L->getNumBackEdges() != 1){
+      errs()<<"malformed loop: "; L->dump();
+      return false;
+  }
+  if (!SE->hasLoopInvariantBackedgeTakenCount(L)){
+    errs()<<"cannot calculate backedge taken count\n";
+    return false;
+  }
+  const SCEV *bt = SE->getBackedgeTakenCount(L);
+  if(!isSafeToExpandAt(bt, InsertionPoint, *SE) /|| !SE->isAvailableAtLoopEntry(bt, L)/){
+    errs()<<"cannot expand bt SCEV: "; bt->dump();
+  }
+  errs()<<"loop is well-formed: "; bt->dump();
+  return true;
+}
+
+/// check whether BB is on all controlflow paths from header to header
+bool isOnAllControlFlowPaths(const BasicBlock *BB, const Loop *L, const DominatorTree *DT){
+  return DT->dominates(BB, L->getHeader());
+}
+
+bool runOnLoop(
+    const Loop *L, AAResults *AA, LoopInfo *LI, DominatorTree *DT,
+    BlockFrequencyInfo *BFI, TargetLibraryInfo *TLI, TargetTransformInfo *TTI,
+    ScalarEvolution *SE, MemorySSA *MSSA) {
+  L->dump();
+
+  if (!L->getLoopPreheader() || !checkLoop(L, DT, SE, L->getLoopPreheader()->getTerminator())) return true;
+
+  SmallVector<SSRStream *, 3>  streams;
+
+  for (const auto &BB : L->getBlocks()){
+    //TODO: how to allow inner loops?
+    if (!isOnAllControlFlowPaths(BB, L, DT)) continue;
+
+    for (auto &I : *BB){
+      Value *Addr;
+      if (LoadInst *Load = dyn_cast<LoadInst>(&I)){
+        Addr = Load->getPointerOperand();
+      }else if (StoreInst *Store = dyn_cast<StoreInst>(&I)){
+        Addr = Store->getPointerOperand();
+      }else{
+        continue; //cannot do anything with this instruction
+      }
+
+      const SCEV *AddrSCEV = SE->getSCEVAtScope(Addr, L);
+      if (!SE->hasComputableLoopEvolution(AddrSCEV, L)) continue;
+      errs()<<"has computable loop evolution: "; AddrSCEV->dump();
+
+      auto split = SE->SplitIntoInitAndPostInc(L, AddrSCEV);
+      const SCEV *SetupAddrSCEV = split.first;
+      const SCEV *PostIncSCEV = split.second;
+      if (!isSafeToExpandAt(SetupAddrSCEV, L->getLoopPreheader()->getTerminator(), *SE)) continue;
+      errs()<<"can expand setup addr scev in preheader: "; SetupAddrSCEV->dump();
+
+
+    }
+  }
+
+  return true;
 }
 
 } //end of namespace
@@ -361,9 +432,9 @@ bool runOnLoop(
 PreservedAnalyses SSRInferencePass::run(Loop &L, LoopAnalysisManager &AM, LoopStandardAnalysisResults &AR, LPMUpdater &){
   //if (!EnableSSRInference) return PreservedAnalyses::all(); //if flag is not set, skip
   errs()<<"# =============== SSR Inference =============== #\n";
-  if(!runOnLoop(&L, &AR.AA, &AR.LI, &AR.DT, AR.BFI, &AR.TLI, &AR.TTI, &AR.SE, AR.MSSA)){
-    //return PreservedAnalyses::all();
-  }
+  runOnLoop(&L, &AR.AA, &AR.LI, &AR.DT, AR.BFI, &AR.TLI, &AR.TTI, &AR.SE, AR.MSSA);
+  errs()<<"# =============== SSR done      =============== #\n";
   return PreservedAnalyses::none();
 }
 
+*/

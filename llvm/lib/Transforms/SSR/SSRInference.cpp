@@ -20,6 +20,7 @@
 
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
+#include "llvm/Transforms/Utils/ScalarEvolutionExpander.h"
 
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -122,6 +123,96 @@ void SSRStream::GenerateSSRInstructions(){
 
 namespace{
 
+/// guarantees: 
+/// L has 1 preheader and 1 dedicated exit
+/// L has 1 backedge and 1 exiting block
+/// bt SCEV can be expanded to instructions at insertionsPoint
+bool checkLoop(const Loop *L, DominatorTree *DT, ScalarEvolution *SE, Instruction *InsertionPoint){
+  if (!L->isLCSSAForm(*DT) || !L->getLoopPreheader() || !L->getExitBlock() 
+    || !L->getExitBlock() || !L->hasDedicatedExits() || L->getNumBackEdges() != 1){
+      errs()<<"malformed loop: "; L->dump();
+      return false;
+  }
+  if (!SE->hasLoopInvariantBackedgeTakenCount(L)){
+    errs()<<"cannot calculate backedge taken count\n";
+    return false;
+  }
+  const SCEV *bt = SE->getBackedgeTakenCount(L);
+  if(!isSafeToExpandAt(bt, InsertionPoint, *SE) /*|| !SE->isAvailableAtLoopEntry(bt, L)*/){
+    errs()<<"cannot expand bt SCEV: "; bt->dump();
+  }
+  errs()<<"loop is well-formed: "; bt->dump();
+  return true;
+}
+
+/// check whether BB is on all controlflow paths from header to header
+bool isOnAllControlFlowPaths(const BasicBlock *BB, const Loop *L, const DominatorTree *DT){
+  return DT->dominates(BB, L->getHeader());
+}
+
+bool runOnLoop(
+    const Loop *L, AAResults *AA, LoopInfo *LI, DominatorTree *DT,
+    BlockFrequencyInfo *BFI, TargetLibraryInfo *TLI, TargetTransformInfo *TTI,
+    ScalarEvolution *SE, MemorySSA *MSSA) {
+  L->dump();
+
+  if (!L->getLoopPreheader() || !checkLoop(L, DT, SE, L->getLoopPreheader()->getTerminator())) return true;
+
+  SmallVector<SSRStream *, 3>  streams;
+
+  for (const auto &BB : L->getBlocks()){
+    //TODO: how to allow inner loops?
+    if (!isOnAllControlFlowPaths(BB, L, DT)) continue;
+
+    for (auto &I : *BB){
+      Value *Addr;
+      if (LoadInst *Load = dyn_cast<LoadInst>(&I)){
+        Addr = Load->getPointerOperand();
+      }else if (StoreInst *Store = dyn_cast<StoreInst>(&I)){
+        Addr = Store->getPointerOperand();
+      }else{
+        continue; //cannot do anything with this instruction
+      }
+
+      const SCEV *AddrSCEV = SE->getSCEVAtScope(Addr, L);
+      if (!SE->hasComputableLoopEvolution(AddrSCEV, L)) continue;
+      errs()<<"has computable loop evolution: "; AddrSCEV->dump();
+
+      auto split = SE->SplitIntoInitAndPostInc(L, AddrSCEV);
+      const SCEV *SetupAddrSCEV = split.first;
+      const SCEV *PostIncSCEV = split.second;
+      if (!isSafeToExpandAt(SetupAddrSCEV, L->getLoopPreheader()->getTerminator(), *SE)) continue;
+      errs()<<"can expand setup addr scev in preheader: "; SetupAddrSCEV->dump();
+      if (!isSafeToExpandAt(PostIncSCEV, L->getLoopPreheader()->getTerminator(), *SE)) continue;
+      errs()<<"can expand post inc addr scev in preheader: "; PostIncSCEV->dump();
+
+
+    }
+  }
+
+  return true;
+}
+
+} //end of namespace
+
+PreservedAnalyses SSRInferencePass::run(Loop &L, LoopAnalysisManager &AM, LoopStandardAnalysisResults &AR, LPMUpdater &){
+  //if (!EnableSSRInference) return PreservedAnalyses::all(); //if flag is not set, skip
+  errs()<<"# =============== SSR Inference =============== #\n";
+  runOnLoop(&L, &AR.AA, &AR.LI, &AR.DT, AR.BFI, &AR.TLI, &AR.TTI, &AR.SE, AR.MSSA);
+  errs()<<"# =============== SSR done      =============== #\n";
+  return PreservedAnalyses::none();
+}
+
+
+
+
+/*
+  const SCEV *bt = SE->getBackedgeTakenCount(L);
+  SCEVExpander ex(*SE, L->getHeader()->getModule()->getDataLayout(), "backedge.taken");
+  ex.setInsertPoint(L->getLoopPreheader()->getTerminator());
+  Value *v = ex.expandCodeFor(bt);
+  v->dump();
+
 Value *SCEVtoValues(const SCEV *scev, ilist<Instruction> *insns){
   assert(scev && insns && "arguments should not be null");
   errs()<<"\t";
@@ -207,59 +298,8 @@ ConstantInt *SCEVtoConstStep(const SCEV *scev, const SCEV *init, Loop *L){
   return nullptr;
 }
 
-bool runOnLoop(
-    Loop *L, AAResults *AA, LoopInfo *LI, DominatorTree *DT,
-    BlockFrequencyInfo *BFI, TargetLibraryInfo *TLI, TargetTransformInfo *TTI,
-    ScalarEvolution *SE, MemorySSA *MSSA) {
-  L->dump();
 
-  if (!L->isInnermost() || !L->isLCSSAForm(*DT)){
-    errs()<<"loop not innermost or not LCSSA\n";
-    return false;
-  }
-
-  BasicBlock *preheader = L->getLoopPreheader();
-  if (!preheader){
-    //TODO: can alleviate this by adding one if SSR setup needed
-    errs()<<"loop has no preheader\n";
-    return false;
-  }
-
-  BasicBlock *exit = L->getExitBlock();
-  if (!exit){
-    errs()<<"loop has no or multiple exits\n";
-    return false;
-  }
-
-  BasicBlock *exiting = L->getExitingBlock();
-  if (!exiting){
-    errs()<<"no, or multiple exiting blocks \n";
-    return false;
-  }
-
-  if (!L->hasDedicatedExits()){
-    //TODO: relatively easily fixable ==> add block before single exit block
-    errs()<<"exit block is not dedicated \n";
-    return false;
-  }
-
-  if (L->getNumBackEdges() != 1){
-    errs()<<"# of back-edges is not 1 \n";
-    return false;
-  }
-
-  if (!SE->hasLoopInvariantBackedgeTakenCount(L)){
-    errs()<<"back-edge taken count is not loop-inv\n";
-    return false;
-  }
-
-  const SCEV *bt = SE->getBackedgeTakenCount(L);
-
-  ilist<Instruction> *insns = new iplist<Instruction>();
-  
-  Value *repcount = SCEVtoValues(bt, insns);
-
-  std::vector<SSRStream *> streams;
+std::vector<SSRStream *> streams;
   
   errs()<<"instructions with SSR replacement potential\n";
   for (BasicBlock *BB : L->blocks()){
@@ -353,17 +393,5 @@ bool runOnLoop(
   errs()<<"done with loop:\n";
   L->dump();
 
-  return Changed;
-}
 
-} //end of namespace
-
-PreservedAnalyses SSRInferencePass::run(Loop &L, LoopAnalysisManager &AM, LoopStandardAnalysisResults &AR, LPMUpdater &){
-  //if (!EnableSSRInference) return PreservedAnalyses::all(); //if flag is not set, skip
-  errs()<<"# =============== SSR Inference =============== #\n";
-  if(!runOnLoop(&L, &AR.AA, &AR.LI, &AR.DT, AR.BFI, &AR.TLI, &AR.TTI, &AR.SE, AR.MSSA)){
-    //return PreservedAnalyses::all();
-  }
-  return PreservedAnalyses::none();
-}
-
+*/

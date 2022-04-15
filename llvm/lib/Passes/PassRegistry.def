@@ -191,9 +191,9 @@ FUNCTION_ALIAS_ANALYSIS("tbaa", TypeBasedAA())
 #ifndef FUNCTION_PASS
 #define FUNCTION_PASS(NAME, CREATE_PASS)
 #endif
-FUNCTION_PASS("affine-access-pass", AffineAccessAnalysisPass(dbgs()))
 FUNCTION_PASS("infer-ssr", SSRInferencePass())
-FUNCTION_PASS("generate-ssr-intrinsics", SSRGenerationPass())
+FUNCTION_PASS("generate-ssr", SSRGenerationPass())
+FUNCTION_PASS("affine-access-pass", AffineAccessAnalysisPass())
 FUNCTION_PASS("aa-eval", AAEvaluator())
 FUNCTION_PASS("adce", ADCEPass())
 FUNCTION_PASS("add-discriminators", AddDiscriminatorsPass())

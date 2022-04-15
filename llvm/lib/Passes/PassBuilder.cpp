@@ -87,6 +87,7 @@
 #include "llvm/Transforms/Coroutines/CoroSplit.h"
 #include "llvm/Transforms/HelloNew/HelloWorld.h"
 #include "llvm/Transforms/SSR/SSRInference.h"
+#include "llvm/Transforms/SSR/SSRGeneration.h"
 #include "llvm/Transforms/IPO/AlwaysInliner.h"
 #include "llvm/Transforms/IPO/Annotation2Metadata.h"
 #include "llvm/Transforms/IPO/ArgumentPromotion.h"
@@ -594,10 +595,9 @@ PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
   FPM.addPass(createFunctionToLoopPassAdaptor(
       std::move(LPM1), EnableMSSALoopDependency, /*UseBlockFrequencyInfo=*/true,
       DebugLogging));
+  FPM.addPass(SSRInferencePass());
   FPM.addPass(SimplifyCFGPass());
   FPM.addPass(InstCombinePass());
-
-  FPM.addPass(SSRInferencePass());
 
   if (EnableLoopFlatten)
     FPM.addPass(LoopFlattenPass());
@@ -763,8 +763,6 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
       DebugLogging));
   FPM.addPass(SimplifyCFGPass());
   FPM.addPass(InstCombinePass());
-
-  FPM.addPass(SSRInferencePass());
 
   if (EnableLoopFlatten)
     FPM.addPass(LoopFlattenPass());

@@ -10,29 +10,41 @@
 
 namespace llvm {
 
+class AffineAccess;
+
 class AffineAcc{
-public:
-  AffineAcc(const Loop *L, ArrayRef<Instruction *> instructions, const SCEV *data, const SCEV *bound, const SCEV *stride);
-  void dump();
-  unsigned getDimension();
+  friend AffineAccess;
 private:
   void addLoop(const Loop *L, const SCEV *bound, const SCEV *stride); //add dimension
   
   const SCEV *data;
-  SmallVector<const SCEV *, 2> bounds; //from outer- to innermost loop
-  SmallVector<const SCEV *, 2> strides; //from outer- to innermost loop
-  SmallVector<Instruction *, 2> instructions; //instructions that are accessing the memory according to data, bounds, and strides.
+  SmallVector<const SCEV *, 2U> bounds; //from outer- to innermost loop
+  SmallVector<const SCEV *, 2U> strides; //from outer- to innermost loop
+  Instruction *Addr;
+  SmallVector<Instruction *, 2U> accesses; //load/store instructions that use address (guaranteed to be in same loop)
   const Loop *L; //outermost loop
+
+public:
+  AffineAcc(const Loop *L, Instruction *Addr, ArrayRef<Instruction *> accesses, const SCEV *data, const SCEV *bound, const SCEV *stride);
+  void dump() const;
+  unsigned getDimension() const;
+  const Loop *getLoop() const;
+  Instruction *getAddrIns() const;
+  const SmallVector<Instruction *, 2U> &getAccesses() const;
 };
 
 class AffineAccess{
-public:
-  AffineAccess(ScalarEvolution &SE) :SE(SE) {}
-  void addAccess(AffineAcc &a);
-  ArrayRef<AffineAcc> getAll();
 private:
-  SmallVector<AffineAcc> accesses;
+  SmallVector<const AffineAcc *> accesses;
   ScalarEvolution &SE;
+public:
+  AffineAccess(ScalarEvolution &SE) : SE(SE) {}
+  void addAccess(const AffineAcc *a);
+  ArrayRef<const AffineAcc *> getAll() const;
+  
+  Value *expandData(const AffineAcc *aa, Type *ty = (Type *)nullptr) const;
+  Value *expandBound(const AffineAcc *aa, unsigned i, Type *ty = (Type *)nullptr) const;
+  Value *expandStride(const AffineAcc *aa, unsigned i, Type *ty = (Type *)nullptr) const;
 };
 
 class AffineAccessAnalysis : public AnalysisInfoMixin<AffineAccessAnalysis> {
@@ -46,10 +58,7 @@ public:
 
 // This is the analysis pass that will be invocable via opt
 class AffineAccessAnalysisPass : public AnalysisInfoMixin<AffineAccessAnalysisPass> {
-  raw_ostream &OS;
-
 public:
-  explicit AffineAccessAnalysisPass(raw_ostream &OS) : OS(OS) {}
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 };
 

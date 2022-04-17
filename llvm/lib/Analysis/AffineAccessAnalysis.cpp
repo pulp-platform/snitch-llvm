@@ -39,6 +39,7 @@
 #include <array>
 #include <vector>
 #include <iostream>
+#include <utility>
 
 using namespace llvm;
 
@@ -106,8 +107,36 @@ bool checkLoop(const Loop *L, DominatorTree &DT, ScalarEvolution &SE, Instructio
   return true;
 }
 
+Optional<std::pair<const SCEV *, const SCEV *>> toSameSize(const SCEV *LHS, const SCEV *RHS, ScalarEvolution &SE, bool unsafe = false){
+  using PT = std::pair<const SCEV *, const SCEV *>;
+  if (LHS->getType()->getIntegerBitWidth() > RHS->getType()->getIntegerBitWidth()) {
+    if (auto LHSx = dyn_cast<SCEVConstant>(LHS)){
+      if (LHSx->getAPInt().getActiveBits() <= RHS->getType()->getIntegerBitWidth()) {}
+        return Optional<PT>(std::make_pair(SE.getConstant(RHS->getType(), LHSx->getAPInt().getLimitedValue()), RHS));
+    } 
+    if (auto RHSx = dyn_cast<SCEVConstant>(RHS)){
+      if (RHSx->getAPInt().getActiveBits() <= LHS->getType()->getIntegerBitWidth())
+        return Optional<PT>(std::make_pair(LHS, SE.getConstant(LHS->getType(), RHSx->getAPInt().getLimitedValue())));
+    }
+    if (auto LHSx = dyn_cast<SCEVSignExtendExpr>(LHS)) return toSameSize(LHSx->getOperand(0), RHS, SE);
+    if (auto LHSx = dyn_cast<SCEVZeroExtendExpr>(LHS)) return toSameSize(LHSx->getOperand(0), RHS, SE);
+    if (auto RHSx = dyn_cast<SCEVTruncateExpr>(RHS)) return toSameSize(LHS, RHSx->getOperand(0), SE);
+    if (unsafe) return Optional<PT>(std::make_pair(SE.getTruncateExpr(LHS, RHS->getType()), RHS));
+    return None;
+  }else if (LHS->getType()->getIntegerBitWidth() < RHS->getType()->getIntegerBitWidth()){
+    auto p = toSameSize(RHS, LHS, SE, unsafe);
+    if (!p.hasValue()) return None;
+    return Optional<PT>(std::make_pair(p.getValue().second, p.getValue().first));
+  }
+  return Optional<PT>(std::make_pair(LHS, RHS));
+}
+
 ///checks whether LHS == RHS always holds
 bool SCEVEquals(const SCEV *LHS, const SCEV *RHS, ScalarEvolution &SE){
+  auto p = toSameSize(LHS, RHS, SE);
+  if (!p.hasValue()) return false;
+  LHS = p.getValue().first;
+  RHS = p.getValue().second;
   errs()<<"SCEVEquals:\n\t"; LHS->dump();
   errs()<<"\t"; RHS->dump();
   if (LHS == RHS) return true; //trivially the same if this holds (bc const Ptr)
@@ -115,6 +144,7 @@ bool SCEVEquals(const SCEV *LHS, const SCEV *RHS, ScalarEvolution &SE){
     const SCEVPredicate *Peq = SE.getEqualPredicate(LHS, RHS);
     if (Peq->isAlwaysTrue()) return true; //if we arrive at setup addr scev, we are done
   }
+  errs()<<"false\n";
   return false;
 }
 
@@ -150,7 +180,16 @@ Optional<bool> predicatedICmpOutcome(ICmpInst *Cmp, const SCEV *Rep, ScalarEvolu
     if (SCEVEquals(Rep, LHSmRHS, SE)) return Optional<bool>(true);
     else return None;
   }
-  //TODO: do for more cases
+  case CmpInst::Predicate::ICMP_EQ:
+  case CmpInst::Predicate::ICMP_NE:
+  {
+    //Rep > 0 ==> Rep + x != x
+    const SCEV *LHS = SE.getSCEV(Cmp->getOperand(0)); //Rep + x (hopefully)
+    const SCEV *RHS = SE.getSCEV(Cmp->getOperand(1)); //x 
+    const SCEV *LHSmRHS = SE.getMinusSCEV(LHS, RHS);  //Rep (hopefully)
+    if (SCEVEquals(Rep, LHSmRHS, SE)) return Optional<bool>(Cmp->getPredicate() == CmpInst::Predicate::ICMP_NE);
+    else return None;
+  }
   default:
     return None;
   }
@@ -208,6 +247,75 @@ SmallVector<const Loop *, 3U> &getContainingLoops(ArrayRef<const Loop *> loopsPr
   return *r;
 }
 
+void findStridesRec(const SCEV *Addr, ArrayRef<const Loop *> loops, SmallVector<const SCEV *, 2U> &factors, ScalarEvolution &SE, SmallVector<const SCEV *, 4U> &res){
+  errs()<<"finding strides in "; Addr->dump();
+  if (loops.empty()) return;
+  switch (Addr->getSCEVType())
+  {
+  case SCEVTypes::scAddRecExpr:
+  {
+    auto AddRec = cast<SCEVAddRecExpr>(Addr);
+    if (AddRec->getLoop() == *loops.begin()){
+      const SCEV *S = AddRec->getStepRecurrence(SE);
+      for (const SCEV *x : factors){
+        auto p = toSameSize(S, x, SE, true);
+        S = SE.getMulExpr(p.getValue().first, p.getValue().second);
+      }
+      res.push_back(S);
+      findStridesRec(AddRec->getStart(), ArrayRef<const Loop *>(loops.begin()+1, loops.end()), factors, SE, res);
+    }else{
+      bool occurs = false;
+      for (const Loop *L : loops) occurs = occurs || AddRec->getLoop() == L; //loops needs to occur further up, o/w invalid
+      if (!occurs) return;
+      res.push_back(SE.getConstant(APInt(64U, 0U)));
+      findStridesRec(AddRec->getStart(), loops, factors, SE, res);
+    }
+    return;
+  }
+  //case SCEVTypes::scTruncate: TODO: is unsafe here, right?
+  case SCEVTypes::scSignExtend:
+  case SCEVTypes::scZeroExtend:
+    findStridesRec(cast<SCEVIntegralCastExpr>(Addr)->getOperand(0), loops, factors, SE, res);
+    return;
+
+  case SCEVTypes::scAddExpr:
+  {
+    auto S = cast<SCEVAddExpr>(Addr);
+    bool lhs = SE.containsAddRecurrence(S->getOperand(0));
+    bool rhs = SE.containsAddRecurrence(S->getOperand(1));
+    if (lhs && !rhs) findStridesRec(S->getOperand(0), loops, factors, SE, res);
+    else if (!lhs && rhs) findStridesRec(S->getOperand(1), loops, factors, SE, res);
+    return;
+  }
+  case SCEVTypes::scMulExpr:
+  {
+    auto S = cast<SCEVMulExpr>(Addr);
+    bool lhs = SE.containsAddRecurrence(S->getOperand(0));
+    bool rhs = SE.containsAddRecurrence(S->getOperand(1));
+    if (lhs && !rhs) {
+      factors.push_back(S->getOperand(1));
+      findStridesRec(S->getOperand(0), loops, factors, SE, res);
+    }else if (!lhs && rhs) {
+      factors.push_back(S->getOperand(0));
+      findStridesRec(S->getOperand(1), loops, factors, SE, res);
+    }
+    return;
+  }
+
+  default:
+    return;
+  }
+}
+
+SmallVector<const SCEV *, 4U> &findStrides(const SCEV *Addr, ArrayRef<const Loop *> loops, ScalarEvolution &SE){
+  SmallVector<const SCEV *, 4U> &strides = *(new SmallVector<const SCEV *, 4U>());
+  SmallVector<const SCEV *, 2U> factors;
+  findStridesRec(Addr, loops, factors, SE, strides);
+  errs()<<"found strides: \n";
+  for (const SCEV *S : strides) S->dump();
+  return strides;
+}
+
 } //end of namespace
 
 //================== AffineAcces, Result of Analysis =========================================
@@ -263,13 +371,18 @@ AffineAcc *AffineAccess::promoteAccess(const AffineAcc &aa, const Loop *L, const
   for (const SCEV *Bd : aa.bounds){
     if (!(SE.isLoopInvariant(Bd, L) && isSafeToExpandAt(Bd, InsPoint, SE))) return nullptr; //(4)
   }
+
+  errs()<<"passed (4)\n";
+
   for (const SCEV *Str : aa.strides){
     if (!(SE.isLoopInvariant(Str, L) && isSafeToExpandAt(Str, InsPoint, SE))) return nullptr; //(5)
   }
 
+  errs()<<"passed (5)\n";
+
   if (!isSafeToExpandAt(Bound, InsPoint, SE) || !isSafeToExpandAt(Stride, InsPoint, SE)) return nullptr; //(6)
 
-  errs()<<"passed (4), (5) & (6)\n";
+  errs()<<"passed (6)\n";
 
   AffineAcc *A = new AffineAcc(aa);
   A->data = Data;
@@ -299,38 +412,25 @@ void AffineAccess::addAllAccesses(Instruction *Addr, const Loop *L){
 
   errs()<<"has "<<cloops.size()<<" containing loops\n";
 
+  auto &strides = findStrides(AddrS, cloops, SE);
+  auto Stride = strides.begin();
+
   AffineAcc dim0(Addr, ArrayRef<Instruction *>(accesses), AddrS); //never needed -> alloc in stack
   AffineAcc *A = &dim0;
 
-  const SCEV *CS = AddrS;
   for (auto L = cloops.begin(); L != cloops.end(); ++L){
     if (loopReps.find(*L) == loopReps.end()) break; //this loop is malformed ==> this and all more outer loops cannot be used
+    if (Stride == strides.end()) break; //ran out of strides  
 
-    errs()<<"finding stride in: "; CS->dump();
-    const SCEV *Stride;
-    if (const auto *Rec = dyn_cast<SCEVAddRecExpr>(CS)){
-      if (Rec->getLoop() == *L) {
-        CS = Rec->getStart();
-        Stride = Rec->getStepRecurrence(SE);
-      }else{
-        bool occurs = false;
-        for (auto L_ = L; L_ != cloops.end(); ++L_) occurs = occurs && Rec->getLoop() == *L_;
-        if (!occurs) break; //AddRecExpr references a loop that is not a containing loop ==> cannot guarantee anything
-        Stride = SE.getConstant(APInt(64U, 0U)); //addrSCEV does not step in this loop ==> stride is 0
-      }
-    }else{
-      break; //did not manage to compute stride
-    }
-    assert(Stride);
-    errs()<<"found stride: "; Stride->dump();
-
-    A = promoteAccess(*A, *L, Stride);
+    A = promoteAccess(*A, *L, *Stride);
     if (A){
       errs()<<"found AffineAcc:\n"; A->dump();
       this->accesses.push_back(A);
     }else{
       break; //did not manage to promote ==> cannot promote for loops further out
     }
+
+    ++Stride;
   }
   errs()<<"\n";
   return;
@@ -340,6 +440,9 @@ ArrayRef<const AffineAcc *> AffineAccess::getAccesses() const{
   ArrayRef<const AffineAcc *> *ar = new ArrayRef<const AffineAcc *>(accesses.begin(), accesses.end());
   return *ar; 
 }
+
+//TODO: 2D Stride = (1D Bound + 1) * 1D Stride
+//TODO: fix below: do casts manually
 
 Value *AffineAccess::expandData(const AffineAcc *aa, Type *ty) const{
   SCEVExpander ex(SE, aa->L->getHeader()->getModule()->getDataLayout(), "data");
@@ -539,4 +642,24 @@ AffineAccess &runOnFunction(Function &F, LoopInfo &LI, DominatorTree &DT, Scalar
   return *aa;
 }
 
+*/
+
+/*
+errs()<<"finding stride in: "; CS->dump();
+    const SCEV *Stride;
+    if (const auto *Rec = dyn_cast<SCEVAddRecExpr>(CS)){
+      if (Rec->getLoop() == *L) {
+        CS = Rec->getStart();
+        Stride = Rec->getStepRecurrence(SE);
+      }else{
+        bool occurs = false;
+        for (auto L_ = L; L_ != cloops.end(); ++L_) occurs = occurs && Rec->getLoop() == *L_;
+        if (!occurs) break; //AddRecExpr references a loop that is not a containing loop ==> cannot guarantee anything
+        Stride = SE.getConstant(APInt(64U, 0U)); //addrSCEV does not step in this loop ==> stride is 0
+      }
+    }else{
+      break; //did not manage to compute stride
+    }
+    assert(Stride);
+    errs()<<"found stride: "; Stride->dump();
 */

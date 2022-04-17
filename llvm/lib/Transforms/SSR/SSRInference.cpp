@@ -24,6 +24,7 @@
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Analysis/AffineAccessAnalysis.h"
 #include "llvm/Transforms/Utils/ScalarEvolutionExpander.h"
+#include "llvm/Transforms/Scalar/LoopStrengthReduce.h"
 #include "llvm/Transforms/SSR/SSRGeneration.h"
 
 #include "llvm/Support/CommandLine.h"
@@ -49,6 +50,7 @@ PreservedAnalyses SSRInferencePass::run(Function &F, FunctionAnalysisManager &FA
   FunctionPassManager FPM(true);
   FPM.addPass(LoopSimplifyPass()); //canonicalize loops
   FPM.addPass(LCSSAPass());        //put loops into LCSSA-form
+  FPM.addPass(createFunctionToLoopPassAdaptor(LoopStrengthReducePass()));
   FPM.addPass(SSRGenerationPass());//runs AffineAccess analysis and generates SSR intrinsics
   FPM.addPass(ADCEPass());         //remove potential dead instructions that result from SSR replacement (dead code elim)
   return FPM.run(F, FAM);

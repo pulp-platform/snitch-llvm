@@ -34,6 +34,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/ADT/ilist.h"
+#include "llvm/ADT/DenseMap.h"
 
 #include <array>
 #include <vector>
@@ -41,18 +42,9 @@
 
 using namespace llvm;
 
-AffineAcc::AffineAcc(const Loop *L, Instruction *Addr, ArrayRef<Instruction *> accesses,
-    const SCEV *data, const SCEV *bound, const SCEV *stride) : data(data), Addr(Addr){
+AffineAcc::AffineAcc(Instruction *Addr, ArrayRef<Instruction *> accesses,
+    const SCEV *data) : data(data), Addr(Addr){
   for (Instruction *I : accesses) this->accesses.push_back(I);
-  addLoop(L, bound, stride);
-  return;
-}
-
-///note: stride can be 0 if access is inv w.r.t. this loop
-void AffineAcc::addLoop(const Loop *L, const SCEV *bound, const SCEV *stride){
-  this->L = L;
-  this->bounds.push_back(bound);
-  this->strides.push_back(stride);
   return;
 }
 
@@ -87,36 +79,7 @@ const SmallVector<Instruction *, 2U> &AffineAcc::getAccesses() const{
   return this->accesses;
 }
 
-//================== AffineAcces, Result of Analysis =========================================
-void AffineAccess::addAccess(const AffineAcc *a){
-  this->accesses.push_back(a);
-  return;
-}
-
-ArrayRef<const AffineAcc *> AffineAccess::getAll() const{
-  ArrayRef<const AffineAcc *> *ar = new ArrayRef<const AffineAcc *>(accesses.begin(), accesses.end());
-  return *ar; 
-}
-
-  Value *AffineAccess::expandData(const AffineAcc *aa, Type *ty) const{
-    SCEVExpander ex(SE, aa->L->getHeader()->getModule()->getDataLayout(), "data");
-    ex.setInsertPoint(aa->L->getLoopPreheader()->getTerminator());
-    return ex.expandCodeFor(aa->data, ty);
-  }
-
-  Value *AffineAccess::expandBound(const AffineAcc *aa, unsigned i, Type *ty) const{
-    SCEVExpander ex(SE, aa->L->getHeader()->getModule()->getDataLayout(), "bound");
-    ex.setInsertPoint(aa->L->getLoopPreheader()->getTerminator());
-    return ex.expandCodeFor(aa->bounds[i], ty);
-  }
-
-  Value *AffineAccess::expandStride(const AffineAcc *aa, unsigned i, Type *ty) const{
-    SCEVExpander ex(SE, aa->L->getHeader()->getModule()->getDataLayout(), "stride");
-    ex.setInsertPoint(aa->L->getLoopPreheader()->getTerminator());
-    return ex.expandCodeFor(aa->strides[i], ty);
-  }
-
-//================== Affine Acces Analysis ==================================================
+//================== AffineAcces, helper functions =========================================
 
 namespace {
 
@@ -132,7 +95,7 @@ bool checkLoop(const Loop *L, DominatorTree &DT, ScalarEvolution &SE, Instructio
   if (L->getNumBackEdges() != 1) { errs()<<"nr. back-edges != 1\n"; return false; }
 
   if (!SE.hasLoopInvariantBackedgeTakenCount(L)){
-    errs()<<"cannot calculate backedge taken count\n";
+    errs()<<"checkLoop: cannot calculate backedge taken count\n";
     return false;
   }
   const SCEV *bt = SE.getBackedgeTakenCount(L);
@@ -143,21 +106,314 @@ bool checkLoop(const Loop *L, DominatorTree &DT, ScalarEvolution &SE, Instructio
   return true;
 }
 
+///checks whether LHS == RHS always holds
+bool SCEVEquals(const SCEV *LHS, const SCEV *RHS, ScalarEvolution &SE){
+  errs()<<"SCEVEquals:\n\t"; LHS->dump();
+  errs()<<"\t"; RHS->dump();
+  if (LHS == RHS) return true; //trivially the same if this holds (bc const Ptr)
+  else{
+    const SCEVPredicate *Peq = SE.getEqualPredicate(LHS, RHS);
+    if (Peq->isAlwaysTrue()) return true; //if we arrive at setup addr scev, we are done
+  }
+  return false;
+}
+
 /// check whether BB is on all controlflow paths from header to header
 bool isOnAllControlFlowPaths(const BasicBlock *BB, const Loop *L, const DominatorTree &DT){
   return DT.dominates(BB, L->getHeader());
 }
 
+//return result of Cmp predicated on Rep > 0 if possible.
+Optional<bool> predicatedICmpOutcome(ICmpInst *Cmp, const SCEV *Rep, ScalarEvolution &SE){
+  switch (Cmp->getPredicate())
+  {
+  case CmpInst::Predicate::ICMP_SGT:
+  case CmpInst::Predicate::ICMP_UGT:
+  {
+    const SCEV *LHS = SE.getSCEV(Cmp->getOperand(0));
+    const SCEV *RHS = SE.getSCEV(Cmp->getOperand(1));
+    //transform: LHS > RHS <==> LHS - RHS > 0
+    const SCEV *LHSmRHS = SE.getMinusSCEV(LHS, RHS);
+    //then check whether Rep == LHS - RHS in which case we know: Rep > 0 ==> result of Cmp is true
+    if (SCEVEquals(Rep, LHSmRHS, SE)) return Optional<bool>(true);
+    else return None;
+  }
+  case CmpInst::Predicate::ICMP_SLT:
+  case CmpInst::Predicate::ICMP_ULT:
+  {
+    //a < b <==> b > a
+    const SCEV *LHS = SE.getSCEV(Cmp->getOperand(1)); //b
+    const SCEV *RHS = SE.getSCEV(Cmp->getOperand(0)); //a
+    //transform: LHS > RHS <==> LHS - RHS > 0
+    const SCEV *LHSmRHS = SE.getMinusSCEV(LHS, RHS);
+    //then check whether Rep == LHS - RHS in which case we know: Rep > 0 ==> result of Cmp is true
+    if (SCEVEquals(Rep, LHSmRHS, SE)) return Optional<bool>(true);
+    else return None;
+  }
+  //TODO: do for more cases
+  default:
+    return None;
+  }
+}
+
+//conservative! 
+//because SCEVComparePredicate is not in this version of LLVM we have to do this manually ==> will not catch all cases
+//predicate is that Rep > 0
+bool isOnAllPredicatedControlFlowPaths(const BasicBlock *BB, const Loop *L, const DominatorTree &DT, const SCEV *Rep, ScalarEvolution &SE){
+  if (isOnAllControlFlowPaths(BB, L, DT)) return true; //is on all paths anyway
+  Rep->dump();
+
+  std::deque<BasicBlock *> q(1U, L->getHeader()); //iterative BFS with queue
+  while (!q.empty()){
+    BasicBlock *Current = q.front(); q.pop_front();
+    if (Current == BB) continue; //do not continue BFS from BB
+
+    Instruction *T = Current->getTerminator();
+    T->dump();
+    if (BranchInst *BR = dyn_cast<BranchInst>(T)){
+      if (BR->isConditional()){
+        if (ICmpInst *Cmp = dyn_cast<ICmpInst>(BR->getCondition())){ //FOR NOW: only works with a single ICmpInst as branch condition operand
+          Cmp->dump();
+          auto r = predicatedICmpOutcome(Cmp, Rep, SE);
+          if (r.hasValue()){
+            if (r.getValue()) q.push_back(BR->getSuccessor(0));
+            else q.push_back(BR->getSuccessor(1));
+          }else{
+            q.push_back(BR->getSuccessor(0));
+            q.push_back(BR->getSuccessor(1));
+          }
+        }
+      }else{
+        q.push_back(BR->getSuccessor(0)); //add the only successor to queue
+      }
+    }else{  
+      return false; //unknown jump somewhere else ==> BB not on all predicated paths
+    }
+
+    if (q.front() == L->getHeader()) return false; //bfs arrived at Header (again) with a path that never went through BB
+  }
+
+  return true;
+}
+
+/// get Loops containing Ins from innermost to outermost
+SmallVector<const Loop *, 3U> &getContainingLoops(ArrayRef<const Loop *> loopsPreorder, Instruction *Ins){
+  BasicBlock *BB = Ins->getParent();
+  SmallVector<const Loop *, 3U> *r = new SmallVector<const Loop *, 3U>();
+  for (auto L = loopsPreorder.rbegin(); L != loopsPreorder.rend(); ++L){ //go through loops in reverse order ==> innermost first
+    if ((*L)->contains(BB)){
+      r->push_back(*L);
+    }
+  }
+  return *r;
+}
+
+} //end of namespace
+
+//================== AffineAcces, Result of Analysis =========================================
+AffineAccess::AffineAccess(ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI) : SE(SE), DT(DT), LI(LI){
+  auto loops = LI.getLoopsInPreorder();
+  unsigned l = 0u;
+  for (const Loop *L : loops){
+    L->dump();
+
+    if (!L->getLoopPreheader()) continue;
+    if (!checkLoop(L, DT, SE, L->getLoopPreheader()->getTerminator())) continue;
+
+    loopReps.insert(std::make_pair(L, SE.getBackedgeTakenCount(L))); l++;
+  }
+  errs()<<"FOUND "<<l<<" LOOPS\n";
+  return;
+}
+
+/// promotes a (potentially dim=0) AffineAcc to one more dimension 
+///  (1) parent loop L satisfies checkLoop
+///  (2) child loop (in particular all in aa.accesses) is on all paths in L where the inner bound + 1 > 0 
+///  (3) data ptr can be computed outside of parent loop
+///  (4) forall bd : aa.bounds. SE.isLoopInvariant(bd, L) && isSafeToExpandAt(bd, LPreheader->getTerminator(), SE)
+///  (5) forall st : aa.strides. SE.isLoopInvariant(st, L) && isSafeToExpandAt(st, LPreheader->getTerminator(), SE)
+///  (6) isSafeToExpandAt(Bound / Stride, LPreheader->getTerminator(), SE)
+AffineAcc *AffineAccess::promoteAccess(const AffineAcc &aa, const Loop *L, const SCEV *Stride){
+  assert((!aa.L) || (aa.L && aa.L->getParentLoop() == L && "can only promote to parent loop")); //(1)
+  assert(this->loopReps.find(L) != this->loopReps.end() && "L is well formed"); //(1)
+
+  errs()<<"Trying to promote AA of dim="<<aa.getDimension()<<"\n";
+
+  if (aa.L){
+    const SCEV *Bd = loopReps.find(aa.L)->getSecond();
+    const SCEV *Rep = SE.getAddExpr(Bd, SE.getConstant(Bd->getType(), 1U));
+    if (!isOnAllPredicatedControlFlowPaths(aa.L->getHeader(), L, this->DT, Rep, this->SE)) return nullptr; //(2.1)
+  }else{
+    for (Instruction *I : aa.accesses){
+      if (!isOnAllControlFlowPaths(I->getParent(), L, DT)) return nullptr; //(2.2)
+    }
+  }
+
+  errs()<<"passed (2)\n";
+
+  const SCEV *Bound = this->loopReps.find(L)->getSecond();
+  Instruction *InsPoint = L->getLoopPreheader()->getTerminator();
+
+  if (!SE.hasComputableLoopEvolution(aa.data, L)) return nullptr; //(3.1)
+  const SCEV *Data = SE.SplitIntoInitAndPostInc(L, aa.data).first;
+  if (!isSafeToExpandAt(Data, InsPoint, SE)) return nullptr;      //(3.2)
+
+  errs()<<"passed (3)\n";
+
+  for (const SCEV *Bd : aa.bounds){
+    if (!(SE.isLoopInvariant(Bd, L) && isSafeToExpandAt(Bd, InsPoint, SE))) return nullptr; //(4)
+  }
+  for (const SCEV *Str : aa.strides){
+    if (!(SE.isLoopInvariant(Str, L) && isSafeToExpandAt(Str, InsPoint, SE))) return nullptr; //(5)
+  }
+
+  if (!isSafeToExpandAt(Bound, InsPoint, SE) || !isSafeToExpandAt(Stride, InsPoint, SE)) return nullptr; //(6)
+
+  errs()<<"passed (4), (5) & (6)\n";
+
+  AffineAcc *A = new AffineAcc(aa);
+  A->data = Data;
+  A->L = L;
+  A->bounds.push_back(Bound);
+  A->strides.push_back(Stride);
+  return A;
+}
+
+/// adds all affine accesses that use Addr in loop L
+void AffineAccess::addAllAccesses(Instruction *Addr, const Loop *L){
+  std::vector<Instruction *> accesses;
+  for (auto U = Addr->use_begin(); U != Addr->use_end(); ++U){
+    Instruction *Acc = dyn_cast<LoadInst>(U->getUser());
+    if (!Acc) Acc = dyn_cast<StoreInst>(U->getUser());
+    if (!Acc) continue; //both casts failed ==> not a suitable instruction
+    if (!isOnAllControlFlowPaths(Acc->getParent(), L, DT)) continue; //access does not occur consistently in loop ==> not suitable
+    accesses.push_back(Acc);
+  }
+  if (accesses.empty()) return; //Addr not used
+
+  errs()<<"adding Access: "; Addr->dump();
+
+  const SCEV *AddrS = SE.getSCEV(Addr);
+
+  auto &cloops = getContainingLoops(LI.getLoopsInPreorder(), Addr);
+
+  errs()<<"has "<<cloops.size()<<" containing loops\n";
+
+  AffineAcc dim0(Addr, ArrayRef<Instruction *>(accesses), AddrS); //never needed -> alloc in stack
+  AffineAcc *A = &dim0;
+
+  const SCEV *CS = AddrS;
+  for (auto L = cloops.begin(); L != cloops.end(); ++L){
+    if (loopReps.find(*L) == loopReps.end()) break; //this loop is malformed ==> this and all more outer loops cannot be used
+
+    errs()<<"finding stride in: "; CS->dump();
+    const SCEV *Stride;
+    if (const auto *Rec = dyn_cast<SCEVAddRecExpr>(CS)){
+      if (Rec->getLoop() == *L) {
+        CS = Rec->getStart();
+        Stride = Rec->getStepRecurrence(SE);
+      }else{
+        bool occurs = false;
+        for (auto L_ = L; L_ != cloops.end(); ++L_) occurs = occurs && Rec->getLoop() == *L_;
+        if (!occurs) break; //AddRecExpr references a loop that is not a containing loop ==> cannot guarantee anything
+        Stride = SE.getConstant(APInt(64U, 0U)); //addrSCEV does not step in this loop ==> stride is 0
+      }
+    }else{
+      break; //did not manage to compute stride
+    }
+    assert(Stride);
+    errs()<<"found stride: "; Stride->dump();
+
+    A = promoteAccess(*A, *L, Stride);
+    if (A){
+      errs()<<"found AffineAcc:\n"; A->dump();
+      this->accesses.push_back(A);
+    }else{
+      break; //did not manage to promote ==> cannot promote for loops further out
+    }
+  }
+  errs()<<"\n";
+  return;
+}
+
+ArrayRef<const AffineAcc *> AffineAccess::getAccesses() const{
+  ArrayRef<const AffineAcc *> *ar = new ArrayRef<const AffineAcc *>(accesses.begin(), accesses.end());
+  return *ar; 
+}
+
+Value *AffineAccess::expandData(const AffineAcc *aa, Type *ty) const{
+  SCEVExpander ex(SE, aa->L->getHeader()->getModule()->getDataLayout(), "data");
+  ex.setInsertPoint(aa->L->getLoopPreheader()->getTerminator());
+  return ex.expandCodeFor(aa->data, ty);
+}
+
+Value *AffineAccess::expandBound(const AffineAcc *aa, unsigned i, Type *ty) const{
+  SCEVExpander ex(SE, aa->L->getHeader()->getModule()->getDataLayout(), "bound");
+  ex.setInsertPoint(aa->L->getLoopPreheader()->getTerminator());
+  return ex.expandCodeFor(aa->bounds[i], ty);
+}
+
+Value *AffineAccess::expandStride(const AffineAcc *aa, unsigned i, Type *ty) const{
+  SCEVExpander ex(SE, aa->L->getHeader()->getModule()->getDataLayout(), "stride");
+  ex.setInsertPoint(aa->L->getLoopPreheader()->getTerminator());
+  return ex.expandCodeFor(aa->strides[i], ty);
+}
+
+//================== Affine Acces Analysis ==================================================
+
+AnalysisKey AffineAccessAnalysis::Key;
+
+AffineAccess AffineAccessAnalysis::run(Function &F, FunctionAnalysisManager &FAM) {
+  
+  errs()<<"running AffineAccessAnalysis on "<<F.getName()<<"\n";
+
+  LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
+  DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
+  ScalarEvolution &SE = FAM.getResult<ScalarEvolutionAnalysis>(F);
+  //AAResults &AA = FAM.getResult<AAManager>(F);
+
+  AffineAccess *A = new AffineAccess(SE, DT, LI);
+
+  for (const Loop *L : LI.getLoopsInPreorder()){
+    for (BasicBlock *BB : L->getBlocks()){
+      if (!isOnAllControlFlowPaths(BB, L, DT)) continue;
+      for (Instruction &I : *BB){
+        Value *Addr;
+        if (LoadInst *Load = dyn_cast<LoadInst>(&I)){
+          Addr = Load->getPointerOperand();
+        }else if (StoreInst *Store = dyn_cast<StoreInst>(&I)){
+          Addr = Store->getPointerOperand();
+        }else{
+          continue; //cannot do anything with this instruction
+        }
+        Instruction *AddrIns;
+        if (!(AddrIns = dyn_cast<Instruction>(Addr))) continue; //if Addr is not instruction ==> constant, or sth else (==> leave for other passes to opt)
+        
+        A->addAllAccesses(AddrIns, L);
+      }
+    }
+  }
+
+  return *A;
+}
+
+//================== Affine Acces Analysis Pass for opt =======================================
+PreservedAnalyses AffineAccessAnalysisPass::run(Function &F, FunctionAnalysisManager &FAM) {
+  AffineAccess AA = FAM.getResult<AffineAccessAnalysis>(F);
+  for (const auto *A : AA.getAccesses()){
+    A->dump();
+  }
+  return PreservedAnalyses::all();
+}
+
+
+/*
 /// Fold over AddrSCEV
 /// All AddRecSCEVs are dependent on L or loops contained in L (TODO: and on all paths?)
 /// All steps in ADDRecSCEVs can be calculated in preheader of L
 bool canFindStrides(ScalarEvolution &SE, const ArrayRef<const Loop *> &loops, const SCEV *AddrSCEV, const SCEV *SetupAddrSCEV){
   errs()<<"finding strides in: "; AddrSCEV->dump();
-  if (AddrSCEV == SetupAddrSCEV) return true; //trivially the same if this holds (bc const Ptr)
-  else{
-    const SCEVPredicate *Peq = SE.getEqualPredicate(AddrSCEV, SetupAddrSCEV);
-    if (Peq->isAlwaysTrue()) return true; //if we arrive at setup addr scev, we are done
-  }
+  if (SCEVEquals(AddrSCEV, SetupAddrSCEV, SE)) return true;
   
   if (loops.empty()) { errs()<<"not enough loops\n"; return false; } //need at least one more loop here for SCEVAddRecvExpr
 
@@ -175,37 +431,50 @@ bool canFindStrides(ScalarEvolution &SE, const ArrayRef<const Loop *> &loops, co
   }
   return false;
 }
+*/
 
-SmallVector<const Loop *, 3U> &getContainingLoops(const Loop *Outermost, Instruction *Ins){
-  BasicBlock *BB = Ins->getParent();
-  const auto &loops = Outermost->getLoopsInPreorder();
-  SmallVector<const Loop *, 3U> *r = new SmallVector<const Loop *, 3U>();
-  for (auto L = loops.rbegin(); L != loops.rend(); ++L){ //go through loops in reverse order ==> innermost first
-    if ((*L)->contains(BB)){
-      errs()<<"found containing Loop\n";
-      r->push_back(*L);
-    }
-  }
-  return *r;
+/*
+/// can promote if: 
+  (1) parent loop Outer satisfies checkLoop
+  (2) child loop Inner is on all paths in Outer where Inner.backedgetakencount +1 > 0
+  (3) Stride for Outer can be found
+  (4) forall bd : aa.bounds. SE.isLoopInvariant(bd, Outer) && isSafeToExpandAt(bd, OuterPreheader->getTerminator(), SE)
+  (5) forall st : aa.strides. SE.isLoopInvariant(st, Outer) && isSafeToExpandAt(st, OuterPreheader->getTerminator(), SE)
+bool promoteAffineAccess(AffineAcc &aa, ScalarEvolution &SE, DominatorTree &DT, DenseMap<const Loop *, const SCEV *> &LR){
+  const Loop *Inner = aa.getLoop();
+  const Loop *Outer = Inner->getParentLoop();
+  const auto &R = LR.find_as(Outer); 
+  if (R == LR.end()) return false; //Outer violates (1)
+  const SCEV *Bound = R->getSecond();
+  BasicBlock *OuterPreheader = Outer->getLoopPreheader();
+  BasicBlock *InnerPreheader = Inner->getLoopPreheader();
+  const SCEV *Rep = SE.getAddExpr(SE.getBackedgeTakenCount(Inner), SE.getConstant(APInt(64U, 1U))); //trip count of Inner loop
+  if (!isOnAllPredicatedControlFlowPaths(InnerPreheader, Outer, DT, Rep, SE)) return false;  //violates (2)
+  
 }
+*/
 
+/*
 AffineAccess &runOnFunction(Function &F, LoopInfo &LI, DominatorTree &DT, ScalarEvolution &SE, AAResults &AA){
-  AffineAccess *aa = new AffineAccess(SE);
+  AffineAccess *aa = new AffineAccess(SE, DT, LI);
 
   auto loops = LI.getLoopsInPreorder();
   errs()<<"contains "<<loops.size()<<" loops\n";
+
+  //loops contained in this are guatanteed to have passed checkLoop
+  DenseMap<const Loop *, const SCEV *> loopReps;
 
   for (const Loop *L : loops){
     errs()<<"LOOP:\n";
     L->dump();
 
-    if (!L->isInnermost()) continue; //for now
-
-    if (!L->getLoopPreheader()) { errs()<<"loop has no preheader\n"; continue; }
+    if (!L->getLoopPreheader()) continue;
     if (!checkLoop(L, DT, SE, L->getLoopPreheader()->getTerminator())) continue;
 
+    loopReps.insert(std::make_pair(L, SE.getBackedgeTakenCount(L)));
+
     for (const auto &BB : L->getBlocks()){
-      //TODO: how to allow inner loops?
+      
       if (!isOnAllControlFlowPaths(BB, L, DT)) continue;
 
       for (auto &I : *BB){
@@ -221,27 +490,22 @@ AffineAccess &runOnFunction(Function &F, LoopInfo &LI, DominatorTree &DT, Scalar
         if (!(AddrIns = dyn_cast<Instruction>(Addr))) continue; //if Addr is not instruction ==> constant, or sth else (==> leave for other passes to opt)
         errs()<<"looking at: "; AddrIns->dump();
 
+        aa->addAllAccesses(AddrIns);
+
+        //Address SCEV
         const SCEV *AddrSCEV = SE.getSCEV(Addr);
         if (!SE.hasComputableLoopEvolution(AddrSCEV, L)) continue;
         errs()<<"has computable loop evolution: "; AddrSCEV->dump();
 
+        //Base Pointer (=data) SCEV
         auto split = SE.SplitIntoInitAndPostInc(L, AddrSCEV);
         const SCEV *SetupAddrSCEV = split.first; //const SCEV *PostIncSCEV = split.second;
         if (!isSafeToExpandAt(SetupAddrSCEV, L->getLoopPreheader()->getTerminator(), SE)) continue;
         errs()<<"can expand setup addr scev in preheader: "; SetupAddrSCEV->dump();
         
-        const auto &loops = getContainingLoops(L, AddrIns);
-        if (!canFindStrides(SE, ArrayRef<const Loop *>(loops.begin(), loops.end()), AddrSCEV, SetupAddrSCEV)) continue;
-        errs()<<"can find loop Strides: "; AddrSCEV->dump();
-
-        const SCEV *TC = SE.getBackedgeTakenCount(L);
-        const auto *AddrRecSCEV = cast<SCEVAddRecExpr>(AddrSCEV);
-        const SCEV *Str;
-        if (AddrRecSCEV->getLoop() == L){
-          Str = cast<SCEVAddRecExpr>(AddrSCEV)->getStepRecurrence(SE); //because 1D for now
-        }else{
-          Str = SE.getConstant(APInt(64U, 0U));
-        }
+        //Stride Check
+        if (!canFindStride(L, AddrSCEV, SetupAddrSCEV, SE)) continue;
+        errs()<<"can find loop Stride: "; AddrSCEV->dump();
 
         std::vector<Instruction *> accesses;
         for (auto U = Addr->use_begin(); U != Addr->use_end(); ++U){
@@ -254,8 +518,19 @@ AffineAccess &runOnFunction(Function &F, LoopInfo &LI, DominatorTree &DT, Scalar
           accesses.push_back(Acc);
         }
 
+        const SCEV *TC = loopReps.find(L)->getSecond();
+        const auto *AddrRecSCEV = cast<SCEVAddRecExpr>(AddrSCEV);
+        const SCEV *Str;
+        if (AddrRecSCEV->getLoop() == L){
+          Str = cast<SCEVAddRecExpr>(AddrSCEV)->getStepRecurrence(SE); //because 1D for now
+        }else{
+          Str = SE.getConstant(APInt(64U, 0U));
+        }
+
         aa->addAccess(new AffineAcc(L, AddrIns, ArrayRef<Instruction *>(accesses), SetupAddrSCEV, TC, Str));
         errs()<<"added new AffineAcc\n";
+
+        //TODO: dimension promotion: if preheader has only one predecessor -> if cond for "skipping loop" is bt+1 == 0 -> if parent loop passes checks -> promote
       }
     }
 
@@ -264,28 +539,4 @@ AffineAccess &runOnFunction(Function &F, LoopInfo &LI, DominatorTree &DT, Scalar
   return *aa;
 }
 
-} //end of namespace
-
-AnalysisKey AffineAccessAnalysis::Key;
-
-AffineAccess AffineAccessAnalysis::run(Function &F, FunctionAnalysisManager &FAM) {
-  
-  errs()<<"running AffineAccessAnalysis on "<<F.getName()<<"\n";
-
-  LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
-  DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
-  ScalarEvolution &SE = FAM.getResult<ScalarEvolutionAnalysis>(F);
-  AAResults &AA = FAM.getResult<AAManager>(F);
-
-  AffineAccess aa = runOnFunction(F, LI, DT, SE, AA);  
-  return aa;
-}
-
-//================== Affine Acces Analysis Pass for opt =======================================
-PreservedAnalyses AffineAccessAnalysisPass::run(Function &F, FunctionAnalysisManager &FAM) {
-  AffineAccess AA = FAM.getResult<AffineAccessAnalysis>(F);
-  for (const auto *A : AA.getAll()){
-    A->dump();
-  }
-  return PreservedAnalyses::all();
-}
+*/

@@ -40,8 +40,9 @@
 
 #include <array>
 #include <vector>
+#include <algorithm>
 
-#define NUM_SSR 3U
+#define NUM_SSR 10U
 
 //current state of hw: only allow doubles
 #define CHECK_TYPE(I) (I->getType() == Type::getDoubleTy(I->getParent()->getContext()))
@@ -50,6 +51,7 @@ using namespace llvm;
 
 namespace{
 
+///generates SSR setup calls
 void generateSSR(AffineAccess &AA, const AffineAcc *aa, unsigned dmid, unsigned n_insts, bool isStore){
   BasicBlock *LoopPreheader = aa->getLoop()->getLoopPreheader();
   Module *mod = LoopPreheader->getModule();
@@ -118,6 +120,7 @@ void generateSSR(AffineAccess &AA, const AffineAcc *aa, unsigned dmid, unsigned 
   return;
 }
 
+///generates SSR enable & disable calls
 void generateSSREnDis(const Loop *L){
   IRBuilder<> builder(L->getLoopPreheader()->getTerminator());
   Module *mod = L->getHeader()->getModule();
@@ -131,18 +134,49 @@ void generateSSREnDis(const Loop *L){
   return;
 }
 
+bool conflictingAccesses(const AffineAcc *A, const AffineAcc *B){
+  if (A->getAddrIns() == B->getAddrIns()) return true;
+  for (Instruction *IA : A->getAccesses()){
+    for (Instruction *IB : B->getAccesses()){
+      if (IA == IB) return true;
+    }
+  }
+  return false;
+}
+
 } //end of namespace
 
 PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &FAM){
-  errs()<<"SSR Generation Pass on function: "<<F.getNameOrAsOperand()<<"\n";
-
+  
   AffineAccess &AF = FAM.getResult<AffineAccessAnalysis>(F);
 
+  errs()<<"SSR Generation Pass on function: "<<F.getNameOrAsOperand()<<"\n";
 
   SmallPtrSet<const Loop *, 8U> changedLoops;
 
+  auto accs = AF.getAccesses();
+  std::vector<const AffineAcc *> allaccesses;
+  for (const AffineAcc *A : accs) allaccesses.push_back(A); 
+
+  //sort by dimension
+  std::sort(allaccesses.begin(), allaccesses.end(), [](const AffineAcc *A, const AffineAcc *B){return A->getDimension() <= B->getDimension();});
+
+  errs()<<"total of "<<allaccesses.size()<<" AffineAcc\n";
+  
+  std::vector<const AffineAcc *> accesses;
+  while (!allaccesses.empty()){
+    auto A = allaccesses.back(); allaccesses.pop_back();
+    bool conflict = false;
+    for (auto B : accesses){
+      conflict = conflict || conflictingAccesses(A, B);
+    }
+    if (!conflict) accesses.push_back(A);
+  }
+
+  errs()<<accesses.size()<<" AffineAcc useful\n";
+
   unsigned dmid = 0U;
-  for (const auto *A : AF.getAll()){
+  for (const AffineAcc *A : accesses){
     if (dmid >= NUM_SSR) break;
     
     unsigned n_store = 0U;
@@ -161,7 +195,9 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
     if(!valid || (n_store == 0U && n_load == 0U)) continue; 
     //all uses are valid load/stores and there is at least one of them
 
+    A->dump();
     generateSSR(AF, A, dmid, n_store + n_load, n_store > 0U);
+    errs()<<"done with generation\n\n";
     changedLoops.insert(A->getLoop());
     dmid++;
   }

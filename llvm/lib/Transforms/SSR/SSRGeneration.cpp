@@ -40,9 +40,13 @@
 
 #include <array>
 #include <vector>
+#include <map>
+#include <utility>
 #include <algorithm>
+#include <queue>
 
-#define NUM_SSR 10U
+#define NUM_SSR 3U
+#define SSR_MAX_DIM 4U
 
 //current state of hw: only allow doubles
 #define CHECK_TYPE(I) (I->getType() == Type::getDoubleTy(I->getParent()->getContext()))
@@ -134,7 +138,7 @@ void generateSSREnDis(const Loop *L){
   return;
 }
 
-bool conflictingAccesses(const AffineAcc *A, const AffineAcc *B){
+bool shareInsts(const AffineAcc *A, const AffineAcc *B){
   if (A->getAddrIns() == B->getAddrIns()) return true;
   for (Instruction *IA : A->getAccesses()){
     for (Instruction *IB : B->getAccesses()){
@@ -142,6 +146,107 @@ bool conflictingAccesses(const AffineAcc *A, const AffineAcc *B){
     }
   }
   return false;
+}
+
+bool isValid(const AffineAcc *A){
+  if (A->getDimension() > SSR_MAX_DIM) return false;
+  unsigned n_store = 0U;
+  unsigned n_load = 0U;
+  bool valid = true;
+  for (auto *I : A->getAccesses()){
+    valid = valid && CHECK_TYPE(I);
+    if (dyn_cast<LoadInst>(I)) n_load++;
+    else if(dyn_cast<StoreInst>(I)) n_store++;
+    else assert(false && "non load/store instruction in AffineAcc::accesses ?");
+    if(!valid) break;
+  }
+  return valid && ((n_store > 0U && n_load == 0U)|| (n_store == 0U && n_load > 0U)); 
+}
+
+bool conflict(const AffineAcc *A, const AffineAcc *B){
+  assert(!shareInsts(A, B) && "this AffineAcc's share instructions ==> one of them should be filtered");
+  if (A->getNStore() == 0U && B->getNStore() == 0U) return false; //can intersect read only streams
+  //at this point one of them is store
+  for (BasicBlock *BB : A->getLoop()->getBlocks()) { if (B->getLoop()->contains(BB)) return true; } //loops contain each other
+  for (BasicBlock *BB : B->getLoop()->getBlocks()) { if (A->getLoop()->contains(BB)) return true; } //loops contain each other
+  return true;
+}
+
+struct ConflictGraph{
+  using NodeT = const AffineAcc *;
+
+  ConflictGraph(ArrayRef<NodeT> accesses) {
+    for (auto A = accesses.begin(); A != accesses.end(); ++A){
+      if (!isValid(*A)) continue;
+      conflicts.insert(std::make_pair(*A, std::move(std::vector<NodeT>())));
+      mutexs.insert(std::make_pair(*A, std::move(std::vector<NodeT>())));
+      for (auto B = accesses.begin(); B != A; ++B){
+        if (shareInsts(*A, *B)){
+          mutexs.find(*A)->second.push_back(*B);
+          mutexs.find(*B)->second.push_back(*A);
+        }else if (conflict(*A, *B)){
+          conflicts.find(*A)->second.push_back(*B);
+          conflicts.find(*B)->second.push_back(*A);
+        }
+      }
+    }
+  }
+
+  ///currently done greedily according to isBetter
+  std::map<NodeT, Optional<unsigned>> &color(unsigned nColors){
+    std::map<NodeT, Optional<unsigned>> &color = *(new std::map<NodeT, Optional<unsigned>>());
+    std::vector<NodeT> accs;
+    for (const auto &A : conflicts) accs.push_back(A.first);
+    auto isBetter = [](NodeT A, NodeT B){ return A->getDimension() > B->getDimension(); };
+    std::sort(accs.begin(), accs.end(), isBetter);
+    for (const auto &A : accs){
+      bool done = false;
+      for (const auto &M : mutexs.find(A)->second){
+        auto c = color.find(M);
+        if (c != color.end() && c->second.hasValue()) {//one mutex neighbour has color => A cannot get one
+          color.insert(std::make_pair(A, None));
+          done = true;
+          break;
+        }
+      }
+      if (done) continue; //done with this A ==> go to next
+
+      BitVector cs(nColors);
+      for (const auto &M : conflicts.find(A)->second){
+        auto mc = color.find(M);
+        if (mc != color.end() && mc->second.hasValue()){ //neighbour has some color mc ==> A cannot get mc
+          cs[mc->second.getValue()] = true;
+        }
+      }
+      int c = cs.find_first_unset();
+      if (c >= 0) color.insert(std::make_pair(A, (unsigned)c));
+      else color.insert(std::make_pair(A, None));
+    }
+    return color;
+  }
+
+private:
+  std::map<NodeT, std::vector<NodeT>> conflicts; //cannot get same color
+  std::map<NodeT, std::vector<NodeT>> mutexs; //if one gets a color the other cannot
+};
+
+void addChangedLoop(const Loop *NewL, SmallPtrSet<const Loop *, 4U> &loops){
+  //check whether L or any of its predecessors (parents, parents of parents, etc) are already marked for SSRenable & -disable
+  const Loop *L = NewL;
+  bool contained = false;
+  while (L && !contained){
+    contained = contained || (loops.find(L) != loops.end());
+    L = L->getParentLoop();
+  }
+  if (!contained){
+    //check for all loops in loops whether NewL contains them
+    std::vector<const Loop *> dels; //cannot directly delete loops in foreach loops ==> store here first
+    for (const Loop *L : loops){
+      if (NewL->contains(L->getHeader())) dels.push_back(L);
+    }
+    for (const Loop *L : dels) loops.erase(L);
+    loops.insert(NewL);
+  }
 }
 
 } //end of namespace
@@ -152,13 +257,33 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
 
   errs()<<"SSR Generation Pass on function: "<<F.getNameOrAsOperand()<<"\n";
 
-  SmallPtrSet<const Loop *, 8U> changedLoops;
+  SmallPtrSet<const Loop *, 4U> changedLoops;
 
   auto accs = AF.getAccesses();
-  std::vector<const AffineAcc *> allaccesses;
+
+  ConflictGraph g(accs);
+  const auto &clr = g.color(NUM_SSR);
+
+  for (const auto &C : clr){
+    if (C.second.hasValue()){ //not None
+      unsigned n_store = C.first->getNStore(), n_load = C.first->getNLoad();
+      generateSSR(AF, C.first, C.second.getValue(), n_store + n_load, n_store > 0U);
+
+      addChangedLoop(C.first->getLoop(), changedLoops);
+    }
+  }
+
+  for (const Loop *L : changedLoops) generateSSREnDis(L);
+
+  return changedLoops.empty() ? PreservedAnalyses::all() : PreservedAnalyses::none();
+}
+
+
+/*
+std::vector<const AffineAcc *> allaccesses;
   for (const AffineAcc *A : accs) allaccesses.push_back(A); 
 
-  //sort by dimension
+  //sort by dimension ascending
   std::sort(allaccesses.begin(), allaccesses.end(), [](const AffineAcc *A, const AffineAcc *B){return A->getDimension() <= B->getDimension();});
 
   errs()<<"total of "<<allaccesses.size()<<" AffineAcc\n";
@@ -166,9 +291,10 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
   std::vector<const AffineAcc *> accesses;
   while (!allaccesses.empty()){
     auto A = allaccesses.back(); allaccesses.pop_back();
+    if (!isValid(A)) continue;
     bool conflict = false;
     for (auto B : accesses){
-      conflict = conflict || conflictingAccesses(A, B);
+      conflict = conflict || shareInsts(A, B);
     }
     if (!conflict) accesses.push_back(A);
   }
@@ -178,31 +304,9 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
   unsigned dmid = 0U;
   for (const AffineAcc *A : accesses){
     if (dmid >= NUM_SSR) break;
-    
-    unsigned n_store = 0U;
-    unsigned n_load = 0U;
-    bool valid = true;
-    for (auto *I : A->getAccesses()){
-      valid = valid && CHECK_TYPE(I);
-      if (dyn_cast<LoadInst>(I)) n_load++;
-      else if(dyn_cast<StoreInst>(I)) n_store++;
-      else assert(false && "non load/store instruction in AffineAcc::accesses ?");
-
-      if(!valid) break;
-    }
-
-    errs()<<"current aa is "<<valid<<" with #st="<<n_store<<" #ld="<<n_load<<"\n";
-    if(!valid || (n_store == 0U && n_load == 0U)) continue; 
-    //all uses are valid load/stores and there is at least one of them
-
-    A->dump();
+    unsigned n_store = A->getNStore(), n_load = A->getNLoad();
     generateSSR(AF, A, dmid, n_store + n_load, n_store > 0U);
-    errs()<<"done with generation\n\n";
     changedLoops.insert(A->getLoop());
     dmid++;
   }
-
-  for (const Loop *L : changedLoops) generateSSREnDis(L);
-
-  return changedLoops.empty() ? PreservedAnalyses::all() : PreservedAnalyses::none();
-}
+  */

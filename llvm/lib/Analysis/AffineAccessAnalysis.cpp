@@ -80,6 +80,18 @@ const SmallVector<Instruction *, 2U> &AffineAcc::getAccesses() const{
   return this->accesses;
 }
 
+unsigned AffineAcc::getNStore() const {
+  unsigned r = 0U;
+  for (Instruction *I : this->accesses) r += isa<StoreInst>(I);
+  return r;
+}
+
+unsigned AffineAcc::getNLoad() const {
+  unsigned r = 0U;
+  for (Instruction *I : this->accesses) r += isa<LoadInst>(I);
+  return r;
+}
+
 //================== AffineAcces, helper functions =========================================
 
 namespace {
@@ -441,25 +453,38 @@ ArrayRef<const AffineAcc *> AffineAccess::getAccesses() const{
   return *ar; 
 }
 
-//TODO: 2D Stride = (1D Bound + 1) * 1D Stride
-//TODO: fix below: do casts manually
+Value *castToSize(Value *R, Type *ty, Instruction *InsPoint){
+  const DataLayout &DL = InsPoint->getParent()->getModule()->getDataLayout();
+  Type *rty = R->getType();
+  if (rty == ty) return R;
+  if (DL.getTypeSizeInBits(rty) > DL.getTypeSizeInBits(ty)) {
+    return CastInst::CreateTruncOrBitCast(R, ty, "scev.cast", InsPoint);
+  }
+  if (DL.getTypeSizeInBits(rty) < DL.getTypeSizeInBits(ty)) {
+    return CastInst::CreateZExtOrBitCast(R, ty, "scev.cast", InsPoint);
+  }
+  return CastInst::CreateBitOrPointerCast(R, ty, "scev.cast", InsPoint);
+}
 
 Value *AffineAccess::expandData(const AffineAcc *aa, Type *ty) const{
+  Instruction *InsPoint = aa->L->getLoopPreheader()->getTerminator();
   SCEVExpander ex(SE, aa->L->getHeader()->getModule()->getDataLayout(), "data");
-  ex.setInsertPoint(aa->L->getLoopPreheader()->getTerminator());
-  return ex.expandCodeFor(aa->data, ty);
+  ex.setInsertPoint(InsPoint);
+  return castToSize(ex.expandCodeFor(aa->data), ty, InsPoint);
 }
 
 Value *AffineAccess::expandBound(const AffineAcc *aa, unsigned i, Type *ty) const{
+  Instruction *InsPoint = aa->L->getLoopPreheader()->getTerminator();
   SCEVExpander ex(SE, aa->L->getHeader()->getModule()->getDataLayout(), "bound");
-  ex.setInsertPoint(aa->L->getLoopPreheader()->getTerminator());
-  return ex.expandCodeFor(aa->bounds[i], ty);
+  ex.setInsertPoint(InsPoint);
+  return castToSize(ex.expandCodeFor(aa->bounds[i]), ty, InsPoint);
 }
 
 Value *AffineAccess::expandStride(const AffineAcc *aa, unsigned i, Type *ty) const{
+  Instruction *InsPoint = aa->L->getLoopPreheader()->getTerminator();
   SCEVExpander ex(SE, aa->L->getHeader()->getModule()->getDataLayout(), "stride");
-  ex.setInsertPoint(aa->L->getLoopPreheader()->getTerminator());
-  return ex.expandCodeFor(aa->strides[i], ty);
+  ex.setInsertPoint(InsPoint);
+  return castToSize(ex.expandCodeFor(aa->strides[i]), ty, InsPoint);
 }
 
 //================== Affine Acces Analysis ==================================================

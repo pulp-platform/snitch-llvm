@@ -32,6 +32,8 @@ public:
   const Loop *getLoop() const;
   Instruction *getAddrIns() const;
   const SmallVector<Instruction *, 2U> &getAccesses() const;
+  unsigned getNStore() const;
+  unsigned getNLoad() const;
 };
 
 class AffineAccess{

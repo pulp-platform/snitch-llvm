@@ -56,7 +56,7 @@ using namespace llvm;
 namespace{
 
 ///generates SSR setup calls
-void generateSSR(AffineAccess &AA, const AffineAcc *aa, unsigned dmid, unsigned n_insts, bool isStore){
+void generateSSR(AffineAccess &AA, const AffineAcc *aa, unsigned dmid, bool isStore){
   BasicBlock *LoopPreheader = aa->getLoop()->getLoopPreheader();
   Module *mod = LoopPreheader->getModule();
   LLVMContext &ctxt = LoopPreheader->getContext();
@@ -67,23 +67,14 @@ void generateSSR(AffineAccess &AA, const AffineAcc *aa, unsigned dmid, unsigned 
   ConstantInt *dm = ConstantInt::get(i32, dmid); //datamover id, ty=i32
   ConstantInt *dim = ConstantInt::get(i32, aa->getDimension() - 1U); //dimension - 1, ty=i32
   Value *data = AA.expandData(aa, Type::getInt8PtrTy(ctxt));
-  Function *SSRReadSetup;
+  Function *SSRSetup;
   if (!isStore){
-    SSRReadSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_read_imm); //can take _imm bc dm and dim are constant
+    SSRSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_read_imm); //can take _imm bc dm and dim are constant
   }else{
-    SSRReadSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_write_imm); //can take _imm bc dm and dim are constant
+    SSRSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_write_imm); //can take _imm bc dm and dim are constant
   }
   std::array<Value *, 3> args = {dm, dim, data};
-  builder.CreateCall(SSRReadSetup->getFunctionType(), SSRReadSetup, ArrayRef<Value *>(args));
-
-  errs()<<"generated ssr_read/write_imm \n";
-
-  ConstantInt *rep = ConstantInt::get(i32, n_insts - 1U); //repetition - 1, ty=i32
-  Function *SSRRepetitionSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_setup_repetition);
-  std::array<Value *, 2> repargs = {dm, rep};
-  builder.CreateCall(SSRRepetitionSetup->getFunctionType(), SSRRepetitionSetup, ArrayRef<Value *>(repargs));
-
-  errs()<<"generated ssr_setup_repetitions \n";
+  builder.CreateCall(SSRSetup->getFunctionType(), SSRSetup, ArrayRef<Value *>(args))->dump();
 
   Intrinsic::RISCVIntrinsics functions[] = {
     Intrinsic::riscv_ssr_setup_bound_stride_1d,
@@ -97,30 +88,41 @@ void generateSSR(AffineAccess &AA, const AffineAcc *aa, unsigned dmid, unsigned 
 
     Function *SSRBoundStrideSetup = Intrinsic::getDeclaration(mod, functions[d]);
     std::array<Value *, 3> bsargs = {dm, bound, stride};
-    builder.CreateCall(SSRBoundStrideSetup->getFunctionType(), SSRBoundStrideSetup, ArrayRef<Value *>(bsargs));
-
-    errs()<<"generated ssr_setup_bound_stride_"<<(d+1)<<"d \n";
+    auto *C = builder.CreateCall(SSRBoundStrideSetup->getFunctionType(), SSRBoundStrideSetup, ArrayRef<Value *>(bsargs));
+    C->dump();
   }
 
+  unsigned n_reps = 0U;
   if (isStore){
     Function *SSRPush = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_push);
     for (Instruction *I : aa->getAccesses()){
       std::array<Value *, 2> pusharg = {dm, cast<StoreInst>(I)->getValueOperand()};
       builder.SetInsertPoint(I);
-      builder.CreateCall(SSRPush->getFunctionType(), SSRPush, ArrayRef<Value *>(pusharg));
+      auto *C = builder.CreateCall(SSRPush->getFunctionType(), SSRPush, ArrayRef<Value *>(pusharg));
+      C->dump();
+      I->dump();
       I->removeFromParent();
+      n_reps++;
     }
   }else{
     Function *SSRPop = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_pop);
     std::array<Value *, 1> poparg = {dm};
     for (Instruction *I : aa->getAccesses()){
+      for (auto U = I->user_begin(); U != I->user_end(); ++U) n_reps++; //reps for load is its nr of uses
       builder.SetInsertPoint(I);
-      Value *v = builder.CreateCall(SSRPop->getFunctionType(), SSRPop, ArrayRef<Value *>(poparg), "ssr.pop");
+      Instruction *V = builder.CreateCall(SSRPop->getFunctionType(), SSRPop, ArrayRef<Value *>(poparg), "ssr.pop");
+      V->dump();
+      I->dump();
       BasicBlock::iterator ii(I);
-      ReplaceInstWithValue(I->getParent()->getInstList(), ii, v);
+      ReplaceInstWithValue(I->getParent()->getInstList(), ii, V);
     }
   }
-  errs()<<"placed push/pop calls\n";
+
+  builder.SetInsertPoint(LoopPreheader->getTerminator());
+  ConstantInt *rep = ConstantInt::get(i32, n_reps - 1U); //repetition - 1, ty=i32
+  Function *SSRRepetitionSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_setup_repetition);
+  std::array<Value *, 2> repargs = {dm, rep};
+  builder.CreateCall(SSRRepetitionSetup->getFunctionType(), SSRRepetitionSetup, ArrayRef<Value *>(repargs))->dump();
   return;
 }
 
@@ -138,17 +140,8 @@ void generateSSREnDis(const Loop *L){
   return;
 }
 
-bool shareInsts(const AffineAcc *A, const AffineAcc *B){
-  if (A->getAddrIns() == B->getAddrIns()) return true;
-  for (Instruction *IA : A->getAccesses()){
-    for (Instruction *IB : B->getAccesses()){
-      if (IA == IB) return true;
-    }
-  }
-  return false;
-}
-
 bool isValid(const AffineAcc *A){
+  if (!A) return false;
   if (A->getDimension() > SSR_MAX_DIM) return false;
   unsigned n_store = 0U;
   unsigned n_load = 0U;
@@ -160,31 +153,24 @@ bool isValid(const AffineAcc *A){
     else assert(false && "non load/store instruction in AffineAcc::accesses ?");
     if(!valid) break;
   }
-  return valid && ((n_store > 0U && n_load == 0U)|| (n_store == 0U && n_load > 0U)); 
-}
-
-bool conflict(const AffineAcc *A, const AffineAcc *B){
-  assert(!shareInsts(A, B) && "this AffineAcc's share instructions ==> one of them should be filtered");
-  if (A->getNStore() == 0U && B->getNStore() == 0U) return false; //can intersect read only streams
-  //at this point one of them is store
-  for (BasicBlock *BB : A->getLoop()->getBlocks()) { if (B->getLoop()->contains(BB)) return true; } //loops contain each other
-  for (BasicBlock *BB : B->getLoop()->getBlocks()) { if (A->getLoop()->contains(BB)) return true; } //loops contain each other
-  return true;
+  return valid && ((n_store > 0U && n_load == 0U) || (n_store == 0U && n_load > 0U)); 
 }
 
 struct ConflictGraph{
   using NodeT = const AffineAcc *;
 
-  ConflictGraph(ArrayRef<NodeT> accesses) {
-    for (auto A = accesses.begin(); A != accesses.end(); ++A){
-      if (!isValid(*A)) continue;
-      conflicts.insert(std::make_pair(*A, std::move(std::vector<NodeT>())));
-      mutexs.insert(std::make_pair(*A, std::move(std::vector<NodeT>())));
-      for (auto B = accesses.begin(); B != A; ++B){
-        if (shareInsts(*A, *B)){
+  ///accs assumed to be valid
+  ConflictGraph(const AffineAccess &AF, ArrayRef<NodeT> accesses)  : AF(AF){ 
+    for (auto A = accesses.begin(); A != accesses.end(); A++){
+      conflicts.insert(std::make_pair(*A, std::vector<NodeT>()));
+      mutexs.insert(std::make_pair(*A, std::vector<NodeT>()));
+      for (auto B = accesses.begin(); B != A; B++){
+        assert(conflicts.find(*B) != conflicts.end());
+        assert(mutexs.find(*B) != mutexs.end());
+        if (AF.shareInsts(*A, *B)){
           mutexs.find(*A)->second.push_back(*B);
           mutexs.find(*B)->second.push_back(*A);
-        }else if (conflict(*A, *B)){
+        }else if (AF.conflictWWWR(*A, *B)){
           conflicts.find(*A)->second.push_back(*B);
           conflicts.find(*B)->second.push_back(*A);
         }
@@ -193,7 +179,7 @@ struct ConflictGraph{
   }
 
   ///currently done greedily according to isBetter
-  std::map<NodeT, Optional<unsigned>> &color(unsigned nColors){
+  std::map<NodeT, Optional<unsigned>> &color(unsigned nColors) {
     std::map<NodeT, Optional<unsigned>> &color = *(new std::map<NodeT, Optional<unsigned>>());
     std::vector<NodeT> accs;
     for (const auto &A : conflicts) accs.push_back(A.first);
@@ -226,8 +212,9 @@ struct ConflictGraph{
   }
 
 private:
+  const AffineAccess &AF;
   std::map<NodeT, std::vector<NodeT>> conflicts; //cannot get same color
-  std::map<NodeT, std::vector<NodeT>> mutexs; //if one gets a color the other cannot
+  std::map<NodeT, std::vector<NodeT>> mutexs; //if one gets a color the other cannot get any color
 };
 
 void addChangedLoop(const Loop *NewL, SmallPtrSet<const Loop *, 4U> &loops){
@@ -261,13 +248,21 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
 
   auto accs = AF.getAccesses();
 
-  ConflictGraph g(accs);
+  std::vector<const AffineAcc *> goodAccs;
+  for (const AffineAcc *A : accs){
+    auto p = AF.splitLoadStore(A);
+    if (p.first && isValid(p.first)) goodAccs.push_back(p.first);
+    if (p.second && isValid(p.second)) goodAccs.push_back(p.second);
+  }
+
+  ConflictGraph g(AF, ArrayRef<const AffineAcc *>(goodAccs));
   const auto &clr = g.color(NUM_SSR);
+  errs()<<"computed coloring\n";
 
   for (const auto &C : clr){
     if (C.second.hasValue()){ //not None
-      unsigned n_store = C.first->getNStore(), n_load = C.first->getNLoad();
-      generateSSR(AF, C.first, C.second.getValue(), n_store + n_load, n_store > 0U);
+      generateSSR(AF, C.first, C.second.getValue(), C.first->getNStore() > 0U);
+      errs()<<"generated ssr insts \n";
 
       addChangedLoop(C.first->getLoop(), changedLoops);
     }

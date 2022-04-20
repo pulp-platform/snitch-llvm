@@ -44,7 +44,7 @@
 using namespace llvm;
 
 AffineAcc::AffineAcc(Instruction *Addr, ArrayRef<Instruction *> accesses,
-    const SCEV *data) : data(data), Addr(Addr){
+    const SCEV *data) : data(data), Addr(Addr), L(nullptr){
   for (Instruction *I : accesses) this->accesses.push_back(I);
   return;
 }
@@ -55,7 +55,8 @@ unsigned AffineAcc::getDimension() const{
 
 void AffineAcc::dump() const{
   errs()<<"Affine Access in Loop:\n";
-  L->dump();
+  if (L) L->dump();
+  else errs()<<"nullptr\n";
   errs()<<"With Addr instruction: "; Addr->dump();
   errs()<<"And the following load/store instructions:\n";
   for (Instruction *I : accesses){
@@ -213,11 +214,13 @@ Optional<bool> predicatedICmpOutcome(ICmpInst *Cmp, const SCEV *Rep, ScalarEvolu
 bool isOnAllPredicatedControlFlowPaths(const BasicBlock *BB, const Loop *L, const DominatorTree &DT, const SCEV *Rep, ScalarEvolution &SE){
   if (isOnAllControlFlowPaths(BB, L, DT)) return true; //is on all paths anyway
   Rep->dump();
-
+  DenseSet<BasicBlock *> vis; //visited set
   std::deque<BasicBlock *> q(1U, L->getHeader()); //iterative BFS with queue
   while (!q.empty()){
     BasicBlock *Current = q.front(); q.pop_front();
     if (Current == BB) continue; //do not continue BFS from BB
+    if (vis.find(Current) == vis.end()) continue; //already visited this block
+    vis.insert(Current);
 
     Instruction *T = Current->getTerminator();
     T->dump();
@@ -328,6 +331,19 @@ SmallVector<const SCEV *, 4U> &findStrides(const SCEV *Addr, ArrayRef<const Loop
   return strides;
 }
 
+Value *castToSize(Value *R, Type *ty, Instruction *InsPoint){
+  const DataLayout &DL = InsPoint->getParent()->getModule()->getDataLayout();
+  Type *rty = R->getType();
+  if (rty == ty) return R;
+  if (DL.getTypeSizeInBits(rty) > DL.getTypeSizeInBits(ty)) {
+    return CastInst::CreateTruncOrBitCast(R, ty, "scev.cast", InsPoint);
+  }
+  if (DL.getTypeSizeInBits(rty) < DL.getTypeSizeInBits(ty)) {
+    return CastInst::CreateZExtOrBitCast(R, ty, "scev.cast", InsPoint);
+  }
+  return CastInst::CreateBitOrPointerCast(R, ty, "scev.cast", InsPoint);
+}
+
 } //end of namespace
 
 //================== AffineAcces, Result of Analysis =========================================
@@ -354,6 +370,8 @@ AffineAccess::AffineAccess(ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI)
 ///  (5) forall st : aa.strides. SE.isLoopInvariant(st, L) && isSafeToExpandAt(st, LPreheader->getTerminator(), SE)
 ///  (6) isSafeToExpandAt(Bound / Stride, LPreheader->getTerminator(), SE)
 AffineAcc *AffineAccess::promoteAccess(const AffineAcc &aa, const Loop *L, const SCEV *Stride){
+  aa.dump();
+  assert(!aa.L || (aa.L && !aa.L->isInvalid()));
   assert((!aa.L) || (aa.L && aa.L->getParentLoop() == L && "can only promote to parent loop")); //(1)
   assert(this->loopReps.find(L) != this->loopReps.end() && "L is well formed"); //(1)
 
@@ -369,7 +387,7 @@ AffineAcc *AffineAccess::promoteAccess(const AffineAcc &aa, const Loop *L, const
     }
   }
 
-  errs()<<"passed (2)\n";
+  errs()<<"passed (2), ";
 
   const SCEV *Bound = this->loopReps.find(L)->getSecond();
   Instruction *InsPoint = L->getLoopPreheader()->getTerminator();
@@ -378,23 +396,23 @@ AffineAcc *AffineAccess::promoteAccess(const AffineAcc &aa, const Loop *L, const
   const SCEV *Data = SE.SplitIntoInitAndPostInc(L, aa.data).first;
   if (!isSafeToExpandAt(Data, InsPoint, SE)) return nullptr;      //(3.2)
 
-  errs()<<"passed (3)\n";
+  errs()<<"passed (3), ";
 
   for (const SCEV *Bd : aa.bounds){
     if (!(SE.isLoopInvariant(Bd, L) && isSafeToExpandAt(Bd, InsPoint, SE))) return nullptr; //(4)
   }
 
-  errs()<<"passed (4)\n";
+  errs()<<"passed (4), ";
 
   for (const SCEV *Str : aa.strides){
     if (!(SE.isLoopInvariant(Str, L) && isSafeToExpandAt(Str, InsPoint, SE))) return nullptr; //(5)
   }
 
-  errs()<<"passed (5)\n";
+  errs()<<"passed (5), ";
 
   if (!isSafeToExpandAt(Bound, InsPoint, SE) || !isSafeToExpandAt(Stride, InsPoint, SE)) return nullptr; //(6)
 
-  errs()<<"passed (6)\n";
+  errs()<<"passed (6)";
 
   AffineAcc *A = new AffineAcc(aa);
   A->data = Data;
@@ -406,10 +424,22 @@ AffineAcc *AffineAccess::promoteAccess(const AffineAcc &aa, const Loop *L, const
 
 /// adds all affine accesses that use Addr in loop L
 void AffineAccess::addAllAccesses(Instruction *Addr, const Loop *L){
+  if (addresses.find(Addr) != addresses.end()) return; //already called addAllAccesses on this Addr instruction
+  addresses.insert(Addr);
+
+  //find all accesses
   std::vector<Instruction *> accesses;
   for (auto U = Addr->use_begin(); U != Addr->use_end(); ++U){
     Instruction *Acc = dyn_cast<LoadInst>(U->getUser());
-    if (!Acc) Acc = dyn_cast<StoreInst>(U->getUser());
+    if (Acc){ //load inst
+      bool unvaildUser = false;
+      for (auto AU = Acc->use_begin(); AU != Acc->use_end(); ++AU){
+        auto *I = dyn_cast<Instruction>(AU->getUser());
+        unvaildUser = unvaildUser || !I || !isOnAllControlFlowPaths(I->getParent(), L, DT);
+      }
+      if (unvaildUser) continue; //skip this load it has users ouside of loop or not on all control flow paths
+    }
+    if (!Acc) Acc = dyn_cast<StoreInst>(U->getUser()); //try to cast to store
     if (!Acc) continue; //both casts failed ==> not a suitable instruction
     if (!isOnAllControlFlowPaths(Acc->getParent(), L, DT)) continue; //access does not occur consistently in loop ==> not suitable
     accesses.push_back(Acc);
@@ -420,7 +450,9 @@ void AffineAccess::addAllAccesses(Instruction *Addr, const Loop *L){
 
   const SCEV *AddrS = SE.getSCEV(Addr);
 
-  auto &cloops = getContainingLoops(LI.getLoopsInPreorder(), Addr);
+  //we are looking at containing loops of all the accesses (guaranteed to be all the same)
+  //Addr ins might be outside of loop (licm) if 1D stride is 0
+  auto &cloops = getContainingLoops(LI.getLoopsInPreorder(), accesses[0]); 
 
   errs()<<"has "<<cloops.size()<<" containing loops\n";
 
@@ -435,6 +467,7 @@ void AffineAccess::addAllAccesses(Instruction *Addr, const Loop *L){
     if (Stride == strides.end()) break; //ran out of strides  
 
     A = promoteAccess(*A, *L, *Stride);
+    errs()<<"\n";
     if (A){
       errs()<<"found AffineAcc:\n"; A->dump();
       this->accesses.push_back(A);
@@ -444,8 +477,23 @@ void AffineAccess::addAllAccesses(Instruction *Addr, const Loop *L){
 
     ++Stride;
   }
-  errs()<<"\n";
+  errs()<<"we now have "<<this->accesses.size()<<" affine accesses\n";
   return;
+}
+
+std::pair<const AffineAcc *, const AffineAcc *> AffineAccess::splitLoadStore(const AffineAcc *Acc) const{
+  unsigned nLoad = Acc->getNLoad(), nStore = Acc->getNStore();
+  if (nLoad > 0U && nStore == 0U) return std::make_pair(Acc, nullptr);
+  if (nLoad == 0U && nStore > 0U) return std::make_pair(nullptr, Acc);
+  AffineAcc *L = new AffineAcc(*Acc); //copy
+  AffineAcc *S = new AffineAcc(*Acc); //copy
+  L->accesses.clear();
+  S->accesses.clear();
+  for (Instruction *I : Acc->getAccesses()){
+    if (isa<LoadInst>(I)) L->accesses.push_back(I);
+    else if(isa<StoreInst>(I)) S->accesses.push_back(I);
+  }
+  return std::make_pair(L, S);
 }
 
 ArrayRef<const AffineAcc *> AffineAccess::getAccesses() const{
@@ -453,17 +501,57 @@ ArrayRef<const AffineAcc *> AffineAccess::getAccesses() const{
   return *ar; 
 }
 
-Value *castToSize(Value *R, Type *ty, Instruction *InsPoint){
-  const DataLayout &DL = InsPoint->getParent()->getModule()->getDataLayout();
-  Type *rty = R->getType();
-  if (rty == ty) return R;
-  if (DL.getTypeSizeInBits(rty) > DL.getTypeSizeInBits(ty)) {
-    return CastInst::CreateTruncOrBitCast(R, ty, "scev.cast", InsPoint);
+bool AffineAccess::accessPatternsMatch(const AffineAcc *A, const AffineAcc *B) const {
+  if (!SCEVEquals(A->data, B->data, SE)) return false;
+  if (A->getDimension() != B->getDimension()) return false;
+  for (unsigned i = 0; i < A->getDimension(); i++){
+    if (!SCEVEquals(A->bounds[i], B->bounds[i], SE)) return false;
+    if (!SCEVEquals(A->strides[i], B->strides[i], SE)) return false;
   }
-  if (DL.getTypeSizeInBits(rty) < DL.getTypeSizeInBits(ty)) {
-    return CastInst::CreateZExtOrBitCast(R, ty, "scev.cast", InsPoint);
+  return true;
+}
+
+bool AffineAccess::shareInsts(const AffineAcc *A, const AffineAcc *B) const{
+  for (Instruction *IA : A->getAccesses()){
+    for (Instruction *IB : B->getAccesses()){
+      if (IA == IB) return true;
+    }
   }
-  return CastInst::CreateBitOrPointerCast(R, ty, "scev.cast", InsPoint);
+  return false;
+}
+
+bool AffineAccess::conflictWWWR(const AffineAcc *A, const AffineAcc *B) const {
+  assert(!shareInsts(A, B) && "these AffineAcc's share instructions ==> one of them should be filtered");
+  unsigned nstA = A->getNStore(), nstB = B->getNStore();
+  if (nstA == 0U && nstB == 0U) return false; //can intersect read only streams
+  //at this point at least one of them is store
+
+  //special case: no conflict, if
+  // - exactly one of them is a store
+  // - they have the same access pattern (AffineAccessAnalysis::accessPatternsMatch)
+  // - all loads dominate all stores in the loop (ie. read before write)
+  if ((nstA && !nstB) || (!nstA && nstB)){
+    if (accessPatternsMatch(A, B)){
+      A = nstA ? A : B; //A is store
+      B = nstA ? B : A; //B is load
+      bool check = true;
+      for (Instruction *IL : B->getAccesses()){
+        for (Instruction *IS : A->getAccesses()){
+          check = check && DT.dominates(IL, IS);
+        }
+      }
+      if (check) return false;
+    }
+  }
+  
+  if (A->getLoop()->contains(B->getLoop()) || B->getLoop()->contains(A->getLoop())) return true;
+  return false;
+}
+
+const SCEV *AffineAccess::wellFormedLoopBTCount(const Loop *L) const{
+  auto P = loopReps.find(L);
+  if (P == loopReps.end()) return nullptr; //loop not well-formed;
+  return P->getSecond();
 }
 
 Value *AffineAccess::expandData(const AffineAcc *aa, Type *ty) const{
@@ -503,6 +591,9 @@ AffineAccess AffineAccessAnalysis::run(Function &F, FunctionAnalysisManager &FAM
   AffineAccess *A = new AffineAccess(SE, DT, LI);
 
   for (const Loop *L : LI.getLoopsInPreorder()){
+    assert(L);
+    assert(!L->isInvalid());
+    if (!A->wellFormedLoopBTCount(L)) continue; //loop not well-formed
     for (BasicBlock *BB : L->getBlocks()){
       if (!isOnAllControlFlowPaths(BB, L, DT)) continue;
       for (Instruction &I : *BB){
@@ -522,7 +613,7 @@ AffineAccess AffineAccessAnalysis::run(Function &F, FunctionAnalysisManager &FAM
     }
   }
 
-  return *A;
+  return std::move(*A);
 }
 
 //================== Affine Acces Analysis Pass for opt =======================================

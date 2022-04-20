@@ -595,7 +595,6 @@ PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
   FPM.addPass(createFunctionToLoopPassAdaptor(
       std::move(LPM1), EnableMSSALoopDependency, /*UseBlockFrequencyInfo=*/true,
       DebugLogging));
-  FPM.addPass(SSRInferencePass());
   FPM.addPass(SimplifyCFGPass());
   FPM.addPass(InstCombinePass());
 

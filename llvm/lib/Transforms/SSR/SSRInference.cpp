@@ -24,7 +24,10 @@
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Analysis/AffineAccessAnalysis.h"
 #include "llvm/Transforms/Utils/ScalarEvolutionExpander.h"
+#include "llvm/Transforms/Utils/FixIrreducible.h"
+#include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar/LoopStrengthReduce.h"
+#include "llvm/Transforms/Scalar/SimplifyCFG.h"
 #include "llvm/Transforms/SSR/SSRGeneration.h"
 
 #include "llvm/Support/CommandLine.h"
@@ -46,12 +49,17 @@
 using namespace llvm;
 
 PreservedAnalyses SSRInferencePass::run(Function &F, FunctionAnalysisManager &FAM){
-  errs()<<"SSR Inference Pass on function: "<<F.getNameOrAsOperand()<<"\n";
+  errs()<<"SSR Inference Pass on function: "<<F.getNameOrAsOperand()<<"====================================================\n";
   FunctionPassManager FPM(true);
-  FPM.addPass(LoopSimplifyPass()); //canonicalize loops
-  FPM.addPass(LCSSAPass());        //put loops into LCSSA-form
-  FPM.addPass(createFunctionToLoopPassAdaptor(LoopStrengthReducePass()));
-  FPM.addPass(SSRGenerationPass());//runs AffineAccess analysis and generates SSR intrinsics
-  FPM.addPass(ADCEPass());         //remove potential dead instructions that result from SSR replacement (dead code elim)
-  return FPM.run(F, FAM);
+  FPM.addPass(FixIrreduciblePass());//turn some non-loops into loops
+  FPM.addPass(LoopSimplifyPass());  //canonicalize loops
+  FPM.addPass(LCSSAPass());         //put loops into LCSSA-form
+  FPM.addPass(createFunctionToLoopPassAdaptor(LoopStrengthReducePass())); //loop strength reduction
+  FPM.addPass(SSRGenerationPass()); //runs AffineAccess analysis and generates SSR intrinsics
+  FPM.addPass(SimplifyCFGPass());   //simplifies CFG again
+  FPM.addPass(InstCombinePass());   //removes phi nodes from LCSSA
+  FPM.addPass(ADCEPass());          //remove potential dead instructions that result from SSR replacement
+  auto pa = FPM.run(F, FAM);
+  errs()<<"SSR Inference Pass on function: "<<F.getNameOrAsOperand()<<" done! =============================================\n";
+  return pa;
 }

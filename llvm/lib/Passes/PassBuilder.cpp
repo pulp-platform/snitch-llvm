@@ -627,6 +627,8 @@ PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
   FPM.addPass(InstCombinePass());
   invokePeepholeEPCallbacks(FPM, Level);
 
+  FPM.addPass(SSRInferencePass());
+
   if (PTO.Coroutines)
     FPM.addPass(CoroElidePass());
 
@@ -800,6 +802,8 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
   FPM.addPass(InstCombinePass());
   invokePeepholeEPCallbacks(FPM, Level);
 
+  FPM.addPass(SSRInferencePass());
+  
   // Re-consider control flow based optimizations after redundancy elimination,
   // redo DCE, etc.
   FPM.addPass(JumpThreadingPass());

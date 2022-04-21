@@ -263,8 +263,10 @@ SmallVector<const Loop *, 3U> &getContainingLoops(ArrayRef<const Loop *> loopsPr
 }
 
 void findStridesRec(const SCEV *Addr, ArrayRef<const Loop *> loops, SmallVector<const SCEV *, 2U> &factors, ScalarEvolution &SE, SmallVector<const SCEV *, 4U> &res){
+  if (!res.empty()) { errs()<<"stride: "; res.back()->dump(); }
   errs()<<"finding strides in "; Addr->dump();
   if (loops.empty()) return;
+  errs()<<"loop header: "<<loops[0]->getHeader()->getNameOrAsOperand()<<"\n";
   switch (Addr->getSCEVType())
   {
   case SCEVTypes::scAddRecExpr:
@@ -283,7 +285,7 @@ void findStridesRec(const SCEV *Addr, ArrayRef<const Loop *> loops, SmallVector<
       for (const Loop *L : loops) occurs = occurs || AddRec->getLoop() == L; //loops needs to occur further up, o/w invalid
       if (!occurs) return;
       res.push_back(SE.getConstant(APInt(64U, 0U)));
-      findStridesRec(AddRec->getStart(), loops, factors, SE, res);
+      findStridesRec(AddRec, ArrayRef<const Loop *>(loops.begin()+1, loops.end()), factors, SE, res);
     }
     return;
   }
@@ -326,8 +328,6 @@ SmallVector<const SCEV *, 4U> &findStrides(const SCEV *Addr, ArrayRef<const Loop
   SmallVector<const SCEV *, 4U> &strides = *(new SmallVector<const SCEV *, 4U>());
   SmallVector<const SCEV *, 2U> factors;
   findStridesRec(Addr, loops, factors, SE, strides);
-  errs()<<"found strides: \n";
-  for (const SCEV *S : strides) S->dump();
   return strides;
 }
 
@@ -370,7 +370,6 @@ AffineAccess::AffineAccess(ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI)
 ///  (5) forall st : aa.strides. SE.isLoopInvariant(st, L) && isSafeToExpandAt(st, LPreheader->getTerminator(), SE)
 ///  (6) isSafeToExpandAt(Bound / Stride, LPreheader->getTerminator(), SE)
 AffineAcc *AffineAccess::promoteAccess(const AffineAcc &aa, const Loop *L, const SCEV *Stride){
-  aa.dump();
   assert(!aa.L || (aa.L && !aa.L->isInvalid()));
   assert((!aa.L) || (aa.L && aa.L->getParentLoop() == L && "can only promote to parent loop")); //(1)
   assert(this->loopReps.find(L) != this->loopReps.end() && "L is well formed"); //(1)
@@ -392,7 +391,7 @@ AffineAcc *AffineAccess::promoteAccess(const AffineAcc &aa, const Loop *L, const
   const SCEV *Bound = this->loopReps.find(L)->getSecond();
   Instruction *InsPoint = L->getLoopPreheader()->getTerminator();
 
-  if (!SE.hasComputableLoopEvolution(aa.data, L)) return nullptr; //(3.1)
+  if (!SE.hasComputableLoopEvolution(aa.data, L) && !SE.isLoopInvariant(aa.data, L)) return nullptr; //(3.1)
   const SCEV *Data = SE.SplitIntoInitAndPostInc(L, aa.data).first;
   if (!isSafeToExpandAt(Data, InsPoint, SE)) return nullptr;      //(3.2)
 
@@ -464,9 +463,11 @@ void AffineAccess::addAllAccesses(Instruction *Addr, const Loop *L){
 
   for (auto L = cloops.begin(); L != cloops.end(); ++L){
     if (loopReps.find(*L) == loopReps.end()) break; //this loop is malformed ==> this and all more outer loops cannot be used
-    if (Stride == strides.end()) break; //ran out of strides  
+    const SCEV *Str;
+    if (Stride != strides.end()) Str = *(Stride++);
+    else Str = SE.getConstant(IntegerType::getInt32Ty((*L)->getHeader()->getContext()), 0U); //if we run out of strides we can still promote with stride=0
 
-    A = promoteAccess(*A, *L, *Stride);
+    A = promoteAccess(*A, *L, Str);
     errs()<<"\n";
     if (A){
       errs()<<"found AffineAcc:\n"; A->dump();
@@ -474,8 +475,6 @@ void AffineAccess::addAllAccesses(Instruction *Addr, const Loop *L){
     }else{
       break; //did not manage to promote ==> cannot promote for loops further out
     }
-
-    ++Stride;
   }
   errs()<<"we now have "<<this->accesses.size()<<" affine accesses\n";
   return;
@@ -523,7 +522,7 @@ bool AffineAccess::shareInsts(const AffineAcc *A, const AffineAcc *B) const{
 bool AffineAccess::conflictWWWR(const AffineAcc *A, const AffineAcc *B) const {
   assert(!shareInsts(A, B) && "these AffineAcc's share instructions ==> one of them should be filtered");
   unsigned nstA = A->getNStore(), nstB = B->getNStore();
-  if (nstA == 0U && nstB == 0U) return false; //can intersect read only streams
+  if (nstA == 0U && nstB == 0U) return false; //can intersect read streams
   //at this point at least one of them is store
 
   //special case: no conflict, if
@@ -548,27 +547,31 @@ bool AffineAccess::conflictWWWR(const AffineAcc *A, const AffineAcc *B) const {
   return false;
 }
 
-const SCEV *AffineAccess::wellFormedLoopBTCount(const Loop *L) const{
+bool AffineAccess::shareLoops(const AffineAcc *A, const AffineAcc *B) const {
+  return A->getLoop() == B->getLoop() || A->getLoop()->contains(B->getLoop()) || B->getLoop()->contains(A->getLoop());
+}
+
+const SCEV *AffineAccess::wellFormedLoopBTCount(const Loop *L) const {
   auto P = loopReps.find(L);
   if (P == loopReps.end()) return nullptr; //loop not well-formed;
   return P->getSecond();
 }
 
-Value *AffineAccess::expandData(const AffineAcc *aa, Type *ty) const{
+Value *AffineAccess::expandData(const AffineAcc *aa, Type *ty) const {
   Instruction *InsPoint = aa->L->getLoopPreheader()->getTerminator();
   SCEVExpander ex(SE, aa->L->getHeader()->getModule()->getDataLayout(), "data");
   ex.setInsertPoint(InsPoint);
   return castToSize(ex.expandCodeFor(aa->data), ty, InsPoint);
 }
 
-Value *AffineAccess::expandBound(const AffineAcc *aa, unsigned i, Type *ty) const{
+Value *AffineAccess::expandBound(const AffineAcc *aa, unsigned i, Type *ty) const {
   Instruction *InsPoint = aa->L->getLoopPreheader()->getTerminator();
   SCEVExpander ex(SE, aa->L->getHeader()->getModule()->getDataLayout(), "bound");
   ex.setInsertPoint(InsPoint);
   return castToSize(ex.expandCodeFor(aa->bounds[i]), ty, InsPoint);
 }
 
-Value *AffineAccess::expandStride(const AffineAcc *aa, unsigned i, Type *ty) const{
+Value *AffineAccess::expandStride(const AffineAcc *aa, unsigned i, Type *ty) const {
   Instruction *InsPoint = aa->L->getLoopPreheader()->getTerminator();
   SCEVExpander ex(SE, aa->L->getHeader()->getModule()->getDataLayout(), "stride");
   ex.setInsertPoint(InsPoint);
@@ -607,7 +610,6 @@ AffineAccess AffineAccessAnalysis::run(Function &F, FunctionAnalysisManager &FAM
         }
         Instruction *AddrIns;
         if (!(AddrIns = dyn_cast<Instruction>(Addr))) continue; //if Addr is not instruction ==> constant, or sth else (==> leave for other passes to opt)
-        
         A->addAllAccesses(AddrIns, L);
       }
     }

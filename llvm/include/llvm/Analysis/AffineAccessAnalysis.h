@@ -20,8 +20,8 @@ private:
   AffineAcc(Instruction *Addr, ArrayRef<Instruction *> accesses, const SCEV *data);
   
   const SCEV *data;
-  SmallVector<const SCEV *, 3U> bounds; //from outer- to innermost loop
-  SmallVector<const SCEV *, 3U> strides; //from outer- to innermost loop
+  SmallVector<const SCEV *, 3U> bounds; //from inner- to outermost loop
+  SmallVector<const SCEV *, 3U> strides; //from inner- to outermost loop
   Instruction *Addr;
   SmallVector<Instruction *, 2U> accesses; //load/store instructions that use address (guaranteed to be in same loop)
   const Loop *L; //outermost loop
@@ -56,6 +56,7 @@ public:
   bool accessPatternsMatch(const AffineAcc *A, const AffineAcc *B) const;
   bool shareInsts(const AffineAcc *A, const AffineAcc *B) const;
   bool conflictWWWR(const AffineAcc *A, const AffineAcc *B) const;
+  bool shareLoops(const AffineAcc *A, const AffineAcc *B) const;
   const SCEV *wellFormedLoopBTCount(const Loop *L) const; //returns bt count if loop is well-formed
   Value *expandData(const AffineAcc *aa, Type *ty = (Type *)nullptr) const;
   Value *expandBound(const AffineAcc *aa, unsigned i, Type *ty = (Type *)nullptr) const;

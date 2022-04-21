@@ -54,7 +54,7 @@ PreservedAnalyses SSRInferencePass::run(Function &F, FunctionAnalysisManager &FA
   FPM.addPass(FixIrreduciblePass());//turn some non-loops into loops
   FPM.addPass(LoopSimplifyPass());  //canonicalize loops
   FPM.addPass(LCSSAPass());         //put loops into LCSSA-form
-  FPM.addPass(createFunctionToLoopPassAdaptor(LoopStrengthReducePass())); //loop strength reduction
+  //FPM.addPass(createFunctionToLoopPassAdaptor(LoopStrengthReducePass())); //loop strength reduction
   FPM.addPass(SSRGenerationPass()); //runs AffineAccess analysis and generates SSR intrinsics
   FPM.addPass(SimplifyCFGPass());   //simplifies CFG again
   FPM.addPass(InstCombinePass());   //removes phi nodes from LCSSA

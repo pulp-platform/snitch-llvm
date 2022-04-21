@@ -95,20 +95,21 @@ void generateSSR(AffineAccess &AA, const AffineAcc *aa, unsigned dmid, bool isSt
   unsigned n_reps = 0U;
   if (isStore){
     Function *SSRPush = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_push);
+    std::vector<Instruction *> del;
     for (Instruction *I : aa->getAccesses()){
       std::array<Value *, 2> pusharg = {dm, cast<StoreInst>(I)->getValueOperand()};
       builder.SetInsertPoint(I);
       auto *C = builder.CreateCall(SSRPush->getFunctionType(), SSRPush, ArrayRef<Value *>(pusharg));
       C->dump();
       I->dump();
-      I->removeFromParent();
+      del.push_back(I);
       n_reps++;
     }
+    for (Instruction *I : del) I->removeFromParent();
   }else{
     Function *SSRPop = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_pop);
     std::array<Value *, 1> poparg = {dm};
     for (Instruction *I : aa->getAccesses()){
-      for (auto U = I->user_begin(); U != I->user_end(); ++U) n_reps++; //reps for load is its nr of uses
       builder.SetInsertPoint(I);
       Instruction *V = builder.CreateCall(SSRPop->getFunctionType(), SSRPop, ArrayRef<Value *>(poparg), "ssr.pop");
       V->dump();
@@ -167,10 +168,10 @@ struct ConflictGraph{
       for (auto B = accesses.begin(); B != A; B++){
         assert(conflicts.find(*B) != conflicts.end());
         assert(mutexs.find(*B) != mutexs.end());
-        if (AF.shareInsts(*A, *B)){
+        if (AF.shareInsts(*A, *B) || AF.conflictWWWR(*A, *B)){
           mutexs.find(*A)->second.push_back(*B);
           mutexs.find(*B)->second.push_back(*A);
-        }else if (AF.conflictWWWR(*A, *B)){
+        }else if (AF.shareLoops(*A, *B)){
           conflicts.find(*A)->second.push_back(*B);
           conflicts.find(*B)->second.push_back(*A);
         }
@@ -201,7 +202,7 @@ struct ConflictGraph{
       for (const auto &M : conflicts.find(A)->second){
         auto mc = color.find(M);
         if (mc != color.end() && mc->second.hasValue()){ //neighbour has some color mc ==> A cannot get mc
-          cs[mc->second.getValue()] = true;
+          cs[mc->second.getValue()] = 1u;
         }
       }
       int c = cs.find_first_unset();
@@ -229,7 +230,7 @@ void addChangedLoop(const Loop *NewL, SmallPtrSet<const Loop *, 4U> &loops){
     //check for all loops in loops whether NewL contains them
     std::vector<const Loop *> dels; //cannot directly delete loops in foreach loops ==> store here first
     for (const Loop *L : loops){
-      if (NewL->contains(L->getHeader())) dels.push_back(L);
+      if (NewL->contains(L)) dels.push_back(L);
     }
     for (const Loop *L : dels) loops.erase(L);
     loops.insert(NewL);

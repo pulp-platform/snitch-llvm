@@ -180,7 +180,6 @@ extern "C" bool GOMP_OFFLOAD_fini_device(int n __attribute__((unused))) {
 
   hero_dev_rab_free(hd, 0);
   hero_dev_free_v_addr(hd);
-  sleep(1);
   hero_dev_munmap(hd);
 
   return 1;

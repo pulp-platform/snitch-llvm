@@ -69,11 +69,10 @@ endif()
 if(${LIBOMPTARGET_HERO_DEV_TYPE} STREQUAL "PULP")
   add_definitions(-DLIBOMPTARGET_HERO_DEV_TYPE_PULP)
   if(EXISTS $ENV{HERO_LIBPULP_DIR}/lib/libpulp.so)
-    target_link_libraries(omptarget.rtl.pulp
+    target_link_libraries(omptarget.rtl.herodev
         $ENV{HERO_LIBPULP_DIR}/lib/libpulp.so)
   else()
-    target_link_libraries(omptarget.rtl.pulp
-        libpulp.so)
+    target_link_libraries(omptarget.rtl.herodev libpulp.so)
   endif()
 endif()
 
@@ -83,8 +82,7 @@ if(${LIBOMPTARGET_HERO_DEV_TYPE} STREQUAL "Snitch")
     target_link_libraries(omptarget.rtl.herodev
         $ENV{HERO_LIBSNITCH_DIR}/lib/libsnitch.so)
   else()
-    target_link_libraries(omptarget.rtl.herodev
-        libsnitch.so)
+    target_link_libraries(omptarget.rtl.herodev libsnitch.so)
   endif()
 endif()
 

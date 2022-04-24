@@ -121,7 +121,11 @@ bool checkLoop(const Loop *L, DominatorTree &DT, ScalarEvolution &SE, Instructio
 }
 
 Optional<std::pair<const SCEV *, const SCEV *>> toSameSize(const SCEV *LHS, const SCEV *RHS, ScalarEvolution &SE, bool unsafe = false){
+  assert(LHS && RHS);
   using PT = std::pair<const SCEV *, const SCEV *>;
+  if (LHS->getType() == RHS->getType()) return Optional<PT>(std::make_pair(LHS, RHS)); //trivially the same size
+  if (!LHS->getType()->isSized() || !RHS->getType()->isSized()) return None;
+  //TODO: use datalayout for size instead
   if (LHS->getType()->getIntegerBitWidth() > RHS->getType()->getIntegerBitWidth()) {
     if (auto LHSx = dyn_cast<SCEVConstant>(LHS)){
       if (LHSx->getAPInt().getActiveBits() <= RHS->getType()->getIntegerBitWidth()) {}
@@ -150,14 +154,11 @@ bool SCEVEquals(const SCEV *LHS, const SCEV *RHS, ScalarEvolution &SE){
   if (!p.hasValue()) return false;
   LHS = p.getValue().first;
   RHS = p.getValue().second;
-  errs()<<"SCEVEquals:\n\t"; LHS->dump();
-  errs()<<"\t"; RHS->dump();
   if (LHS == RHS) return true; //trivially the same if this holds (bc const Ptr)
   else{
     const SCEVPredicate *Peq = SE.getEqualPredicate(LHS, RHS);
     if (Peq->isAlwaysTrue()) return true; //if we arrive at setup addr scev, we are done
   }
-  errs()<<"false\n";
   return false;
 }
 
@@ -531,11 +532,11 @@ bool AffineAccess::conflictWWWR(const AffineAcc *A, const AffineAcc *B) const {
   // - all loads dominate all stores in the loop (ie. read before write)
   if ((nstA && !nstB) || (!nstA && nstB)){
     if (accessPatternsMatch(A, B)){
-      A = nstA ? A : B; //A is store
-      B = nstA ? B : A; //B is load
+      const AffineAcc *S = nstA ? A : B; //store
+      const AffineAcc *L = nstA ? B : A; //load
       bool check = true;
-      for (Instruction *IL : B->getAccesses()){
-        for (Instruction *IS : A->getAccesses()){
+      for (Instruction *IL : L->getAccesses()){
+        for (Instruction *IS : S->getAccesses()){
           check = check && DT.dominates(IL, IS);
         }
       }

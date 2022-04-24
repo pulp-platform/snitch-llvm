@@ -22,12 +22,15 @@
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Analysis/AffineAccessAnalysis.h"
+#include "llvm/Analysis/MemorySSA.h"
+#include "llvm/Analysis/MemorySSAUpdater.h"
 #include "llvm/Transforms/Utils/ScalarEvolutionExpander.h"
 
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Support/FormatVariadic.h"
 
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicInst.h"
@@ -49,11 +52,50 @@
 #define SSR_MAX_DIM 4U
 
 //current state of hw: only allow doubles
-#define CHECK_TYPE(I) (I->getType() == Type::getDoubleTy(I->getParent()->getContext()))
+#define CHECK_TYPE(T, I) (T == Type::getDoubleTy(I->getParent()->getContext()))
 
 using namespace llvm;
 
 namespace{
+
+BasicBlock *cloneRegion(Instruction *BeginWith, Instruction *EndBefore, DomTreeUpdater *DTU, LoopInfo *LI, MemorySSAUpdater *MSSAU){
+  BasicBlock *Begin = BeginWith->getParent();
+  BasicBlock *Head = splitBlockBefore(Begin, BeginWith, DTU, LI, MSSAU, "split.head");
+  BasicBlock *End = splitBlockBefore(EndBefore->getParent(), EndBefore, DTU, LI, MSSAU, "fuse.again");
+  std::deque<BasicBlock *> q; //bfs queue
+  q.push_back(Begin);
+  DenseSet<BasicBlock *> vis; //bfs visited set
+  DenseMap<Value *, Value *> clones; //value in orig -> value in clone
+  std::vector<std::pair<unsigned, Instruction *>> operandsCleanup; //store operands that reference instructions that are not cloned yet
+  
+  while (!q.empty()){
+    BasicBlock *C = q.front(); q.pop_front();
+    if (C == End || vis.find(C) != vis.end()) continue;
+    BasicBlock *Cc = BasicBlock::Create(C->getContext(), Twine(C->getName()).concat(".clone"), C->getParent(), C);
+    IRBuilder<> builder(Cc);
+    for (Instruction &I : *C){
+      Instruction *Ic = I.clone();
+      assert(Ic->use_empty() && "no uses of clone");
+      builder.Insert(Ic, Twine(I.getName()).concat(".clone"));
+      for (unsigned i = 0; i < Ic->getNumOperands(); i++){
+        auto A = clones.find(Ic->getOperand(i));
+        if (A != clones.end()){
+          Ic->setOperand(i, A->second);
+          bool userUpdate = false;
+          for (User *U : A->second->users()) userUpdate |= U == Ic;
+          assert(userUpdate && "user is updated on setOperand");
+        }else{
+          operandsCleanup.push_back(std::make_pair(i, Ic));
+        }
+      }
+      clones.insert(std::make_pair(&I, Ic));
+    }
+
+  }
+  //TODO: change terminator of Head to be CondBr with TakeOrig as cond
+  //TODO: operandCleanup
+  return Head;
+}
 
 ///generates SSR setup calls
 void generateSSR(AffineAccess &AA, const AffineAcc *aa, unsigned dmid, bool isStore){
@@ -76,15 +118,22 @@ void generateSSR(AffineAccess &AA, const AffineAcc *aa, unsigned dmid, bool isSt
   std::array<Value *, 3> args = {dm, dim, data};
   builder.CreateCall(SSRSetup->getFunctionType(), SSRSetup, ArrayRef<Value *>(args))->dump();
 
+  std::vector<Value *> bds, sts;
+  for (unsigned d = 0U; d < aa->getDimension(); d++){
+    bds.push_back(AA.expandBound(aa, d, i32)); //bound - 1, ty=i32 
+    sts.push_back(AA.expandStride(aa, d, i32)); //relative stride, ty=i32
+  }
+
   Intrinsic::RISCVIntrinsics functions[] = {
     Intrinsic::riscv_ssr_setup_bound_stride_1d,
     Intrinsic::riscv_ssr_setup_bound_stride_2d,
     Intrinsic::riscv_ssr_setup_bound_stride_3d,
     Intrinsic::riscv_ssr_setup_bound_stride_4d
   };
-  for (unsigned d = 0U; d < aa->getDimension(); d++){
-    Value *bound = AA.expandBound(aa, d, i32); //bound - 1, ty=i32 
-    Value *stride = AA.expandStride(aa, d, i32); //relative stride, ty=i32
+
+   for (unsigned d = 0U; d < aa->getDimension(); d++){
+    Value *bound = bds[d];
+    Value *stride = sts[d];
 
     Function *SSRBoundStrideSetup = Intrinsic::getDeclaration(mod, functions[d]);
     std::array<Value *, 3> bsargs = {dm, bound, stride};
@@ -95,17 +144,15 @@ void generateSSR(AffineAccess &AA, const AffineAcc *aa, unsigned dmid, bool isSt
   unsigned n_reps = 0U;
   if (isStore){
     Function *SSRPush = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_push);
-    std::vector<Instruction *> del;
     for (Instruction *I : aa->getAccesses()){
       std::array<Value *, 2> pusharg = {dm, cast<StoreInst>(I)->getValueOperand()};
       builder.SetInsertPoint(I);
       auto *C = builder.CreateCall(SSRPush->getFunctionType(), SSRPush, ArrayRef<Value *>(pusharg));
       C->dump();
       I->dump();
-      del.push_back(I);
+      I->eraseFromParent();
       n_reps++;
     }
-    for (Instruction *I : del) I->removeFromParent();
   }else{
     Function *SSRPop = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_pop);
     std::array<Value *, 1> poparg = {dm};
@@ -148,10 +195,13 @@ bool isValid(const AffineAcc *A){
   unsigned n_load = 0U;
   bool valid = true;
   for (auto *I : A->getAccesses()){
-    valid = valid && CHECK_TYPE(I);
-    if (dyn_cast<LoadInst>(I)) n_load++;
-    else if(dyn_cast<StoreInst>(I)) n_store++;
-    else assert(false && "non load/store instruction in AffineAcc::accesses ?");
+    if (dyn_cast<LoadInst>(I)) {
+      n_load++;
+      valid = valid && CHECK_TYPE(I->getType(), I);
+    }else if(auto St = dyn_cast<StoreInst>(I)) {
+      n_store++;
+      valid = valid && CHECK_TYPE(St->getValueOperand()->getType(), I);
+    }else assert(false && "non load/store instruction in AffineAcc::accesses ?");
     if(!valid) break;
   }
   return valid && ((n_store > 0U && n_load == 0U) || (n_store == 0U && n_load > 0U)); 
@@ -162,12 +212,11 @@ struct ConflictGraph{
 
   ///accs assumed to be valid
   ConflictGraph(const AffineAccess &AF, ArrayRef<NodeT> accesses)  : AF(AF){ 
+    errs()<<"conflict graph with "<<accesses.size()<<" nodes\n";
     for (auto A = accesses.begin(); A != accesses.end(); A++){
       conflicts.insert(std::make_pair(*A, std::vector<NodeT>()));
       mutexs.insert(std::make_pair(*A, std::vector<NodeT>()));
       for (auto B = accesses.begin(); B != A; B++){
-        assert(conflicts.find(*B) != conflicts.end());
-        assert(mutexs.find(*B) != mutexs.end());
         if (AF.shareInsts(*A, *B) || AF.conflictWWWR(*A, *B)){
           mutexs.find(*A)->second.push_back(*B);
           mutexs.find(*B)->second.push_back(*A);
@@ -242,6 +291,11 @@ void addChangedLoop(const Loop *NewL, SmallPtrSet<const Loop *, 4U> &loops){
 PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &FAM){
   
   AffineAccess &AF = FAM.getResult<AffineAccessAnalysis>(F);
+  LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
+  DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
+  DomTreeUpdater DTU(&DT, DomTreeUpdater::UpdateStrategy::Eager);
+  auto &MA = FAM.getResult<MemorySSAAnalysis>(F);
+  MemorySSAUpdater MSSAU(&MA.getMSSA());
 
   errs()<<"SSR Generation Pass on function: "<<F.getNameOrAsOperand()<<"\n";
 
@@ -251,6 +305,7 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
 
   std::vector<const AffineAcc *> goodAccs;
   for (const AffineAcc *A : accs){
+    A->dump();
     auto p = AF.splitLoadStore(A);
     if (p.first && isValid(p.first)) goodAccs.push_back(p.first);
     if (p.second && isValid(p.second)) goodAccs.push_back(p.second);
@@ -262,16 +317,24 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
 
   for (const auto &C : clr){
     if (C.second.hasValue()){ //not None
+      cloneRegion(C.first->getLoop()->getLoopPreheader()->getTerminator(), C.first->getLoop()->getExitBlock()->getTerminator(), &DTU, &LI, &MSSAU);
       generateSSR(AF, C.first, C.second.getValue(), C.first->getNStore() > 0U);
       errs()<<"generated ssr insts \n";
-
+      
       addChangedLoop(C.first->getLoop(), changedLoops);
     }
   }
 
   for (const Loop *L : changedLoops) generateSSREnDis(L);
 
-  return changedLoops.empty() ? PreservedAnalyses::all() : PreservedAnalyses::none();
+  for (BasicBlock &BB : F) BB.dump();
+
+  if (changedLoops.empty()){
+    return PreservedAnalyses::all();
+  }else{
+    F.addFnAttr(Attribute::AttrKind::NoInline); //mark function as no-inline, because there can be intersecting streams if function is inlined!
+    return PreservedAnalyses::none();
+  }
 }
 
 
@@ -305,4 +368,5 @@ std::vector<const AffineAcc *> allaccesses;
     changedLoops.insert(A->getLoop());
     dmid++;
   }
+
   */

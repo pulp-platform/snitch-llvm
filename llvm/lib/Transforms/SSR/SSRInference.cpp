@@ -48,6 +48,8 @@
 
 using namespace llvm;
 
+static cl::opt<bool> InferSSR("ssr-inference", cl::init(false), cl::Hidden);
+
 PreservedAnalyses SSRInferencePass::run(Function &F, FunctionAnalysisManager &FAM){
   errs()<<"SSR Inference Pass on function: "<<F.getNameOrAsOperand()<<"====================================================\n";
   FunctionPassManager FPM(true);

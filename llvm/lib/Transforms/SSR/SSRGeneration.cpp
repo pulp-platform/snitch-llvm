@@ -301,6 +301,11 @@ void generateSSREnDis(const Loop *L){
   Module *mod = L->getHeader()->getModule();
   Function *SSREnable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_enable);
   builder.CreateCall(SSREnable->getFunctionType(), SSREnable, ArrayRef<Value *>());
+
+  //insert frep pragma
+  Function *FrepPragma = Intrinsic::getDeclaration(mod, Intrinsic::riscv_frep_infer);
+  builder.CreateCall(FrepPragma->getFunctionType(), FrepPragma, ArrayRef<Value *>());
+
   builder.SetInsertPoint(L->getExitBlock()->getTerminator());
   Function *SSRDisable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_disable);
   builder.CreateCall(SSRDisable->getFunctionType(), SSRDisable, ArrayRef<Value *>());

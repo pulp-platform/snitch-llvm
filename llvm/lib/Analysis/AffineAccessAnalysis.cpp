@@ -558,25 +558,28 @@ const SCEV *AffineAccess::wellFormedLoopBTCount(const Loop *L) const {
   return P->getSecond();
 }
 
-Value *AffineAccess::expandData(const AffineAcc *aa, Type *ty) const {
-  Instruction *InsPoint = aa->L->getLoopPreheader()->getTerminator();
+Value *AffineAccess::expandData(const AffineAcc *aa, Type *ty, Instruction *InsertBefore) const {
+  InsertBefore = InsertBefore ? InsertBefore : aa->L->getLoopPreheader()->getTerminator();
+  assert(isSafeToExpandAt(aa->data, InsertBefore, SE) && "data not expanable here (note: only preheader guaranteed)");
   SCEVExpander ex(SE, aa->L->getHeader()->getModule()->getDataLayout(), "data");
-  ex.setInsertPoint(InsPoint);
-  return castToSize(ex.expandCodeFor(aa->data), ty, InsPoint);
+  ex.setInsertPoint(InsertBefore);
+  return castToSize(ex.expandCodeFor(aa->data), ty, InsertBefore);
 }
 
-Value *AffineAccess::expandBound(const AffineAcc *aa, unsigned i, Type *ty) const {
-  Instruction *InsPoint = aa->L->getLoopPreheader()->getTerminator();
+Value *AffineAccess::expandBound(const AffineAcc *aa, unsigned i, Type *ty, Instruction *InsertBefore) const {
+  InsertBefore = InsertBefore ? InsertBefore : aa->L->getLoopPreheader()->getTerminator();
+  assert(isSafeToExpandAt(aa->bounds[i], InsertBefore, SE) && "bound not expanable here (note: only preheader guaranteed)");
   SCEVExpander ex(SE, aa->L->getHeader()->getModule()->getDataLayout(), "bound");
-  ex.setInsertPoint(InsPoint);
-  return castToSize(ex.expandCodeFor(aa->bounds[i]), ty, InsPoint);
+  ex.setInsertPoint(InsertBefore);
+  return castToSize(ex.expandCodeFor(aa->bounds[i]), ty, InsertBefore);
 }
 
-Value *AffineAccess::expandStride(const AffineAcc *aa, unsigned i, Type *ty) const {
-  Instruction *InsPoint = aa->L->getLoopPreheader()->getTerminator();
+Value *AffineAccess::expandStride(const AffineAcc *aa, unsigned i, Type *ty, Instruction *InsertBefore) const {
+  InsertBefore = InsertBefore ? InsertBefore : aa->L->getLoopPreheader()->getTerminator();
+  assert(isSafeToExpandAt(aa->strides[i], InsertBefore, SE) && "bound not expanable here (note: only preheader guaranteed)");
   SCEVExpander ex(SE, aa->L->getHeader()->getModule()->getDataLayout(), "stride");
-  ex.setInsertPoint(InsPoint);
-  return castToSize(ex.expandCodeFor(aa->strides[i]), ty, InsPoint);
+  ex.setInsertPoint(InsertBefore);
+  return castToSize(ex.expandCodeFor(aa->strides[i]), ty, InsertBefore);
 }
 
 //================== Affine Acces Analysis ==================================================

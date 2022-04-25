@@ -58,9 +58,9 @@ public:
   bool conflictWWWR(const AffineAcc *A, const AffineAcc *B) const;
   bool shareLoops(const AffineAcc *A, const AffineAcc *B) const;
   const SCEV *wellFormedLoopBTCount(const Loop *L) const; //returns bt count if loop is well-formed
-  Value *expandData(const AffineAcc *aa, Type *ty = (Type *)nullptr) const;
-  Value *expandBound(const AffineAcc *aa, unsigned i, Type *ty = (Type *)nullptr) const;
-  Value *expandStride(const AffineAcc *aa, unsigned i, Type *ty = (Type *)nullptr) const;
+  Value *expandData(const AffineAcc *aa, Type *ty = (Type *)nullptr, Instruction *InsertBefore = (Instruction *)nullptr) const;
+  Value *expandBound(const AffineAcc *aa, unsigned i, Type *ty = (Type *)nullptr, Instruction *InsertBefore = (Instruction *)nullptr) const;
+  Value *expandStride(const AffineAcc *aa, unsigned i, Type *ty = (Type *)nullptr, Instruction *InsertBefore = (Instruction *)nullptr) const;
 };
 
 class AffineAccessAnalysis : public AnalysisInfoMixin<AffineAccessAnalysis> {

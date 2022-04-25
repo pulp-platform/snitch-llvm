@@ -50,128 +50,249 @@
 
 #define NUM_SSR 3U
 #define SSR_MAX_DIM 4U
-
+//both are inclusive! 
+#define SSR_SCRATCHPAD_BEGIN 1000U
+#define SSR_SCRATCHPAD_END 18000U
 //current state of hw: only allow doubles
 #define CHECK_TYPE(T, I) (T == Type::getDoubleTy(I->getParent()->getContext()))
 
 using namespace llvm;
 
+///Wraps an AffineAcc *Access, expands all its SCEVs in constructor
+struct GenSSR{
+private:
+  Value *Base;
+  ConstantInt *DMID;
+  SmallVector<std::pair<Value *, Value *>, SSR_MAX_DIM> offsets; 
+  //Instruction *AvailableFrom;
+  
+public:
+  ///AffineAcc which is wrapped by this GenSSR
+  const AffineAcc *Access;
+
+  ///expand data, bound, and stride
+  GenSSR(const AffineAcc *A, unsigned dmid, Instruction *ExpandBefore, AffineAccess &AF) : Access(A) {
+    auto &ctxt = ExpandBefore->getParent()->getContext();
+    Type *i32 = IntegerType::getInt32Ty(ctxt);
+    DMID = cast<ConstantInt>(ConstantInt::get(i32, dmid));
+    Base = AF.expandData(A, Type::getInt8PtrTy(ctxt), ExpandBefore);
+    for (unsigned i = 0U; i < A->getDimension(); i++){
+      offsets.push_back(std::make_pair(AF.expandBound(A, i, i32, ExpandBefore), AF.expandStride(A, i, i32, ExpandBefore)));
+    }
+  }
+
+  ///generate comparisons 
+  Value *GenerateSSRGuard(Instruction *ExpandBefore){
+    auto &ctxt = ExpandBefore->getParent()->getContext();
+    Type *i64 = IntegerType::getInt64Ty(ctxt);
+    IRBuilder<> builder(ExpandBefore);
+    std::vector<Value *> checks;
+    for (unsigned i = 0U; i < Access->getDimension(); i++){
+      /// loop has to be taken at least once (>= 1) ==> bound >= 0
+      /// SGE also works for unsigned int: if the bound is unsigned and larger than 2^30 it will be too large for the scratchpad anyway
+      checks.push_back(builder.CreateICmpSGE(getBound(i), ConstantInt::get(Type::getInt32Ty(ExpandBefore->getContext()), 0U)));
+    }
+    errs()<<"before ptr to i64 \n";
+    errs()<<CastInst::getCastOpcode(getBase(), false, i64, false);
+    Value *BaseInt = builder.CreatePtrToInt(getBase(), i64, "base.to.int");
+    errs()<<"after ptr to i64 \n";
+    checks.push_back(builder.CreateICmpUGE(BaseInt, ConstantInt::get(i64, SSR_SCRATCHPAD_BEGIN), "scratchpad.begin.check"));
+    Value *Range = builder.CreateNUWMul(offsets.back().first, offsets.back().second, "range");
+    Value *RangeExt = builder.CreateSExt(Range, i64, "range.sext");
+    checks.push_back(builder.CreateICmpULE(RangeExt, ConstantInt::get(i64, SSR_SCRATCHPAD_END), "scratchpad.end.check"));
+    return builder.CreateAnd(ArrayRef<Value *>(checks));
+  }
+
+  ///generate setup instructions in loop preheader
+  void GenerateSetup(){
+    Instruction *Point = Access->getLoop()->getLoopPreheader()->getTerminator();
+    Module *mod = Point->getModule();
+    IRBuilder<> builder(Point);
+    Type *i32 = Type::getInt32Ty(Point->getContext());
+    Constant *dim = ConstantInt::get(i32, Access->getDimension() - 1U); //dimension - 1, ty=i32
+    bool isStore = Access->getNStore() > 0u;
+
+    Function *SSRSetup;
+    if (!isStore){
+      SSRSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_read_imm); //can take _imm bc dm and dim are constant
+    }else{
+      SSRSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_write_imm); //can take _imm bc dm and dim are constant
+    }
+    std::array<Value *, 3> args = {getDMID(), dim, getBase()};
+    builder.CreateCall(SSRSetup->getFunctionType(), SSRSetup, ArrayRef<Value *>(args))->dump();
+
+    Intrinsic::RISCVIntrinsics functions[] = {
+      Intrinsic::riscv_ssr_setup_bound_stride_1d,
+      Intrinsic::riscv_ssr_setup_bound_stride_2d,
+      Intrinsic::riscv_ssr_setup_bound_stride_3d,
+      Intrinsic::riscv_ssr_setup_bound_stride_4d
+    };
+    for (unsigned i = 0u; i < Access->getDimension(); i++){
+      Function *SSRBoundStrideSetup = Intrinsic::getDeclaration(mod, functions[i]);
+      std::array<Value *, 3> bsargs = {getDMID(), getBound(i), getStride(i)};
+      builder.CreateCall(SSRBoundStrideSetup->getFunctionType(), SSRBoundStrideSetup, ArrayRef<Value *>(bsargs))->dump();
+    }
+
+    unsigned n_reps = 0U;
+    if (isStore){
+      Function *SSRPush = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_push);
+      for (Instruction *I : Access->getAccesses()){
+        std::array<Value *, 2> pusharg = {getDMID(), cast<StoreInst>(I)->getValueOperand()};
+        builder.SetInsertPoint(I);
+        auto *C = builder.CreateCall(SSRPush->getFunctionType(), SSRPush, ArrayRef<Value *>(pusharg));
+        C->dump(); I->dump();
+        I->eraseFromParent();
+        n_reps++;
+      }
+    }else{
+      Function *SSRPop = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_pop);
+      std::array<Value *, 1> poparg = {getDMID()};
+      for (Instruction *I : Access->getAccesses()){
+        builder.SetInsertPoint(I);
+        Instruction *V = builder.CreateCall(SSRPop->getFunctionType(), SSRPop, ArrayRef<Value *>(poparg), "ssr.pop");
+        V->dump(); I->dump();
+        BasicBlock::iterator ii(I);
+        ReplaceInstWithValue(I->getParent()->getInstList(), ii, V);
+        n_reps++;
+      }
+    }
+
+    builder.SetInsertPoint(Point);
+    Constant *Rep = ConstantInt::get(i32, n_reps - 1U); //repetition - 1, ty=i32
+    Function *SSRRepetitionSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_setup_repetition);
+    std::array<Value *, 2> repargs = {getDMID(), Rep};
+    builder.CreateCall(SSRRepetitionSetup->getFunctionType(), SSRRepetitionSetup, ArrayRef<Value *>(repargs))->dump();
+    return;
+  }
+
+  Value *getBase() { return Base; }
+  Value *getBound(unsigned i) { return offsets[i].first; }
+  Value *getStride(unsigned i) { return offsets[i].second; }
+  ConstantInt *getDMID() { return DMID; }
+};
+
 namespace{
 
-BasicBlock *cloneRegion(Instruction *BeginWith, Instruction *EndBefore, DomTreeUpdater *DTU, LoopInfo *LI, MemorySSAUpdater *MSSAU){
+void copyPHIsFromPred(BasicBlock *BB){
+  BasicBlock *Pred = BB->getSinglePredecessor();
+  assert(Pred && "only works for blocks with one single predecessor");
+  assert(BB->getTerminator() && "need at least one non-phi node in BB");
+  for (Instruction &I : *Pred){
+    if (auto *Phi = dyn_cast<PHINode>(&I)){
+      PHINode *PhiC = PHINode::Create(Phi->getType(), 1u, Twine(Phi->getName()).concat(".copy"), BB->getFirstNonPHI());
+      Phi->replaceAllUsesWith(PhiC);
+      PhiC->addIncoming(Phi, Pred);
+      errs()<<"replaced all uses of "<<*Phi<<" with "<<*PhiC<<"\n";
+    }
+  }
+}
+
+///clones code from BeginWith up to EndBefore
+///assumes all cf-paths from begin lead to end (or return)
+///assumes there is a phi node for each value defined in the region that will be cloned in the block of EndBefore that is live after EndBefore
+BranchInst *cloneRegion(Instruction *BeginWith, Instruction *EndBefore, DominatorTree &DT, DomTreeUpdater *DTU, LoopInfo *LI, MemorySSAUpdater *MSSAU){
+  errs()<<"cloning from "<<*BeginWith<<" up to "<<*EndBefore<<"\n";
   BasicBlock *Begin = BeginWith->getParent();
   BasicBlock *Head = splitBlockBefore(Begin, BeginWith, DTU, LI, MSSAU, "split.head");
-  BasicBlock *End = splitBlockBefore(EndBefore->getParent(), EndBefore, DTU, LI, MSSAU, "fuse.again");
+  copyPHIsFromPred(Begin); //copy Phi's from Head to Begin
+  BasicBlock *End = EndBefore->getParent();
+  BasicBlock *Fuse = splitBlockBefore(EndBefore->getParent(), EndBefore, DTU, LI, MSSAU, "fuse.prep");
+  copyPHIsFromPred(End);
   std::deque<BasicBlock *> q; //bfs queue
   q.push_back(Begin);
   DenseSet<BasicBlock *> vis; //bfs visited set
-  DenseMap<Value *, Value *> clones; //value in orig -> value in clone
+  DenseMap<Value *, Value *> clones; //value in orig -> value in clone (INV: orig and clone are of same class)
   std::vector<std::pair<unsigned, Instruction *>> operandsCleanup; //store operands that reference instructions that are not cloned yet
   
   while (!q.empty()){
     BasicBlock *C = q.front(); q.pop_front();
     if (C == End || vis.find(C) != vis.end()) continue;
+    vis.insert(C);
     BasicBlock *Cc = BasicBlock::Create(C->getContext(), Twine(C->getName()).concat(".clone"), C->getParent(), C);
+    clones.insert(std::make_pair(C, Cc)); //BasicBlock <: Value, needed for branches
     IRBuilder<> builder(Cc);
     for (Instruction &I : *C){
       Instruction *Ic = I.clone();
       assert(Ic->use_empty() && "no uses of clone");
-      builder.Insert(Ic, Twine(I.getName()).concat(".clone"));
+      if (I.getType()->isVoidTy() || I.getType()->isLabelTy()) Ic = builder.Insert(Ic); //insert without name
+      else Ic = builder.Insert(Ic, Twine(I.getName()).concat(".clone"));
       for (unsigned i = 0; i < Ic->getNumOperands(); i++){
         auto A = clones.find(Ic->getOperand(i));
         if (A != clones.end()){
-          Ic->setOperand(i, A->second);
-          bool userUpdate = false;
-          for (User *U : A->second->users()) userUpdate |= U == Ic;
-          assert(userUpdate && "user is updated on setOperand");
+          Ic->setOperand(i, A->second); //this also updates uses of A->second
+          //check users update in A->second
+          bool userUpdate = false; for (User *U : A->second->users()) {userUpdate = userUpdate || U == Ic; } assert(userUpdate && "user is updated on setOperand");
         }else{
           operandsCleanup.push_back(std::make_pair(i, Ic));
         }
       }
-      clones.insert(std::make_pair(&I, Ic));
+      clones.insert(std::make_pair(&I, Ic)); //add Ic as clone of I
     }
-
-  }
-  //TODO: change terminator of Head to be CondBr with TakeOrig as cond
-  //TODO: operandCleanup
-  return Head;
-}
-
-///generates SSR setup calls
-void generateSSR(AffineAccess &AA, const AffineAcc *aa, unsigned dmid, bool isStore){
-  BasicBlock *LoopPreheader = aa->getLoop()->getLoopPreheader();
-  Module *mod = LoopPreheader->getModule();
-  LLVMContext &ctxt = LoopPreheader->getContext();
-  IntegerType *i32 = IntegerType::getInt32Ty(ctxt);
-
-  IRBuilder<> builder(LoopPreheader->getTerminator());
-
-  ConstantInt *dm = ConstantInt::get(i32, dmid); //datamover id, ty=i32
-  ConstantInt *dim = ConstantInt::get(i32, aa->getDimension() - 1U); //dimension - 1, ty=i32
-  Value *data = AA.expandData(aa, Type::getInt8PtrTy(ctxt));
-  Function *SSRSetup;
-  if (!isStore){
-    SSRSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_read_imm); //can take _imm bc dm and dim are constant
-  }else{
-    SSRSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_write_imm); //can take _imm bc dm and dim are constant
-  }
-  std::array<Value *, 3> args = {dm, dim, data};
-  builder.CreateCall(SSRSetup->getFunctionType(), SSRSetup, ArrayRef<Value *>(args))->dump();
-
-  std::vector<Value *> bds, sts;
-  for (unsigned d = 0U; d < aa->getDimension(); d++){
-    bds.push_back(AA.expandBound(aa, d, i32)); //bound - 1, ty=i32 
-    sts.push_back(AA.expandStride(aa, d, i32)); //relative stride, ty=i32
-  }
-
-  Intrinsic::RISCVIntrinsics functions[] = {
-    Intrinsic::riscv_ssr_setup_bound_stride_1d,
-    Intrinsic::riscv_ssr_setup_bound_stride_2d,
-    Intrinsic::riscv_ssr_setup_bound_stride_3d,
-    Intrinsic::riscv_ssr_setup_bound_stride_4d
-  };
-
-   for (unsigned d = 0U; d < aa->getDimension(); d++){
-    Value *bound = bds[d];
-    Value *stride = sts[d];
-
-    Function *SSRBoundStrideSetup = Intrinsic::getDeclaration(mod, functions[d]);
-    std::array<Value *, 3> bsargs = {dm, bound, stride};
-    auto *C = builder.CreateCall(SSRBoundStrideSetup->getFunctionType(), SSRBoundStrideSetup, ArrayRef<Value *>(bsargs));
-    C->dump();
-  }
-
-  unsigned n_reps = 0U;
-  if (isStore){
-    Function *SSRPush = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_push);
-    for (Instruction *I : aa->getAccesses()){
-      std::array<Value *, 2> pusharg = {dm, cast<StoreInst>(I)->getValueOperand()};
-      builder.SetInsertPoint(I);
-      auto *C = builder.CreateCall(SSRPush->getFunctionType(), SSRPush, ArrayRef<Value *>(pusharg));
-      C->dump();
-      I->dump();
-      I->eraseFromParent();
-      n_reps++;
-    }
-  }else{
-    Function *SSRPop = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_pop);
-    std::array<Value *, 1> poparg = {dm};
-    for (Instruction *I : aa->getAccesses()){
-      builder.SetInsertPoint(I);
-      Instruction *V = builder.CreateCall(SSRPop->getFunctionType(), SSRPop, ArrayRef<Value *>(poparg), "ssr.pop");
-      V->dump();
-      I->dump();
-      BasicBlock::iterator ii(I);
-      ReplaceInstWithValue(I->getParent()->getInstList(), ii, V);
+    auto succs = successors(C);
+    for (auto S = succs.begin(); S != succs.end(); ++S) {
+      q.push_back(*S);
     }
   }
-
-  builder.SetInsertPoint(LoopPreheader->getTerminator());
-  ConstantInt *rep = ConstantInt::get(i32, n_reps - 1U); //repetition - 1, ty=i32
-  Function *SSRRepetitionSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_setup_repetition);
-  std::array<Value *, 2> repargs = {dm, rep};
-  builder.CreateCall(SSRRepetitionSetup->getFunctionType(), SSRRepetitionSetup, ArrayRef<Value *>(repargs))->dump();
-  return;
+  //operandCleanup
+  for (const auto &p : operandsCleanup){ //p.first = index of operand that needs to be changed to clone in p.second
+    auto A = clones.find(p.second->getOperand(p.first));
+    if (A != clones.end()){
+      p.second->setOperand(p.first, A->second);
+    }else{
+      errs()<<"cloneRegion: did not find "<<p.second->getOperand(p.first)->getNameOrAsOperand()<<"\n";
+    }
+  }
+  //incoming blocks of phi nodes are not operands ==> handle specially
+  for (const auto &p : clones){ //all clones of phi-nodes appear in here
+    if (auto *Phi = dyn_cast<PHINode>(p.second)){
+      for (auto B = Phi->block_begin(); B != Phi->block_end(); ++B){
+        const auto &c = clones.find(*B);
+        if (c != clones.end()){
+          *B = cast<BasicBlock>(c->second); //overwrite with clone of block if it was cloned
+        }
+      }
+    }
+  }
+  //change terminator of Head to be CondBr with TakeOrig as cond
+  BranchInst *HeadBr = cast<BranchInst>(Head->getTerminator()); //always BranchInst because of splitBlockBefore
+  BasicBlock *HeadSucc = HeadBr->getSuccessor(0);
+  HeadBr->eraseFromParent();
+  HeadBr = BranchInst::Create(
+    HeadSucc, //branch-cond = true -> go to non-clone (here SSR will be inserted)
+    cast<BasicBlock>(clones.find(HeadSucc)->second),
+    ConstantInt::get(Type::getInt1Ty(HeadSucc->getContext()), 0u), 
+    Head
+  );
+  const auto &edge = BasicBlockEdge(std::make_pair(Fuse, End));
+  for (auto &p : clones){
+    for (User *U : p.first->users()){
+      auto *I = dyn_cast<Instruction>(U);
+      if (I && DT.dominates(edge, I->getParent())){
+        errs()<<*I<<" makes use of "<<*p.first<<" after cloned region ==> add phi node at end!\n";
+        assert(true && "did not declare phi node for live-out value");
+      }
+    }
+  }
+  //handle phi nodes in End
+  for (Instruction &I : *End){
+    if (auto *Phi = dyn_cast<PHINode>(&I)){
+      for (auto *B : Phi->blocks()){ //yes Phi->blocks() will change during loop ==> does not matter
+        auto p = clones.find(B);
+        if (p != clones.end()){
+          Value *Bval = Phi->getIncomingValueForBlock(B);
+          auto v = clones.find(Bval);
+          if (v != clones.end()){
+            Phi->addIncoming(v->second, cast<BasicBlock>(p->second)); //add clone value & block as input
+          }else {
+            //v->first is constant or it is defined before cloned region begins
+            Phi->addIncoming(Bval, cast<BasicBlock>(p->second));
+          }
+        }
+      }
+    }
+  }
+  errs()<<"done cloning from \n";
+  return HeadBr;
 }
 
 ///generates SSR enable & disable calls
@@ -186,6 +307,19 @@ void generateSSREnDis(const Loop *L){
 
   errs()<<"generated ssr_enable and ssr_disable\n";
   return;
+}
+
+void generateSSRGuard(BranchInst *BR, ArrayRef<GenSSR *> streams){
+  assert(BR->isConditional());
+  if (streams.empty()) return;
+  IRBuilder<> builder(BR);
+  std::vector<Value *> checks;
+  for (auto *G : streams){
+    checks.push_back(G->GenerateSSRGuard(BR));
+  }
+  //TODO: cross check streams too
+  Value *TakeSSR = builder.CreateAnd(checks);
+  BR->setCondition(TakeSSR);
 }
 
 bool isValid(const AffineAcc *A){
@@ -315,18 +449,48 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
   const auto &clr = g.color(NUM_SSR);
   errs()<<"computed coloring\n";
 
-  for (const auto &C : clr){
+  DenseMap<const Loop *, SmallVector<GenSSR *, NUM_SSR>> ssrs;
+
+  for (const auto C : clr){
     if (C.second.hasValue()){ //not None
-      cloneRegion(C.first->getLoop()->getLoopPreheader()->getTerminator(), C.first->getLoop()->getExitBlock()->getTerminator(), &DTU, &LI, &MSSAU);
-      generateSSR(AF, C.first, C.second.getValue(), C.first->getNStore() > 0U);
-      errs()<<"generated ssr insts \n";
-      
-      addChangedLoop(C.first->getLoop(), changedLoops);
+      //add to ssrs
+      auto p = ssrs.find(C.first->getLoop());
+      GenSSR *G = new GenSSR(C.first, C.second.getValue(), C.first->getLoop()->getLoopPreheader()->getTerminator(), AF);
+      if (p != ssrs.end()) p->getSecond().push_back(G);
+      else ssrs.insert(std::make_pair(C.first->getLoop(), SmallVector<GenSSR *, NUM_SSR>(1u, G)));
+
+      addChangedLoop(C.first->getLoop(), changedLoops); //update set of changed loops
     }
   }
 
+  errs()<<"expanded all SSR bases, bounds, and strides\n";
+
+  //generate clones
+  for (const Loop *L : LI.getLoopsInPreorder()){
+    auto p = ssrs.find(L);
+    if (p != ssrs.end()){
+      BranchInst *BR = cloneRegion(L->getLoopPreheader()->getTerminator(), &*L->getExitBlock()->getFirstInsertionPt(), DT, &DTU, &LI, &MSSAU);
+      generateSSRGuard(BR, ArrayRef<GenSSR *>(p->getSecond().begin(), p->getSecond().end())); //generate "SSR guard"
+    }
+  }
+
+  errs()<<"generated all SSR guards\n";
+
+  //generate ssr setups
+  for (const auto &p : ssrs){
+    for (GenSSR *G : p.getSecond()){
+      G->GenerateSetup();
+    }
+  }
+
+  errs()<<"generated all SSR setups\n";
+
+  //generate enable / disable
   for (const Loop *L : changedLoops) generateSSREnDis(L);
 
+  errs()<<"generated all SSR enable & disable \n";
+
+  errs()<<"printing function: \n";
   for (BasicBlock &BB : F) BB.dump();
 
   if (changedLoops.empty()){
@@ -368,5 +532,83 @@ std::vector<const AffineAcc *> allaccesses;
     changedLoops.insert(A->getLoop());
     dmid++;
   }
+
+  void generateSSR(AffineAccess &AA, const AffineAcc *aa, unsigned dmid, bool isStore){
+  BasicBlock *LoopPreheader = aa->getLoop()->getLoopPreheader();
+  Module *mod = LoopPreheader->getModule();
+  LLVMContext &ctxt = LoopPreheader->getContext();
+  IntegerType *i32 = IntegerType::getInt32Ty(ctxt);
+
+  IRBuilder<> builder(LoopPreheader->getTerminator());
+
+  ConstantInt *dm = ConstantInt::get(i32, dmid); //datamover id, ty=i32
+  ConstantInt *dim = ConstantInt::get(i32, aa->getDimension() - 1U); //dimension - 1, ty=i32
+  Value *data = AA.expandData(aa, Type::getInt8PtrTy(ctxt));
+  Function *SSRSetup;
+  if (!isStore){
+    SSRSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_read_imm); //can take _imm bc dm and dim are constant
+  }else{
+    SSRSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_write_imm); //can take _imm bc dm and dim are constant
+  }
+  std::array<Value *, 3> args = {dm, dim, data};
+  builder.CreateCall(SSRSetup->getFunctionType(), SSRSetup, ArrayRef<Value *>(args))->dump();
+
+  std::vector<Value *> bds, sts;
+  for (unsigned d = 0U; d < aa->getDimension(); d++){
+    bds.push_back(AA.expandBound(aa, d, i32)); //bound - 1, ty=i32 
+    sts.push_back(AA.expandStride(aa, d, i32)); //relative stride, ty=i32
+  }
+
+  Intrinsic::RISCVIntrinsics functions[] = {
+    Intrinsic::riscv_ssr_setup_bound_stride_1d,
+    Intrinsic::riscv_ssr_setup_bound_stride_2d,
+    Intrinsic::riscv_ssr_setup_bound_stride_3d,
+    Intrinsic::riscv_ssr_setup_bound_stride_4d
+  };
+
+  for (unsigned d = 0U; d < aa->getDimension(); d++){
+    Value *bound = bds[d];
+    Value *stride = sts[d];
+
+    Function *SSRBoundStrideSetup = Intrinsic::getDeclaration(mod, functions[d]);
+    std::array<Value *, 3> bsargs = {dm, bound, stride};
+    auto *C = builder.CreateCall(SSRBoundStrideSetup->getFunctionType(), SSRBoundStrideSetup, ArrayRef<Value *>(bsargs));
+    C->dump();
+  }
+
+  unsigned n_reps = 0U;
+  if (isStore){
+    Function *SSRPush = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_push);
+    for (Instruction *I : aa->getAccesses()){
+      std::array<Value *, 2> pusharg = {dm, cast<StoreInst>(I)->getValueOperand()};
+      builder.SetInsertPoint(I);
+      auto *C = builder.CreateCall(SSRPush->getFunctionType(), SSRPush, ArrayRef<Value *>(pusharg));
+      C->dump();
+      I->dump();
+      I->eraseFromParent();
+      n_reps++;
+    }
+  }else{
+    Function *SSRPop = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_pop);
+    std::array<Value *, 1> poparg = {dm};
+    for (Instruction *I : aa->getAccesses()){
+      builder.SetInsertPoint(I);
+      Instruction *V = builder.CreateCall(SSRPop->getFunctionType(), SSRPop, ArrayRef<Value *>(poparg), "ssr.pop");
+      V->dump();
+      I->dump();
+      BasicBlock::iterator ii(I);
+      ReplaceInstWithValue(I->getParent()->getInstList(), ii, V);
+      n_reps++;
+    }
+  }
+
+  builder.SetInsertPoint(LoopPreheader->getTerminator());
+  ConstantInt *rep = ConstantInt::get(i32, n_reps - 1U); //repetition - 1, ty=i32
+  Function *SSRRepetitionSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_setup_repetition);
+  std::array<Value *, 2> repargs = {dm, rep};
+  builder.CreateCall(SSRRepetitionSetup->getFunctionType(), SSRRepetitionSetup, ArrayRef<Value *>(repargs))->dump();
+  return;
+}
+
 
   */

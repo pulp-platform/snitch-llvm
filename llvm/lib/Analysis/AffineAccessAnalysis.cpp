@@ -593,7 +593,7 @@ AffineAccess AffineAccessAnalysis::run(Function &F, FunctionAnalysisManager &FAM
   LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
   DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
   ScalarEvolution &SE = FAM.getResult<ScalarEvolutionAnalysis>(F);
-  //AAResults &AA = FAM.getResult<AAManager>(F);
+  AAResults &AA = FAM.getResult<AAManager>(F);
 
   AffineAccess *A = new AffineAccess(SE, DT, LI);
 

@@ -64,7 +64,7 @@ private:
   Value *Base;
   ConstantInt *DMID;
   SmallVector<std::pair<Value *, Value *>, SSR_MAX_DIM> offsets; 
-  //Instruction *AvailableFrom;
+  //Instruction *AvailableFrom; //use this and do everything lazy?
   
 public:
   ///AffineAcc which is wrapped by this GenSSR
@@ -92,14 +92,16 @@ public:
       /// SGE also works for unsigned int: if the bound is unsigned and larger than 2^30 it will be too large for the scratchpad anyway
       checks.push_back(builder.CreateICmpSGE(getBound(i), ConstantInt::get(Type::getInt32Ty(ExpandBefore->getContext()), 0U)));
     }
-    errs()<<"before ptr to i64 \n";
-    errs()<<CastInst::getCastOpcode(getBase(), false, i64, false);
     Value *BaseInt = builder.CreatePtrToInt(getBase(), i64, "base.to.int");
-    errs()<<"after ptr to i64 \n";
     checks.push_back(builder.CreateICmpUGE(BaseInt, ConstantInt::get(i64, SSR_SCRATCHPAD_BEGIN), "scratchpad.begin.check"));
-    Value *Range = builder.CreateNUWMul(offsets.back().first, offsets.back().second, "range");
-    Value *RangeExt = builder.CreateSExt(Range, i64, "range.sext");
-    checks.push_back(builder.CreateICmpULE(RangeExt, ConstantInt::get(i64, SSR_SCRATCHPAD_END), "scratchpad.end.check"));
+    Value *EndIncl = BaseInt;
+    for (unsigned i = 0U; i < Access->getDimension(); i++){
+      auto dim = formatv("{0}d", i+1u);
+      Value *Range = builder.CreateNUWMul(getBound(i), getStride(i), Twine("range.").concat(dim));
+      Value *RangeExt = builder.CreateSExt(Range, i64, Twine("range.sext.").concat(dim));
+      EndIncl = builder.CreateAdd(EndIncl, RangeExt, Twine("end.incl.").concat(dim));
+    }
+    checks.push_back(builder.CreateICmpULE(EndIncl, ConstantInt::get(i64, SSR_SCRATCHPAD_END), "scratchpad.end.check"));
     return builder.CreateAnd(ArrayRef<Value *>(checks));
   }
 

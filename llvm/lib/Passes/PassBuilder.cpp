@@ -16,6 +16,7 @@
 
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/Analysis/AffineAccessAnalysis.h"
 #include "llvm/Analysis/AliasAnalysisEvaluator.h"
 #include "llvm/Analysis/AliasSetTracker.h"
 #include "llvm/Analysis/AssumptionCache.h"
@@ -86,6 +87,7 @@
 #include "llvm/Transforms/Coroutines/CoroSplit.h"
 #include "llvm/Transforms/HelloNew/HelloWorld.h"
 #include "llvm/Transforms/SSR/SSRInference.h"
+#include "llvm/Transforms/SSR/SSRGeneration.h"
 #include "llvm/Transforms/IPO/AlwaysInliner.h"
 #include "llvm/Transforms/IPO/Annotation2Metadata.h"
 #include "llvm/Transforms/IPO/ArgumentPromotion.h"
@@ -565,8 +567,6 @@ PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
   LPM1.addPass(LICMPass(PTO.LicmMssaOptCap, PTO.LicmMssaNoAccForPromotionCap));
   LPM1.addPass(SimpleLoopUnswitchPass());
 
-  LPM1.addPass(SSRInferencePass());
-
   LPM2.addPass(LoopIdiomRecognizePass());
   LPM2.addPass(IndVarSimplifyPass());
 
@@ -597,6 +597,7 @@ PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
       DebugLogging));
   FPM.addPass(SimplifyCFGPass());
   FPM.addPass(InstCombinePass());
+
   if (EnableLoopFlatten)
     FPM.addPass(LoopFlattenPass());
   // The loop passes in LPM2 (LoopFullUnrollPass) do not preserve MemorySSA.
@@ -625,6 +626,8 @@ PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
   // opportunities opened up by them.
   FPM.addPass(InstCombinePass());
   invokePeepholeEPCallbacks(FPM, Level);
+
+  FPM.addPass(SSRInferencePass());
 
   if (PTO.Coroutines)
     FPM.addPass(CoroElidePass());
@@ -761,6 +764,7 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
       DebugLogging));
   FPM.addPass(SimplifyCFGPass());
   FPM.addPass(InstCombinePass());
+
   if (EnableLoopFlatten)
     FPM.addPass(LoopFlattenPass());
   // The loop passes in LPM2 (LoopIdiomRecognizePass, IndVarSimplifyPass,
@@ -798,6 +802,8 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
   FPM.addPass(InstCombinePass());
   invokePeepholeEPCallbacks(FPM, Level);
 
+  FPM.addPass(SSRInferencePass());
+  
   // Re-consider control flow based optimizations after redundancy elimination,
   // redo DCE, etc.
   FPM.addPass(JumpThreadingPass());

@@ -6,18 +6,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_TRANSFORMS_SSR_SSRINFERENCE_H
-#define LLVM_TRANSFORMS_SSR_SSRINFERENCE_H
+#ifndef LLVM_TRANSFORMS_SSR_SSRGENERATION_H
+#define LLVM_TRANSFORMS_SSR_SSRGENERATION_H
 
 #include "llvm/IR/PassManager.h"
 
 namespace llvm {
 
-class SSRInferencePass : public PassInfoMixin<SSRInferencePass> {
+class SSRGenerationPass : public PassInfoMixin<SSRGenerationPass>{
 public:
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
 };
 
 } // namespace llvm
 
-#endif // LLVM_TRANSFORMS_SSR_SSRINFERENCE_H
+#endif // LLVM_TRANSFORMS_SSR_SSRGENERATION_H

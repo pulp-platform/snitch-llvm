@@ -271,7 +271,7 @@ BranchInst *cloneRegion(Instruction *BeginWith, Instruction *EndBefore, Dominato
       auto *I = dyn_cast<Instruction>(U);
       if (I && DT.dominates(edge, I->getParent())){
         errs()<<*I<<" makes use of "<<*p.first<<" after cloned region ==> add phi node at end!\n";
-        assert(true && "did not declare phi node for live-out value");
+        assert(false && "did not declare phi node for live-out value");
       }
     }
   }
@@ -305,8 +305,8 @@ void generateSSREnDis(const Loop *L){
   builder.CreateCall(SSREnable->getFunctionType(), SSREnable, ArrayRef<Value *>());
 
   //insert frep pragma
-  Function *FrepPragma = Intrinsic::getDeclaration(mod, Intrinsic::riscv_frep_infer);
-  builder.CreateCall(FrepPragma->getFunctionType(), FrepPragma, ArrayRef<Value *>());
+  //Function *FrepPragma = Intrinsic::getDeclaration(mod, Intrinsic::riscv_frep_infer);
+  //builder.CreateCall(FrepPragma->getFunctionType(), FrepPragma, ArrayRef<Value *>());
 
   builder.SetInsertPoint(L->getExitBlock()->getTerminator());
   Function *SSRDisable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_disable);

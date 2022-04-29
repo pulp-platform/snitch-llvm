@@ -232,11 +232,9 @@ let TargetPrefix = "riscv" in {
                              [IntrNoMem]>;
   defm shuffleh : PulpBinaryV2;
   defm shuffleb : PulpBinaryV4;
-  defm pack4_lo
-      : PulpIntrinsic<[llvm_v4i8_ty], [llvm_i8_ty, llvm_i8_ty, llvm_v4i8_ty],
+  defm pack4_lo : PulpIntrinsic<[llvm_v4i8_ty], [llvm_i32_ty, llvm_i32_ty, llvm_v4i8_ty],
                       [IntrNoMem]>;
-  defm pack4_hi
-      : PulpIntrinsic<[llvm_v4i8_ty], [llvm_i8_ty, llvm_i8_ty, llvm_v4i8_ty],
+  defm pack4_hi : PulpIntrinsic<[llvm_v4i8_ty], [llvm_i32_ty, llvm_i32_ty, llvm_v4i8_ty],
                       [IntrNoMem]>;
   defm shuffle4b
       : PulpIntrinsic<[llvm_v4i8_ty],

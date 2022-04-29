@@ -1232,16 +1232,16 @@ v4s test_builtin_pulp_pack4(int32_t x, int32_t y, int32_t z, int32_t t) {
 }
 
 // CHECK-LABEL: @test_builtin_pulp_pack4_hi(
-// CHECK:         [[RES:%.*]] = call <4 x i8> @llvm.riscv.pulp.pack4.hi(i8 {{%.*}}, i8 {{%.*}}, <4 x i8> {{%.*}})
+// CHECK:         [[RES:%.*]] = call <4 x i8> @llvm.riscv.pulp.pack4.hi(i32 {{%.*}}, i32 {{%.*}}, <4 x i8> {{%.*}})
 //
-v4s test_builtin_pulp_pack4_hi(int8_t x, int8_t y, v4s t) {
+v4s test_builtin_pulp_pack4_hi(int32_t x, int32_t y, v4s t) {
   return __builtin_pulp_pack4_hi(x, y, t);
 }
 
 // CHECK-LABEL: @test_builtin_pulp_pack4_lo(
-// CHECK:         [[RES:%.*]] = call <4 x i8> @llvm.riscv.pulp.pack4.lo(i8 {{%.*}}, i8 {{%.*}}, <4 x i8> {{%.*}})
+// CHECK:         [[RES:%.*]] = call <4 x i8> @llvm.riscv.pulp.pack4.lo(i32 {{%.*}}, i32 {{%.*}}, <4 x i8> {{%.*}})
 //
-v4s test_builtin_pulp_pack4_lo(int8_t x, int8_t y, v4s t) {
+v4s test_builtin_pulp_pack4_lo(int32_t x, int32_t y, v4s t) {
   return __builtin_pulp_pack4_lo(x, y, t);
 }
 

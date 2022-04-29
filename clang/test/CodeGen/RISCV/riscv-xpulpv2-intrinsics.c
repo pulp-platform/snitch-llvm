@@ -1001,9 +1001,9 @@ v2s test_builtin_pulp_sub2(v2s x, v2s y) {
 }
 
 // CHECK-LABEL: @test_builtin_pulp_pack2(
-// CHECK:         [[RES:%.*]] = call <2 x i16> @llvm.riscv.pulp.pack2(i16 {{%.*}}, i16 {{%.*}})
+// CHECK:         [[RES:%.*]] = call <2 x i16> @llvm.riscv.pulp.pack2(i32 {{%.*}}, i32 {{%.*}})
 //
-v2s test_builtin_pulp_pack2(int16_t x, int16_t y) {
+v2s test_builtin_pulp_pack2(int32_t x, int32_t y) {
   return __builtin_pulp_pack2(x, y);
 }
 
@@ -1225,9 +1225,9 @@ v4s test_builtin_pulp_sub4(v4s x, v4s y) {
 }
 
 // CHECK-LABEL: @test_builtin_pulp_pack4(
-// CHECK:         [[RES:%.*]] = call <4 x i8> @llvm.riscv.pulp.pack4(i8 {{%.*}}, i8 {{%.*}}, i8 {{%.*}}, i8 {{%.*}})
+// CHECK:         [[RES:%.*]] = call <4 x i8> @llvm.riscv.pulp.pack4(i32 {{%.*}}, i32 {{%.*}}, i32 {{%.*}}, i32 {{%.*}})
 //
-v4s test_builtin_pulp_pack4(int8_t x, int8_t y, int8_t z, int8_t t) {
+v4s test_builtin_pulp_pack4(int32_t x, int32_t y, int32_t z, int32_t t) {
   return __builtin_pulp_pack4(x, y, z, t);
 }
 

@@ -226,10 +226,9 @@ let TargetPrefix = "riscv" in {
   defm sub : N_RN_r;
   defm subu : N_RN_r;
 
-  defm pack2
-      : PulpIntrinsic<[llvm_v2i16_ty], [llvm_i16_ty, llvm_i16_ty], [IntrNoMem]>;
+  defm pack2 : PulpIntrinsic<[llvm_v2i16_ty], [llvm_i32_ty, llvm_i32_ty], [IntrNoMem]>;
   defm pack4 : PulpIntrinsic<[llvm_v4i8_ty],
-                             [llvm_i8_ty, llvm_i8_ty, llvm_i8_ty, llvm_i8_ty],
+                             [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
                              [IntrNoMem]>;
   defm shuffleh : PulpBinaryV2;
   defm shuffleb : PulpBinaryV4;

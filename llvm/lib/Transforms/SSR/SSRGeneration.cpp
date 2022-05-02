@@ -116,6 +116,7 @@ void generateSSR(AffineAccess &AA, const AffineAcc *aa, unsigned dmid, bool isSt
       I->dump();
       BasicBlock::iterator ii(I);
       ReplaceInstWithValue(I->getParent()->getInstList(), ii, V);
+      n_reps++;
     }
   }
 
@@ -271,7 +272,12 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
 
   for (const Loop *L : changedLoops) generateSSREnDis(L);
 
-  return changedLoops.empty() ? PreservedAnalyses::all() : PreservedAnalyses::none();
+  if (changedLoops.empty()){
+    return PreservedAnalyses::all();
+  } else{
+    F.addFnAttr(Attribute::NoInline); //if we have streams in this function cannot inline ==> might conflict with other streams
+    return PreservedAnalyses::none();
+  }
 }
 
 

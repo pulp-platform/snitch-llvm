@@ -120,37 +120,53 @@ bool checkLoop(const Loop *L, DominatorTree &DT, ScalarEvolution &SE, Instructio
   return true;
 }
 
-Optional<std::pair<const SCEV *, const SCEV *>> toSameSize(const SCEV *LHS, const SCEV *RHS, ScalarEvolution &SE, bool unsafe = false){
+Optional<std::pair<const SCEV *, const SCEV *>> toSameType(const SCEV *LHS, const SCEV *RHS, ScalarEvolution &SE, bool unsafe = false){
   assert(LHS && RHS);
   using PT = std::pair<const SCEV *, const SCEV *>;
-  if (LHS->getType() == RHS->getType()) return Optional<PT>(std::make_pair(LHS, RHS)); //trivially the same size
-  if (!LHS->getType()->isSized() || !RHS->getType()->isSized()) return None;
-  //TODO: use datalayout for size instead
-  if (LHS->getType()->getIntegerBitWidth() > RHS->getType()->getIntegerBitWidth()) {
+
+  const DataLayout &DL = SE.getDataLayout();
+  LLVMContext &ctxt = SE.getContext();
+
+  Type *LT = LHS->getType(), *RT = RHS->getType();
+  if (LT == RT) 
+    return Optional<PT>(std::make_pair(LHS, RHS)); //trivially the same size
+  if (LT->isPointerTy() && RT->isPointerTy()) //if we have pointers to different types
+    //PointerType *LTP = cast<PointerType>(LT); PointerType *RTP = cast<PointerType>(RT);
+    return Optional<PT>(std::make_pair(
+      SE.getPtrToIntExpr(LHS, Type::getIntNTy(ctxt, DL.getMaxPointerSizeInBits())), 
+      SE.getPtrToIntExpr(RHS, Type::getIntNTy(ctxt, DL.getMaxPointerSizeInBits()))
+    ));
+
+  if (!LT->isSized() || !RT->isSized()) return None;
+  if (DL.getTypeSizeInBits(LT).isScalable() || DL.getTypeSizeInBits(RT).isScalable()) return None;
+
+  uint64_t ls = DL.getTypeSizeInBits(LT).getValue(), rs = DL.getTypeSizeInBits(RT).getValue();
+
+  if (ls > rs) {
     if (auto LHSx = dyn_cast<SCEVConstant>(LHS)){
-      if (LHSx->getAPInt().getActiveBits() <= RHS->getType()->getIntegerBitWidth()) {}
+      if (LHSx->getAPInt().getActiveBits() <= rs) 
         return Optional<PT>(std::make_pair(SE.getConstant(RHS->getType(), LHSx->getAPInt().getLimitedValue()), RHS));
     } 
     if (auto RHSx = dyn_cast<SCEVConstant>(RHS)){
-      if (RHSx->getAPInt().getActiveBits() <= LHS->getType()->getIntegerBitWidth())
-        return Optional<PT>(std::make_pair(LHS, SE.getConstant(LHS->getType(), RHSx->getAPInt().getLimitedValue())));
+      return Optional<PT>(std::make_pair(LHS, SE.getConstant(LHS->getType(), RHSx->getAPInt().getLimitedValue())));
     }
-    if (auto LHSx = dyn_cast<SCEVSignExtendExpr>(LHS)) return toSameSize(LHSx->getOperand(0), RHS, SE);
-    if (auto LHSx = dyn_cast<SCEVZeroExtendExpr>(LHS)) return toSameSize(LHSx->getOperand(0), RHS, SE);
-    if (auto RHSx = dyn_cast<SCEVTruncateExpr>(RHS)) return toSameSize(LHS, RHSx->getOperand(0), SE);
-    if (unsafe) return Optional<PT>(std::make_pair(SE.getTruncateExpr(LHS, RHS->getType()), RHS));
+    if (auto LHSx = dyn_cast<SCEVSignExtendExpr>(LHS)) return toSameType(LHSx->getOperand(0), RHS, SE);
+    if (auto LHSx = dyn_cast<SCEVZeroExtendExpr>(LHS)) return toSameType(LHSx->getOperand(0), RHS, SE);
+    if (auto RHSx = dyn_cast<SCEVTruncateExpr>(RHS)) return toSameType(LHS, RHSx->getOperand(0), SE);
+    if (unsafe && LT->isIntegerTy() && RT->isIntegerTy()) return Optional<PT>(std::make_pair(SE.getTruncateExpr(LHS, RHS->getType()), RHS));
     return None;
-  }else if (LHS->getType()->getIntegerBitWidth() < RHS->getType()->getIntegerBitWidth()){
-    auto p = toSameSize(RHS, LHS, SE, unsafe);
+  }else if (ls < rs){
+    auto p = toSameType(RHS, LHS, SE); //swap
     if (!p.hasValue()) return None;
-    return Optional<PT>(std::make_pair(p.getValue().second, p.getValue().first));
+    return Optional<PT>(std::make_pair(p.getValue().second, p.getValue().first)); //swap back
   }
-  return Optional<PT>(std::make_pair(LHS, RHS));
+  if (unsafe) return Optional<PT>(std::make_pair(LHS, RHS));
+  return None;
 }
 
 ///checks whether LHS == RHS always holds
 bool SCEVEquals(const SCEV *LHS, const SCEV *RHS, ScalarEvolution &SE){
-  auto p = toSameSize(LHS, RHS, SE);
+  auto p = toSameType(LHS, RHS, SE);
   if (!p.hasValue()) return false;
   LHS = p.getValue().first;
   RHS = p.getValue().second;
@@ -276,7 +292,11 @@ void findStridesRec(const SCEV *Addr, ArrayRef<const Loop *> loops, SmallVector<
     if (AddRec->getLoop() == *loops.begin()){
       const SCEV *S = AddRec->getStepRecurrence(SE);
       for (const SCEV *x : factors){
-        auto p = toSameSize(S, x, SE, true);
+        auto p = toSameType(S, x, SE, true);
+        if (!p.hasValue()) {
+          assert(false && "unsafe toSameType returned None!"); //TODO: change to errs()
+          return;
+        }
         S = SE.getMulExpr(p.getValue().first, p.getValue().second);
       }
       res.push_back(S);
@@ -593,7 +613,7 @@ AffineAccess AffineAccessAnalysis::run(Function &F, FunctionAnalysisManager &FAM
   LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
   DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
   ScalarEvolution &SE = FAM.getResult<ScalarEvolutionAnalysis>(F);
-  AAResults &AA = FAM.getResult<AAManager>(F);
+  //AAResults &AA = FAM.getResult<AAManager>(F);
 
   AffineAccess *A = new AffineAccess(SE, DT, LI);
 
@@ -784,4 +804,37 @@ errs()<<"finding stride in: "; CS->dump();
     }
     assert(Stride);
     errs()<<"found stride: "; Stride->dump();
+*/
+
+/*
+Optional<std::pair<const SCEV *, const SCEV *>> toSameSize(const SCEV *LHS, const SCEV *RHS, ScalarEvolution &SE, bool unsafe = false){
+  assert(LHS && RHS);
+  errs()<<"toSameSize: LHS="<<*LHS<<" with type"<<*LHS->getType()<<"\n";
+  errs()<<"toSameSize: RHS="<<*RHS<<" with type"<<*RHS->getType()<<"\n";
+  using PT = std::pair<const SCEV *, const SCEV *>;
+  if (LHS->getType() == RHS->getType()) return Optional<PT>(std::make_pair(LHS, RHS)); //trivially the same size
+  if (LHS->getType()->isPointerTy() && RHS->getType()->isPointerTy()) return Optional<PT>(std::make_pair(LHS, RHS));
+  if (!LHS->getType()->isSized() || !RHS->getType()->isSized()) return None;
+  //TODO: use datalayout for size instead
+  if (LHS->getType()->getIntegerBitWidth() > RHS->getType()->getIntegerBitWidth()) {
+    if (auto LHSx = dyn_cast<SCEVConstant>(LHS)){
+      if (LHSx->getAPInt().getActiveBits() <= RHS->getType()->getIntegerBitWidth()) {}
+        return Optional<PT>(std::make_pair(SE.getConstant(RHS->getType(), LHSx->getAPInt().getLimitedValue()), RHS));
+    } 
+    if (auto RHSx = dyn_cast<SCEVConstant>(RHS)){
+      if (RHSx->getAPInt().getActiveBits() <= LHS->getType()->getIntegerBitWidth())
+        return Optional<PT>(std::make_pair(LHS, SE.getConstant(LHS->getType(), RHSx->getAPInt().getLimitedValue())));
+    }
+    if (auto LHSx = dyn_cast<SCEVSignExtendExpr>(LHS)) return toSameSize(LHSx->getOperand(0), RHS, SE);
+    if (auto LHSx = dyn_cast<SCEVZeroExtendExpr>(LHS)) return toSameSize(LHSx->getOperand(0), RHS, SE);
+    if (auto RHSx = dyn_cast<SCEVTruncateExpr>(RHS)) return toSameSize(LHS, RHSx->getOperand(0), SE);
+    if (unsafe) return Optional<PT>(std::make_pair(SE.getTruncateExpr(LHS, RHS->getType()), RHS));
+    return None;
+  }else if (LHS->getType()->getIntegerBitWidth() < RHS->getType()->getIntegerBitWidth()){
+    auto p = toSameSize(RHS, LHS, SE, unsafe);
+    if (!p.hasValue()) return None;
+    return Optional<PT>(std::make_pair(p.getValue().second, p.getValue().first));
+  }
+  return Optional<PT>(std::make_pair(LHS, RHS));
+}
 */

@@ -27,7 +27,10 @@
 #include "llvm/Transforms/Utils/FixIrreducible.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar/LoopStrengthReduce.h"
+#include "llvm/Transforms/Scalar/LoopRotation.h"
+#include "llvm/Transforms/Scalar/IndVarSimplify.h"
 #include "llvm/Transforms/Scalar/SimplifyCFG.h"
+#include "llvm/Transforms/Scalar/LoopFlatten.h"
 #include "llvm/Transforms/SSR/SSRGeneration.h"
 
 #include "llvm/Support/CommandLine.h"
@@ -55,8 +58,9 @@ PreservedAnalyses SSRInferencePass::run(Function &F, FunctionAnalysisManager &FA
   FunctionPassManager FPM(true);
   FPM.addPass(FixIrreduciblePass());//turn some non-loops into loops
   FPM.addPass(LoopSimplifyPass());  //canonicalize loops
+  //FPM.addPass(createFunctionToLoopPassAdaptor(LoopRotatePass()));
   FPM.addPass(LCSSAPass());         //put loops into LCSSA-form
-  //FPM.addPass(createFunctionToLoopPassAdaptor(LoopStrengthReducePass())); //loop strength reduction
+  //FPM.addPass(createFunctionToLoopPassAdaptor(IndVarSimplifyPass(false)));
   FPM.addPass(SSRGenerationPass()); //runs AffineAccess analysis and generates SSR intrinsics
   FPM.addPass(SimplifyCFGPass());   //simplifies CFG again
   FPM.addPass(InstCombinePass());   //removes phi nodes from LCSSA

@@ -51,8 +51,8 @@
 #define NUM_SSR 3U
 #define SSR_MAX_DIM 4U
 //both are inclusive! 
-#define SSR_SCRATCHPAD_BEGIN 1000U
-#define SSR_SCRATCHPAD_END 18000U
+#define SSR_SCRATCHPAD_BEGIN 0U
+#define SSR_SCRATCHPAD_END 0xFFFFFFFFFFFFFFFFU //maxint
 //current state of hw: only allow doubles
 #define CHECK_TYPE(T, I) (T == Type::getDoubleTy(I->getParent()->getContext()))
 
@@ -64,6 +64,8 @@ private:
   Value *Base;
   ConstantInt *DMID;
   SmallVector<std::pair<Value *, Value *>, SSR_MAX_DIM> offsets; 
+  Value *MemBegin = nullptr;
+  Value *MemEnd = nullptr;
   //Instruction *AvailableFrom; //use this and do everything lazy?
   
 public:
@@ -93,6 +95,7 @@ public:
       checks.push_back(builder.CreateICmpSGE(getBound(i), ConstantInt::get(Type::getInt32Ty(ExpandBefore->getContext()), 0U)));
     }
     Value *BaseInt = builder.CreatePtrToInt(getBase(), i64, "base.to.int");
+    MemBegin = BaseInt;
     checks.push_back(builder.CreateICmpUGE(BaseInt, ConstantInt::get(i64, SSR_SCRATCHPAD_BEGIN), "scratchpad.begin.check"));
     Value *EndIncl = BaseInt;
     for (unsigned i = 0U; i < Access->getDimension(); i++){
@@ -101,6 +104,7 @@ public:
       Value *RangeExt = builder.CreateSExt(Range, i64, Twine("range.sext.").concat(dim));
       EndIncl = builder.CreateAdd(EndIncl, RangeExt, Twine("end.incl.").concat(dim));
     }
+    MemEnd = EndIncl;
     checks.push_back(builder.CreateICmpULE(EndIncl, ConstantInt::get(i64, SSR_SCRATCHPAD_END), "scratchpad.end.check"));
     return builder.CreateAnd(ArrayRef<Value *>(checks));
   }
@@ -167,18 +171,19 @@ public:
     return;
   }
 
-  Value *getBase() { return Base; }
-  Value *getBound(unsigned i) { return offsets[i].first; }
-  Value *getStride(unsigned i) { return offsets[i].second; }
-  ConstantInt *getDMID() { return DMID; }
+  Value *getBase() const { return Base; }
+  Value *getBound(unsigned i) const { return offsets[i].first; }
+  Value *getStride(unsigned i) const { return offsets[i].second; }
+  ConstantInt *getDMID() const { return DMID; }
+  Value *getMemBegin() const { return MemBegin; }
+  Value *getMemEnd() const { return MemEnd; }
 };
 
 namespace{
 
 void copyPHIsFromPred(BasicBlock *BB){
   BasicBlock *Pred = BB->getSinglePredecessor();
-  assert(Pred && "only works for blocks with one single predecessor");
-  assert(BB->getTerminator() && "need at least one non-phi node in BB");
+  assert(Pred && "BB has single predecessor");
   for (Instruction &I : *Pred){
     if (auto *Phi = dyn_cast<PHINode>(&I)){
       PHINode *PhiC = PHINode::Create(Phi->getType(), 1u, Twine(Phi->getName()).concat(".copy"), BB->getFirstNonPHI());
@@ -189,17 +194,40 @@ void copyPHIsFromPred(BasicBlock *BB){
   }
 }
 
+///splits block, redirects all predecessor to first half of split, copies phi's
+std::pair<BasicBlock *, BasicBlock *> splitAt(Instruction *X, const Twine &name, DomTreeUpdater *DTU){
+  BasicBlock *Two = X->getParent();
+  BasicBlock *One = splitBlockBefore(Two, X, DTU, nullptr, nullptr, name);
+  for (auto *BB : predecessors(Two)){
+    if (BB == One) continue;
+    Instruction *T = BB->getTerminator();
+    for (unsigned i = 0; i < T->getNumOperands(); i++){
+      Value *OP = T->getOperand(i);
+      T->dump();
+      if (dyn_cast<BasicBlock>(OP) == Two){
+        T->setOperand(i, One); //if an operand of the terminator of a predecessor of Two points to Two it should now point to One
+      }
+    }
+  }
+  DTU->flush();
+  copyPHIsFromPred(Two); //copy Phi's from One to Two
+  return std::make_pair(One, Two);
+}
+
 ///clones code from BeginWith up to EndBefore
 ///assumes all cf-paths from begin lead to end (or return)
 ///assumes there is a phi node for each value defined in the region that will be cloned in the block of EndBefore that is live after EndBefore
 BranchInst *cloneRegion(Instruction *BeginWith, Instruction *EndBefore, DominatorTree &DT, DomTreeUpdater *DTU, LoopInfo *LI, MemorySSAUpdater *MSSAU){
   errs()<<"cloning from "<<*BeginWith<<" up to "<<*EndBefore<<"\n";
-  BasicBlock *Begin = BeginWith->getParent();
-  BasicBlock *Head = splitBlockBefore(Begin, BeginWith, DTU, LI, MSSAU, "split.head");
-  copyPHIsFromPred(Begin); //copy Phi's from Head to Begin
-  BasicBlock *End = EndBefore->getParent();
-  BasicBlock *Fuse = splitBlockBefore(EndBefore->getParent(), EndBefore, DTU, LI, MSSAU, "fuse.prep");
-  copyPHIsFromPred(End);
+
+  auto p = splitAt(BeginWith, "split.before", DTU);
+  BasicBlock *Head = p.first;
+  BasicBlock *Begin = p.second;
+
+  p = splitAt(EndBefore, "fuse.prep", DTU);
+  BasicBlock *Fuse = p.first;
+  BasicBlock *End = p.second;
+
   std::deque<BasicBlock *> q; //bfs queue
   q.push_back(Begin);
   DenseSet<BasicBlock *> vis; //bfs visited set
@@ -240,9 +268,7 @@ BranchInst *cloneRegion(Instruction *BeginWith, Instruction *EndBefore, Dominato
     auto A = clones.find(p.second->getOperand(p.first));
     if (A != clones.end()){
       p.second->setOperand(p.first, A->second);
-    }else{
-      errs()<<"cloneRegion: did not find "<<p.second->getOperand(p.first)->getNameOrAsOperand()<<"\n";
-    }
+    }//else did not find ==> was defined before region 
   }
   //incoming blocks of phi nodes are not operands ==> handle specially
   for (const auto &p : clones){ //all clones of phi-nodes appear in here
@@ -293,7 +319,8 @@ BranchInst *cloneRegion(Instruction *BeginWith, Instruction *EndBefore, Dominato
       }
     }
   }
-  errs()<<"done cloning from \n";
+  errs()<<"done cloning \n";
+
   return HeadBr;
 }
 
@@ -304,9 +331,14 @@ void generateSSREnDis(const Loop *L){
   Function *SSREnable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_enable);
   builder.CreateCall(SSREnable->getFunctionType(), SSREnable, ArrayRef<Value *>());
 
+<<<<<<< HEAD
   //insert frep pragma
   //Function *FrepPragma = Intrinsic::getDeclaration(mod, Intrinsic::riscv_frep_infer);
   //builder.CreateCall(FrepPragma->getFunctionType(), FrepPragma, ArrayRef<Value *>());
+=======
+  Function *FREPPragma = Intrinsic::getDeclaration(mod, Intrinsic::riscv_frep_infer);
+  builder.CreateCall(FREPPragma->getFunctionType(), FREPPragma, ArrayRef<Value *>());
+>>>>>>> analysis
 
   builder.SetInsertPoint(L->getExitBlock()->getTerminator());
   Function *SSRDisable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_disable);
@@ -316,15 +348,36 @@ void generateSSREnDis(const Loop *L){
   return;
 }
 
+Value *generateIntersectCheck(IRBuilder<> &builder, GenSSR *G, GenSSR *H){
+  Value *Glo = G->getMemBegin();
+  Value *Ghi = G->getMemEnd();
+  Value *Hlo = H->getMemBegin();
+  Value *Hhi = H->getMemEnd();
+  Value *GhiLTHlo = builder.CreateICmpULT(Ghi, Hlo, "1st.memrange.check"); //bounds are inclusive, we assume alignment
+  Value *HhiLTGlo = builder.CreateICmpULT(Hhi, Glo, "2nd.memrange.check");
+  return builder.CreateOr(GhiLTHlo, HhiLTGlo, "or.memrange"); 
+}
+
 void generateSSRGuard(BranchInst *BR, ArrayRef<GenSSR *> streams){
   assert(BR->isConditional());
   if (streams.empty()) return;
   IRBuilder<> builder(BR);
   std::vector<Value *> checks;
   for (auto *G : streams){
-    checks.push_back(G->GenerateSSRGuard(BR));
+    checks.push_back(G->GenerateSSRGuard(BR)); //means getMemBegin() and getMemEnd() do not return nullptr
   }
-  //TODO: cross check streams too
+  for (unsigned i = 0; i < streams.size(); i++){
+    GenSSR *G = streams[i];
+    for (unsigned j = 0; j < streams.size(); j++){
+      if (G->Access->getNStore() > 0u){
+        GenSSR *H = streams[j];
+        if (j < i || (j > i && H->Access->getNStore() == 0u)){ //true if H is before G OR H is after G and a load
+          checks.push_back(generateIntersectCheck(builder, G, H));
+        }
+      }
+    }
+  }
+
   Value *TakeSSR = builder.CreateAnd(checks);
   BR->setCondition(TakeSSR);
 }
@@ -358,10 +411,10 @@ struct ConflictGraph{
       conflicts.insert(std::make_pair(*A, std::vector<NodeT>()));
       mutexs.insert(std::make_pair(*A, std::vector<NodeT>()));
       for (auto B = accesses.begin(); B != A; B++){
-        if (AF.shareInsts(*A, *B) || AF.conflictWWWR(*A, *B)){
+        if (AF.shareInsts(*A, *B)){ //AF.conflictWWWR(*A, *B) 
           mutexs.find(*A)->second.push_back(*B);
           mutexs.find(*B)->second.push_back(*A);
-        }else if (AF.shareLoops(*A, *B)){
+        }else if (AF.shareLoops(*A, *B)){ //here we assume that the accessed memory region do not intersect and check this at runtime
           conflicts.find(*A)->second.push_back(*B);
           conflicts.find(*B)->second.push_back(*A);
         }
@@ -438,7 +491,7 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
   auto &MA = FAM.getResult<MemorySSAAnalysis>(F);
   MemorySSAUpdater MSSAU(&MA.getMSSA());
 
-  errs()<<"SSR Generation Pass on function: "<<F.getNameOrAsOperand()<<"\n";
+  errs()<<"SSR Generation Pass on function: "<<F.getNameOrAsOperand()<<" ---------------------------------------------------\n";
 
   SmallPtrSet<const Loop *, 4U> changedLoops;
 
@@ -446,11 +499,14 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
 
   std::vector<const AffineAcc *> goodAccs;
   for (const AffineAcc *A : accs){
-    A->dump();
     auto p = AF.splitLoadStore(A);
     if (p.first && isValid(p.first)) goodAccs.push_back(p.first);
     if (p.second && isValid(p.second)) goodAccs.push_back(p.second);
   }
+
+  F.dump();
+
+  if (goodAccs.empty()) return PreservedAnalyses::all(); //early exit
 
   ConflictGraph g(AF, ArrayRef<const AffineAcc *>(goodAccs));
   const auto &clr = g.color(NUM_SSR);
@@ -497,8 +553,8 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
 
   errs()<<"generated all SSR enable & disable \n";
 
-  errs()<<"printing function: \n";
-  for (BasicBlock &BB : F) BB.dump();
+  //TODO: merge loops
+  //TODO: frep pragmas
 
   if (changedLoops.empty()){
     return PreservedAnalyses::all();
@@ -508,114 +564,3 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
   }
 }
 
-
-/*
-std::vector<const AffineAcc *> allaccesses;
-  for (const AffineAcc *A : accs) allaccesses.push_back(A); 
-
-  //sort by dimension ascending
-  std::sort(allaccesses.begin(), allaccesses.end(), [](const AffineAcc *A, const AffineAcc *B){return A->getDimension() <= B->getDimension();});
-
-  errs()<<"total of "<<allaccesses.size()<<" AffineAcc\n";
-  
-  std::vector<const AffineAcc *> accesses;
-  while (!allaccesses.empty()){
-    auto A = allaccesses.back(); allaccesses.pop_back();
-    if (!isValid(A)) continue;
-    bool conflict = false;
-    for (auto B : accesses){
-      conflict = conflict || shareInsts(A, B);
-    }
-    if (!conflict) accesses.push_back(A);
-  }
-
-  errs()<<accesses.size()<<" AffineAcc useful\n";
-
-  unsigned dmid = 0U;
-  for (const AffineAcc *A : accesses){
-    if (dmid >= NUM_SSR) break;
-    unsigned n_store = A->getNStore(), n_load = A->getNLoad();
-    generateSSR(AF, A, dmid, n_store + n_load, n_store > 0U);
-    changedLoops.insert(A->getLoop());
-    dmid++;
-  }
-
-  void generateSSR(AffineAccess &AA, const AffineAcc *aa, unsigned dmid, bool isStore){
-  BasicBlock *LoopPreheader = aa->getLoop()->getLoopPreheader();
-  Module *mod = LoopPreheader->getModule();
-  LLVMContext &ctxt = LoopPreheader->getContext();
-  IntegerType *i32 = IntegerType::getInt32Ty(ctxt);
-
-  IRBuilder<> builder(LoopPreheader->getTerminator());
-
-  ConstantInt *dm = ConstantInt::get(i32, dmid); //datamover id, ty=i32
-  ConstantInt *dim = ConstantInt::get(i32, aa->getDimension() - 1U); //dimension - 1, ty=i32
-  Value *data = AA.expandData(aa, Type::getInt8PtrTy(ctxt));
-  Function *SSRSetup;
-  if (!isStore){
-    SSRSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_read_imm); //can take _imm bc dm and dim are constant
-  }else{
-    SSRSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_write_imm); //can take _imm bc dm and dim are constant
-  }
-  std::array<Value *, 3> args = {dm, dim, data};
-  builder.CreateCall(SSRSetup->getFunctionType(), SSRSetup, ArrayRef<Value *>(args))->dump();
-
-  std::vector<Value *> bds, sts;
-  for (unsigned d = 0U; d < aa->getDimension(); d++){
-    bds.push_back(AA.expandBound(aa, d, i32)); //bound - 1, ty=i32 
-    sts.push_back(AA.expandStride(aa, d, i32)); //relative stride, ty=i32
-  }
-
-  Intrinsic::RISCVIntrinsics functions[] = {
-    Intrinsic::riscv_ssr_setup_bound_stride_1d,
-    Intrinsic::riscv_ssr_setup_bound_stride_2d,
-    Intrinsic::riscv_ssr_setup_bound_stride_3d,
-    Intrinsic::riscv_ssr_setup_bound_stride_4d
-  };
-
-  for (unsigned d = 0U; d < aa->getDimension(); d++){
-    Value *bound = bds[d];
-    Value *stride = sts[d];
-
-    Function *SSRBoundStrideSetup = Intrinsic::getDeclaration(mod, functions[d]);
-    std::array<Value *, 3> bsargs = {dm, bound, stride};
-    auto *C = builder.CreateCall(SSRBoundStrideSetup->getFunctionType(), SSRBoundStrideSetup, ArrayRef<Value *>(bsargs));
-    C->dump();
-  }
-
-  unsigned n_reps = 0U;
-  if (isStore){
-    Function *SSRPush = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_push);
-    for (Instruction *I : aa->getAccesses()){
-      std::array<Value *, 2> pusharg = {dm, cast<StoreInst>(I)->getValueOperand()};
-      builder.SetInsertPoint(I);
-      auto *C = builder.CreateCall(SSRPush->getFunctionType(), SSRPush, ArrayRef<Value *>(pusharg));
-      C->dump();
-      I->dump();
-      I->eraseFromParent();
-      n_reps++;
-    }
-  }else{
-    Function *SSRPop = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_pop);
-    std::array<Value *, 1> poparg = {dm};
-    for (Instruction *I : aa->getAccesses()){
-      builder.SetInsertPoint(I);
-      Instruction *V = builder.CreateCall(SSRPop->getFunctionType(), SSRPop, ArrayRef<Value *>(poparg), "ssr.pop");
-      V->dump();
-      I->dump();
-      BasicBlock::iterator ii(I);
-      ReplaceInstWithValue(I->getParent()->getInstList(), ii, V);
-      n_reps++;
-    }
-  }
-
-  builder.SetInsertPoint(LoopPreheader->getTerminator());
-  ConstantInt *rep = ConstantInt::get(i32, n_reps - 1U); //repetition - 1, ty=i32
-  Function *SSRRepetitionSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_setup_repetition);
-  std::array<Value *, 2> repargs = {dm, rep};
-  builder.CreateCall(SSRRepetitionSetup->getFunctionType(), SSRRepetitionSetup, ArrayRef<Value *>(repargs))->dump();
-  return;
-}
-
-
-  */

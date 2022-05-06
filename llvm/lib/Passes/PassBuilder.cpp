@@ -760,6 +760,7 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
   FPM.addPass(createFunctionToLoopPassAdaptor(
       std::move(LPM1), EnableMSSALoopDependency, /*UseBlockFrequencyInfo=*/true,
       DebugLogging));
+
   FPM.addPass(SimplifyCFGPass());
   FPM.addPass(InstCombinePass());
 
@@ -771,6 +772,8 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
   FPM.addPass(createFunctionToLoopPassAdaptor(
       std::move(LPM2), /*UseMemorySSA=*/false, /*UseBlockFrequencyInfo=*/false,
       DebugLogging));
+
+  FPM.addPass(SSRInferencePass());
 
   // Delete small array after loop unroll.
   FPM.addPass(SROA());
@@ -996,7 +999,7 @@ PassBuilder::buildInlinerPipeline(OptimizationLevel Level,
   MainCGPipeline.addPass(createCGSCCToFunctionPassAdaptor(
       buildFunctionSimplificationPipeline(Level, Phase)));
 
-  MainCGPipeline.addPass(createCGSCCToFunctionPassAdaptor(SSRInferencePass()));
+  //MainCGPipeline.addPass(createCGSCCToFunctionPassAdaptor(SSRInferencePass()));
 
   return MIWP;
 }

@@ -64,6 +64,8 @@ private:
   Value *Base;
   ConstantInt *DMID;
   SmallVector<std::pair<Value *, Value *>, SSR_MAX_DIM> offsets; 
+  Value *MemBegin = nullptr;
+  Value *MemEnd = nullptr;
   //Instruction *AvailableFrom; //use this and do everything lazy?
   
 public:
@@ -93,6 +95,7 @@ public:
       checks.push_back(builder.CreateICmpSGE(getBound(i), ConstantInt::get(Type::getInt32Ty(ExpandBefore->getContext()), 0U)));
     }
     Value *BaseInt = builder.CreatePtrToInt(getBase(), i64, "base.to.int");
+    MemBegin = BaseInt;
     checks.push_back(builder.CreateICmpUGE(BaseInt, ConstantInt::get(i64, SSR_SCRATCHPAD_BEGIN), "scratchpad.begin.check"));
     Value *EndIncl = BaseInt;
     for (unsigned i = 0U; i < Access->getDimension(); i++){
@@ -101,6 +104,7 @@ public:
       Value *RangeExt = builder.CreateSExt(Range, i64, Twine("range.sext.").concat(dim));
       EndIncl = builder.CreateAdd(EndIncl, RangeExt, Twine("end.incl.").concat(dim));
     }
+    MemEnd = EndIncl;
     checks.push_back(builder.CreateICmpULE(EndIncl, ConstantInt::get(i64, SSR_SCRATCHPAD_END), "scratchpad.end.check"));
     return builder.CreateAnd(ArrayRef<Value *>(checks));
   }
@@ -167,10 +171,12 @@ public:
     return;
   }
 
-  Value *getBase() { return Base; }
-  Value *getBound(unsigned i) { return offsets[i].first; }
-  Value *getStride(unsigned i) { return offsets[i].second; }
-  ConstantInt *getDMID() { return DMID; }
+  Value *getBase() const { return Base; }
+  Value *getBound(unsigned i) const { return offsets[i].first; }
+  Value *getStride(unsigned i) const { return offsets[i].second; }
+  ConstantInt *getDMID() const { return DMID; }
+  Value *getMemBegin() const { return MemBegin; }
+  Value *getMemEnd() const { return MemEnd; }
 };
 
 namespace{
@@ -325,6 +331,9 @@ void generateSSREnDis(const Loop *L){
   Function *SSREnable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_enable);
   builder.CreateCall(SSREnable->getFunctionType(), SSREnable, ArrayRef<Value *>());
 
+  Function *FREPPragma = Intrinsic::getDeclaration(mod, Intrinsic::riscv_frep_infer);
+  builder.CreateCall(FREPPragma->getFunctionType(), FREPPragma, ArrayRef<Value *>());
+
   builder.SetInsertPoint(L->getExitBlock()->getTerminator());
   Function *SSRDisable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_disable);
   builder.CreateCall(SSRDisable->getFunctionType(), SSRDisable, ArrayRef<Value *>());
@@ -333,15 +342,36 @@ void generateSSREnDis(const Loop *L){
   return;
 }
 
+Value *generateIntersectCheck(IRBuilder<> &builder, GenSSR *G, GenSSR *H){
+  Value *Glo = G->getMemBegin();
+  Value *Ghi = G->getMemEnd();
+  Value *Hlo = H->getMemBegin();
+  Value *Hhi = H->getMemEnd();
+  Value *GhiLTHlo = builder.CreateICmpULT(Ghi, Hlo, "1st.memrange.check"); //bounds are inclusive, we assume alignment
+  Value *HhiLTGlo = builder.CreateICmpULT(Hhi, Glo, "2nd.memrange.check");
+  return builder.CreateOr(GhiLTHlo, HhiLTGlo, "or.memrange"); 
+}
+
 void generateSSRGuard(BranchInst *BR, ArrayRef<GenSSR *> streams){
   assert(BR->isConditional());
   if (streams.empty()) return;
   IRBuilder<> builder(BR);
   std::vector<Value *> checks;
   for (auto *G : streams){
-    checks.push_back(G->GenerateSSRGuard(BR));
+    checks.push_back(G->GenerateSSRGuard(BR)); //means getMemBegin() and getMemEnd() do not return nullptr
   }
-  //TODO: cross check streams too
+  for (unsigned i = 0; i < streams.size(); i++){
+    GenSSR *G = streams[i];
+    for (unsigned j = 0; j < streams.size(); j++){
+      if (G->Access->getNStore() > 0u){
+        GenSSR *H = streams[j];
+        if (j < i || (j > i && H->Access->getNStore() == 0u)){ //true if H is before G OR H is after G and a load
+          checks.push_back(generateIntersectCheck(builder, G, H));
+        }
+      }
+    }
+  }
+
   Value *TakeSSR = builder.CreateAnd(checks);
   BR->setCondition(TakeSSR);
 }
@@ -375,10 +405,10 @@ struct ConflictGraph{
       conflicts.insert(std::make_pair(*A, std::vector<NodeT>()));
       mutexs.insert(std::make_pair(*A, std::vector<NodeT>()));
       for (auto B = accesses.begin(); B != A; B++){
-        if (AF.shareInsts(*A, *B) || AF.conflictWWWR(*A, *B)){
+        if (AF.shareInsts(*A, *B)){ //AF.conflictWWWR(*A, *B) 
           mutexs.find(*A)->second.push_back(*B);
           mutexs.find(*B)->second.push_back(*A);
-        }else if (AF.shareLoops(*A, *B)){
+        }else if (AF.shareLoops(*A, *B)){ //here we assume that the accessed memory region do not intersect and check this at runtime
           conflicts.find(*A)->second.push_back(*B);
           conflicts.find(*B)->second.push_back(*A);
         }
@@ -455,7 +485,7 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
   auto &MA = FAM.getResult<MemorySSAAnalysis>(F);
   MemorySSAUpdater MSSAU(&MA.getMSSA());
 
-  errs()<<"SSR Generation Pass on function: "<<F.getNameOrAsOperand()<<"\n";
+  errs()<<"SSR Generation Pass on function: "<<F.getNameOrAsOperand()<<" ---------------------------------------------------\n";
 
   SmallPtrSet<const Loop *, 4U> changedLoops;
 
@@ -468,7 +498,9 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
     if (p.second && isValid(p.second)) goodAccs.push_back(p.second);
   }
 
-  if (goodAccs.empty()) return PreservedAnalyses::all();
+  F.dump();
+
+  if (goodAccs.empty()) return PreservedAnalyses::all(); //early exit
 
   ConflictGraph g(AF, ArrayRef<const AffineAcc *>(goodAccs));
   const auto &clr = g.color(NUM_SSR);

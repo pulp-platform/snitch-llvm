@@ -179,8 +179,24 @@ bool SCEVEquals(const SCEV *LHS, const SCEV *RHS, ScalarEvolution &SE){
 }
 
 /// check whether BB is on all controlflow paths from header to header
-bool isOnAllControlFlowPaths(const BasicBlock *BB, const Loop *L, const DominatorTree &DT){
-  return DT.dominates(BB, L->getHeader());
+// TODO: could also be done with DT
+bool isOnAllControlFlowPaths(BasicBlock *BB, const Loop *L, const DominatorTree &DT){
+  BasicBlock *End = L->getHeader();
+  std::deque<std::pair<BasicBlock *, bool>> q;
+  q.push_back(std::make_pair(End, false)); //start with header (false = BB not yet visited)
+  std::set<std::pair<BasicBlock *, bool>> vis; //comp here is less<pair<BasicBlock *, bool>>
+  while (!q.empty()){
+    auto p = q.front(); q.pop_front();
+    if (vis.find(p) != vis.end()) continue;
+    vis.insert(p);
+    for (BasicBlock *B : successors(p.first)){
+      q.push_back(std::make_pair(B, p.second || B == BB));
+    }
+    //check here whether End is reached with false (not at start of loop bc we also start with End)
+    p = q.front();
+    if (!p.second && p.first == End) return false; //got to End (header) without ever visiting BB
+  }
+  return true;
 }
 
 //return result of Cmp predicated on Rep > 0 if possible.
@@ -228,7 +244,7 @@ Optional<bool> predicatedICmpOutcome(ICmpInst *Cmp, const SCEV *Rep, ScalarEvolu
 //conservative! 
 //because SCEVComparePredicate is not in this version of LLVM we have to do this manually ==> will not catch all cases
 //predicate is that Rep > 0
-bool isOnAllPredicatedControlFlowPaths(const BasicBlock *BB, const Loop *L, const DominatorTree &DT, const SCEV *Rep, ScalarEvolution &SE){
+bool isOnAllPredicatedControlFlowPaths(BasicBlock *BB, const Loop *L, const DominatorTree &DT, const SCEV *Rep, ScalarEvolution &SE){
   if (isOnAllControlFlowPaths(BB, L, DT)) return true; //is on all paths anyway
   Rep->dump();
   DenseSet<BasicBlock *> vis; //visited set
@@ -447,22 +463,17 @@ void AffineAccess::addAllAccesses(Instruction *Addr, const Loop *L){
   if (addresses.find(Addr) != addresses.end()) return; //already called addAllAccesses on this Addr instruction
   addresses.insert(Addr);
 
+  errs()<<"addAllAccesses: start: "<<*Addr<<"\n";
+
   //find all accesses
   std::vector<Instruction *> accesses;
   for (auto U = Addr->use_begin(); U != Addr->use_end(); ++U){
-    Instruction *Acc = dyn_cast<LoadInst>(U->getUser());
-    if (Acc){ //load inst
-      bool unvaildUser = false;
-      for (auto AU = Acc->use_begin(); AU != Acc->use_end(); ++AU){
-        auto *I = dyn_cast<Instruction>(AU->getUser());
-        unvaildUser = unvaildUser || !I || !isOnAllControlFlowPaths(I->getParent(), L, DT);
-      }
-      if (unvaildUser) continue; //skip this load it has users ouside of loop or not on all control flow paths
+    Instruction *Acc = dyn_cast<Instruction>(U->getUser());
+    if (!Acc) continue; //user is not an instruction
+    if (isa<LoadInst>(Acc) || isa<StoreInst>(Acc)){
+      if (!isOnAllControlFlowPaths(Acc->getParent(), L, DT)) continue; //access does not occur consistently in loop ==> not suitable
+      accesses.push_back(Acc);
     }
-    if (!Acc) Acc = dyn_cast<StoreInst>(U->getUser()); //try to cast to store
-    if (!Acc) continue; //both casts failed ==> not a suitable instruction
-    if (!isOnAllControlFlowPaths(Acc->getParent(), L, DT)) continue; //access does not occur consistently in loop ==> not suitable
-    accesses.push_back(Acc);
   }
   if (accesses.empty()) return; //Addr not used
 
@@ -632,6 +643,7 @@ AffineAccess AffineAccessAnalysis::run(Function &F, FunctionAnalysisManager &FAM
         }else{
           continue; //cannot do anything with this instruction
         }
+        errs()<<"run: "<<I<<"\n";
         Instruction *AddrIns;
         if (!(AddrIns = dyn_cast<Instruction>(Addr))) continue; //if Addr is not instruction ==> constant, or sth else (==> leave for other passes to opt)
         A->addAllAccesses(AddrIns, L);

@@ -324,7 +324,7 @@ bool PULPHardwareLoops::runOnMachineFunction(MachineFunction &MF) {
   TRI = HST.getRegisterInfo();
 
   for (auto &L : *MLI)
-    if (!L->getParentLoop()) {
+    if (L->isOutermost()) {
       bool L0Used = false;
       bool L1Used = false;
       KnownHardwareLoops.clear();
@@ -762,13 +762,14 @@ CountValue *PULPHardwareLoops::computeCount(MachineLoop *Loop,
   // Phis that may feed into the loop.
   LoopFeederMap LoopFeederPhi;
 
-  // Check if the initial value may be zero and can be decremented in the first
-  // iteration. If the value is zero, the endloop instruction will not decrement
-  // the loop counter, so we shouldn't generate a hardware loop in this case.
-  if (loopCountMayWrapOrUnderFlow(Start, End, Loop->getLoopPreheader(), Loop,
-                                  LoopFeederPhi)) {
-    return nullptr;
-  }
+  // PULP: when dealing with xPULP hwloops, the following doesn't apply.
+  // // Check if the initial value may be zero and can be decremented in the first
+  // // iteration. If the value is zero, the endloop instruction will not decrement
+  // // the loop counter, so we shouldn't generate a hardware loop in this case.
+  // if (loopCountMayWrapOrUnderFlow(Start, End, Loop->getLoopPreheader(), Loop,
+  //                                 LoopFeederPhi)) {
+  //   return nullptr;
+  // }
 
   // A general case: Start and End are some values, but the actual
   // iteration count may not be available.  If it is not, insert

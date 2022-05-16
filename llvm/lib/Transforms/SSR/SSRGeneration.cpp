@@ -35,6 +35,7 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/IntrinsicsRISCV.h"
+#include "llvm/IR/InlineAsm.h"
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -48,15 +49,39 @@
 #include <algorithm>
 #include <queue>
 
+#define SSR_INFERENCE true
+
 #define NUM_SSR 3U
 #define SSR_MAX_DIM 4U
 //both are inclusive! 
-#define SSR_SCRATCHPAD_BEGIN 0U
-#define SSR_SCRATCHPAD_END 0xFFFFFFFFFFFFFFFFU //maxint
+#define SSR_SCRATCHPAD_BEGIN 0x100000
+#define SSR_SCRATCHPAD_END 0x120000
 //current state of hw: only allow doubles
 #define CHECK_TYPE(T, I) (T == Type::getDoubleTy(I->getParent()->getContext()))
 
 using namespace llvm;
+
+static cl::opt<bool> GenerateSSR("generate-ssr", cl::init(true), cl::Hidden);
+
+namespace{
+
+void clobberRegistersAt(ArrayRef<std::string> regs, Instruction *Before){
+  IRBuilder<> builder(Before);
+  //equivalent to asm volatile ("":::regs);
+  std::string constraints = "~{dirflag},~{fpsr},~{flags}"; //TODO: what are these doing?
+  for (const std::string &r : regs){
+    constraints = (formatv("~{{{0}},", r) + Twine(constraints)).str();
+  }
+  InlineAsm *IA = InlineAsm::get(
+    FunctionType::get(Type::getVoidTy(builder.getContext()), false), 
+    "", 
+    constraints,
+    true
+  );
+  builder.CreateCall(IA)->dump();
+}
+
+} //end of namespace
 
 ///Wraps an AffineAcc *Access, expands all its SCEVs in constructor
 struct GenSSR{
@@ -118,25 +143,27 @@ public:
     Constant *dim = ConstantInt::get(i32, Access->getDimension() - 1U); //dimension - 1, ty=i32
     bool isStore = Access->getNStore() > 0u;
 
-    Function *SSRSetup;
-    if (!isStore){
-      SSRSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_read_imm); //can take _imm bc dm and dim are constant
-    }else{
-      SSRSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_write_imm); //can take _imm bc dm and dim are constant
-    }
-    std::array<Value *, 3> args = {getDMID(), dim, getBase()};
-    builder.CreateCall(SSRSetup->getFunctionType(), SSRSetup, ArrayRef<Value *>(args))->dump();
-
     Intrinsic::RISCVIntrinsics functions[] = {
       Intrinsic::riscv_ssr_setup_bound_stride_1d,
       Intrinsic::riscv_ssr_setup_bound_stride_2d,
       Intrinsic::riscv_ssr_setup_bound_stride_3d,
       Intrinsic::riscv_ssr_setup_bound_stride_4d
     };
+    Value *StrideChange = nullptr;
     for (unsigned i = 0u; i < Access->getDimension(); i++){
+      Value *Str = getStride(i);
+      Value *Bd = getBound(i);
+      Value *ChSt;
+      if (StrideChange) ChSt = builder.CreateSub(Str, StrideChange, formatv("stride.{0}d.final", i+1));
+      else ChSt = Str;
       Function *SSRBoundStrideSetup = Intrinsic::getDeclaration(mod, functions[i]);
-      std::array<Value *, 3> bsargs = {getDMID(), getBound(i), getStride(i)};
+      std::array<Value *, 3> bsargs = {getDMID(), Bd, ChSt};
       builder.CreateCall(SSRBoundStrideSetup->getFunctionType(), SSRBoundStrideSetup, ArrayRef<Value *>(bsargs))->dump();
+      if (i + 1 != Access->getDimension()){ //only calculate stride change if needed
+        Value *bdXstr = builder.CreateMul(Bd, Str, formatv("bdXstd.{0}d", i+1)); 
+        if (StrideChange) StrideChange = builder.CreateAdd(StrideChange, bdXstr, formatv("str.change.for{0}d", i+2)); 
+        else StrideChange = bdXstr;
+      }
     }
 
     unsigned n_reps = 0U;
@@ -146,6 +173,7 @@ public:
         std::array<Value *, 2> pusharg = {getDMID(), cast<StoreInst>(I)->getValueOperand()};
         builder.SetInsertPoint(I);
         auto *C = builder.CreateCall(SSRPush->getFunctionType(), SSRPush, ArrayRef<Value *>(pusharg));
+        clobberRegistersAt(ArrayRef<std::string>(formatv("ft{0}", (unsigned)DMID->getValue().getLimitedValue(NUM_SSR))), C);
         C->dump(); I->dump();
         I->eraseFromParent();
         n_reps++;
@@ -156,6 +184,7 @@ public:
       for (Instruction *I : Access->getAccesses()){
         builder.SetInsertPoint(I);
         Instruction *V = builder.CreateCall(SSRPop->getFunctionType(), SSRPop, ArrayRef<Value *>(poparg), "ssr.pop");
+        clobberRegistersAt(ArrayRef<std::string>(formatv("ft{0}", (unsigned)DMID->getValue().getLimitedValue(NUM_SSR))), V);
         V->dump(); I->dump();
         BasicBlock::iterator ii(I);
         ReplaceInstWithValue(I->getParent()->getInstList(), ii, V);
@@ -164,10 +193,26 @@ public:
     }
 
     builder.SetInsertPoint(Point);
-    Constant *Rep = ConstantInt::get(i32, n_reps - 1U); //repetition - 1, ty=i32
+    Constant *Rep = ConstantInt::get(i32, n_reps - 1U);
     Function *SSRRepetitionSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_setup_repetition);
     std::array<Value *, 2> repargs = {getDMID(), Rep};
     builder.CreateCall(SSRRepetitionSetup->getFunctionType(), SSRRepetitionSetup, ArrayRef<Value *>(repargs))->dump();
+
+    Function *SSRSetup;
+    if (!isStore){
+      SSRSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_read_imm); //can take _imm bc dm and dim are constant
+    }else{
+      SSRSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_write_imm); //can take _imm bc dm and dim are constant
+    }
+    std::array<Value *, 3> args = {getDMID(), dim, getBase()};
+    //NOTE: this starts the prefetching ==> always needs to be inserted AFTER bound/stride and repetition setups !!!
+    builder.CreateCall(SSRSetup->getFunctionType(), SSRSetup, ArrayRef<Value *>(args))->dump(); 
+
+    //create an SSR barrior in exit block. TODO: needed esp. for write streams?
+    builder.SetInsertPoint(Access->getLoop()->getExitBlock()->getFirstNonPHI());
+    Function *SSRBarrier = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_barrier);
+    std::array<Value *, 1> barrargs = {getDMID()};
+    builder.CreateCall(SSRBarrier->getFunctionType(), SSRBarrier, ArrayRef<Value *>(barrargs))->dump();
     return;
   }
 
@@ -203,7 +248,6 @@ std::pair<BasicBlock *, BasicBlock *> splitAt(Instruction *X, const Twine &name,
     Instruction *T = BB->getTerminator();
     for (unsigned i = 0; i < T->getNumOperands(); i++){
       Value *OP = T->getOperand(i);
-      T->dump();
       if (dyn_cast<BasicBlock>(OP) == Two){
         T->setOperand(i, One); //if an operand of the terminator of a predecessor of Two points to Two it should now point to One
       }
@@ -326,19 +370,34 @@ BranchInst *cloneRegion(Instruction *BeginWith, Instruction *EndBefore, Dominato
 
 ///generates SSR enable & disable calls
 void generateSSREnDis(const Loop *L){
-  IRBuilder<> builder(L->getLoopPreheader()->getTerminator());
+  IRBuilder<> builder(L->getLoopPreheader()->getTerminator()); // ----------- in preheader 
   Module *mod = L->getHeader()->getModule();
   Function *SSREnable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_enable);
   builder.CreateCall(SSREnable->getFunctionType(), SSREnable, ArrayRef<Value *>());
 
-  Function *FREPPragma = Intrinsic::getDeclaration(mod, Intrinsic::riscv_frep_infer);
-  builder.CreateCall(FREPPragma->getFunctionType(), FREPPragma, ArrayRef<Value *>());
+  //create inline asm that clobbers ft0-2 to make sure none of them are reordered to before ssr enable / after ssr disable
+  //equivalent to asm volatile ("":::"ft0", "ft1", "ft2");
+  InlineAsm *IA = InlineAsm::get(
+    FunctionType::get(Type::getVoidTy(builder.getContext()), false), 
+    "", 
+    "~{ft0},~{ft1},~{ft2},~{dirflag},~{fpsr},~{flags}",
+    true
+  );
+  builder.CreateCall(IA);
 
-  builder.SetInsertPoint(L->getExitBlock()->getTerminator());
+  //Function *FREPPragma = Intrinsic::getDeclaration(mod, Intrinsic::riscv_frep_infer);
+  //builder.CreateCall(FREPPragma->getFunctionType(), FREPPragma, ArrayRef<Value *>());
+
+  builder.SetInsertPoint(L->getExitBlock()->getTerminator()); // ----------- in exit block
+  builder.CreateCall(IA); //same here
   Function *SSRDisable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_disable);
   builder.CreateCall(SSRDisable->getFunctionType(), SSRDisable, ArrayRef<Value *>());
 
   errs()<<"generated ssr_enable and ssr_disable\n";
+
+  L->getLoopPreheader()->getSinglePredecessor()->dump();
+  L->getLoopPreheader()->dump();
+
   return;
 }
 
@@ -478,6 +537,8 @@ void addChangedLoop(const Loop *NewL, SmallPtrSet<const Loop *, 4U> &loops){
 
 PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &FAM){
   
+  if (!SSR_INFERENCE || !GenerateSSR) return PreservedAnalyses::all();
+
   AffineAccess &AF = FAM.getResult<AffineAccessAnalysis>(F);
   LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
   DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
@@ -497,8 +558,6 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
     if (p.first && isValid(p.first)) goodAccs.push_back(p.first);
     if (p.second && isValid(p.second)) goodAccs.push_back(p.second);
   }
-
-  F.dump();
 
   if (goodAccs.empty()) return PreservedAnalyses::all(); //early exit
 
@@ -550,11 +609,7 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
   //TODO: merge loops
   //TODO: frep pragmas
 
-  if (changedLoops.empty()){
-    return PreservedAnalyses::all();
-  }else{
-    F.addFnAttr(Attribute::AttrKind::NoInline); //mark function as no-inline, because there can be intersecting streams if function is inlined!
-    return PreservedAnalyses::none();
-  }
+  F.addFnAttr(Attribute::AttrKind::NoInline); //mark function as no-inline, because there can be intersecting streams if function is inlined!
+  return PreservedAnalyses::none();
 }
 

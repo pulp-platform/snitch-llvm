@@ -53,6 +53,14 @@ unsigned AffineAcc::getDimension() const{
   return this->bounds.size();
 }
 
+unsigned AffineAcc::getUsedDimension() const{
+  unsigned d = 0u;
+  for (const SCEV *S : this->strides){
+    if (!isa<SCEVConstant>(S) || !cast<SCEVConstant>(S)->isZero()) d++; //only cound a dimension if its stride is non-zero
+  }
+  return d;
+}
+
 void AffineAcc::dump() const{
   errs()<<"Affine Access in Loop:\n";
   if (L) L->dump();
@@ -120,50 +128,83 @@ bool checkLoop(const Loop *L, DominatorTree &DT, ScalarEvolution &SE, Instructio
   return true;
 }
 
-Optional<std::pair<const SCEV *, const SCEV *>> toSameSize(const SCEV *LHS, const SCEV *RHS, ScalarEvolution &SE, bool unsafe = false){
+Optional<std::pair<const SCEV *, const SCEV *>> toSameType(const SCEV *LHS, const SCEV *RHS, ScalarEvolution &SE, bool unsafe = false){
+  assert(LHS && RHS);
   using PT = std::pair<const SCEV *, const SCEV *>;
-  if (LHS->getType()->getIntegerBitWidth() > RHS->getType()->getIntegerBitWidth()) {
+
+  const DataLayout &DL = SE.getDataLayout();
+  LLVMContext &ctxt = SE.getContext();
+
+  Type *LT = LHS->getType(), *RT = RHS->getType();
+  if (LT == RT) 
+    return Optional<PT>(std::make_pair(LHS, RHS)); //trivially the same size
+  if (LT->isPointerTy() && RT->isPointerTy()) //if we have pointers to different types
+    //PointerType *LTP = cast<PointerType>(LT); PointerType *RTP = cast<PointerType>(RT);
+    return Optional<PT>(std::make_pair(
+      SE.getPtrToIntExpr(LHS, Type::getIntNTy(ctxt, DL.getMaxPointerSizeInBits())), 
+      SE.getPtrToIntExpr(RHS, Type::getIntNTy(ctxt, DL.getMaxPointerSizeInBits()))
+    ));
+
+  if (!LT->isSized() || !RT->isSized()) return None;
+  if (DL.getTypeSizeInBits(LT).isScalable() || DL.getTypeSizeInBits(RT).isScalable()) return None;
+
+  uint64_t ls = DL.getTypeSizeInBits(LT).getValue(), rs = DL.getTypeSizeInBits(RT).getValue();
+
+  if (ls > rs) {
     if (auto LHSx = dyn_cast<SCEVConstant>(LHS)){
-      if (LHSx->getAPInt().getActiveBits() <= RHS->getType()->getIntegerBitWidth()) {}
+      if (LHSx->getAPInt().getActiveBits() <= rs) 
         return Optional<PT>(std::make_pair(SE.getConstant(RHS->getType(), LHSx->getAPInt().getLimitedValue()), RHS));
     } 
     if (auto RHSx = dyn_cast<SCEVConstant>(RHS)){
-      if (RHSx->getAPInt().getActiveBits() <= LHS->getType()->getIntegerBitWidth())
-        return Optional<PT>(std::make_pair(LHS, SE.getConstant(LHS->getType(), RHSx->getAPInt().getLimitedValue())));
+      return Optional<PT>(std::make_pair(LHS, SE.getConstant(LHS->getType(), RHSx->getAPInt().getLimitedValue())));
     }
-    if (auto LHSx = dyn_cast<SCEVSignExtendExpr>(LHS)) return toSameSize(LHSx->getOperand(0), RHS, SE);
-    if (auto LHSx = dyn_cast<SCEVZeroExtendExpr>(LHS)) return toSameSize(LHSx->getOperand(0), RHS, SE);
-    if (auto RHSx = dyn_cast<SCEVTruncateExpr>(RHS)) return toSameSize(LHS, RHSx->getOperand(0), SE);
-    if (unsafe) return Optional<PT>(std::make_pair(SE.getTruncateExpr(LHS, RHS->getType()), RHS));
+    if (auto LHSx = dyn_cast<SCEVSignExtendExpr>(LHS)) return toSameType(LHSx->getOperand(0), RHS, SE);
+    if (auto LHSx = dyn_cast<SCEVZeroExtendExpr>(LHS)) return toSameType(LHSx->getOperand(0), RHS, SE);
+    if (auto RHSx = dyn_cast<SCEVTruncateExpr>(RHS)) return toSameType(LHS, RHSx->getOperand(0), SE);
+    if (unsafe && LT->isIntegerTy() && RT->isIntegerTy()) return Optional<PT>(std::make_pair(SE.getTruncateExpr(LHS, RHS->getType()), RHS));
     return None;
-  }else if (LHS->getType()->getIntegerBitWidth() < RHS->getType()->getIntegerBitWidth()){
-    auto p = toSameSize(RHS, LHS, SE, unsafe);
+  }else if (ls < rs){
+    auto p = toSameType(RHS, LHS, SE); //swap
     if (!p.hasValue()) return None;
-    return Optional<PT>(std::make_pair(p.getValue().second, p.getValue().first));
+    return Optional<PT>(std::make_pair(p.getValue().second, p.getValue().first)); //swap back
   }
-  return Optional<PT>(std::make_pair(LHS, RHS));
+  if (unsafe) return Optional<PT>(std::make_pair(LHS, RHS));
+  return None;
 }
 
 ///checks whether LHS == RHS always holds
 bool SCEVEquals(const SCEV *LHS, const SCEV *RHS, ScalarEvolution &SE){
-  auto p = toSameSize(LHS, RHS, SE);
+  auto p = toSameType(LHS, RHS, SE);
   if (!p.hasValue()) return false;
   LHS = p.getValue().first;
   RHS = p.getValue().second;
-  errs()<<"SCEVEquals:\n\t"; LHS->dump();
-  errs()<<"\t"; RHS->dump();
   if (LHS == RHS) return true; //trivially the same if this holds (bc const Ptr)
   else{
     const SCEVPredicate *Peq = SE.getEqualPredicate(LHS, RHS);
     if (Peq->isAlwaysTrue()) return true; //if we arrive at setup addr scev, we are done
   }
-  errs()<<"false\n";
   return false;
 }
 
 /// check whether BB is on all controlflow paths from header to header
-bool isOnAllControlFlowPaths(const BasicBlock *BB, const Loop *L, const DominatorTree &DT){
-  return DT.dominates(BB, L->getHeader());
+// TODO: could also be done with DT
+bool isOnAllControlFlowPaths(BasicBlock *BB, const Loop *L, const DominatorTree &DT){
+  BasicBlock *End = L->getHeader();
+  std::deque<std::pair<BasicBlock *, bool>> q;
+  q.push_back(std::make_pair(End, false)); //start with header (false = BB not yet visited)
+  std::set<std::pair<BasicBlock *, bool>> vis; //comp here is less<pair<BasicBlock *, bool>>
+  while (!q.empty()){
+    auto p = q.front(); q.pop_front();
+    if (vis.find(p) != vis.end()) continue;
+    vis.insert(p);
+    for (BasicBlock *B : successors(p.first)){
+      q.push_back(std::make_pair(B, p.second || B == BB));
+    }
+    //check here whether End is reached with false (not at start of loop bc we also start with End)
+    p = q.front();
+    if (!p.second && p.first == End) return false; //got to End (header) without ever visiting BB
+  }
+  return true;
 }
 
 //return result of Cmp predicated on Rep > 0 if possible.
@@ -209,9 +250,9 @@ Optional<bool> predicatedICmpOutcome(ICmpInst *Cmp, const SCEV *Rep, ScalarEvolu
 }
 
 //conservative! 
-//because SCEVComparePredicate is not in this version of LLVM we have to do this manually ==> will not catch all cases
+//because SCEVComparePredicate is not in this version of LLVM we have to do this manually ==> will not catch all cases (FIXME)
 //predicate is that Rep > 0
-bool isOnAllPredicatedControlFlowPaths(const BasicBlock *BB, const Loop *L, const DominatorTree &DT, const SCEV *Rep, ScalarEvolution &SE){
+bool isOnAllPredicatedControlFlowPaths(BasicBlock *BB, const Loop *L, const DominatorTree &DT, const SCEV *Rep, ScalarEvolution &SE){
   if (isOnAllControlFlowPaths(BB, L, DT)) return true; //is on all paths anyway
   Rep->dump();
   DenseSet<BasicBlock *> vis; //visited set
@@ -275,7 +316,11 @@ void findStridesRec(const SCEV *Addr, ArrayRef<const Loop *> loops, SmallVector<
     if (AddRec->getLoop() == *loops.begin()){
       const SCEV *S = AddRec->getStepRecurrence(SE);
       for (const SCEV *x : factors){
-        auto p = toSameSize(S, x, SE, true);
+        auto p = toSameType(S, x, SE, true);
+        if (!p.hasValue()) {
+          assert(false && "unsafe toSameType returned None!"); //TODO: change to errs()
+          return;
+        }
         S = SE.getMulExpr(p.getValue().first, p.getValue().second);
       }
       res.push_back(S);
@@ -284,7 +329,7 @@ void findStridesRec(const SCEV *Addr, ArrayRef<const Loop *> loops, SmallVector<
       bool occurs = false;
       for (const Loop *L : loops) occurs = occurs || AddRec->getLoop() == L; //loops needs to occur further up, o/w invalid
       if (!occurs) return;
-      res.push_back(SE.getConstant(APInt(64U, 0U)));
+      res.push_back(SE.getConstant(APInt(64U, 0U))); //TODO: this leads to ugly casts
       findStridesRec(AddRec, ArrayRef<const Loop *>(loops.begin()+1, loops.end()), factors, SE, res);
     }
     return;
@@ -298,7 +343,7 @@ void findStridesRec(const SCEV *Addr, ArrayRef<const Loop *> loops, SmallVector<
   case SCEVTypes::scAddExpr:
   {
     auto S = cast<SCEVAddExpr>(Addr);
-    bool lhs = SE.containsAddRecurrence(S->getOperand(0));
+    bool lhs = SE.containsAddRecurrence(S->getOperand(0)); //TODO: this does not catch all cases maybe limit SCEV to outermost loop?
     bool rhs = SE.containsAddRecurrence(S->getOperand(1));
     if (lhs && !rhs) findStridesRec(S->getOperand(0), loops, factors, SE, res);
     else if (!lhs && rhs) findStridesRec(S->getOperand(1), loops, factors, SE, res);
@@ -307,7 +352,7 @@ void findStridesRec(const SCEV *Addr, ArrayRef<const Loop *> loops, SmallVector<
   case SCEVTypes::scMulExpr:
   {
     auto S = cast<SCEVMulExpr>(Addr);
-    bool lhs = SE.containsAddRecurrence(S->getOperand(0));
+    bool lhs = SE.containsAddRecurrence(S->getOperand(0)); //TODO: this does not catch all cases maybe limit SCEV to outermost loop?
     bool rhs = SE.containsAddRecurrence(S->getOperand(1));
     if (lhs && !rhs) {
       factors.push_back(S->getOperand(1));
@@ -324,24 +369,26 @@ void findStridesRec(const SCEV *Addr, ArrayRef<const Loop *> loops, SmallVector<
   }
 }
 
-SmallVector<const SCEV *, 4U> &findStrides(const SCEV *Addr, ArrayRef<const Loop *> loops, ScalarEvolution &SE){
+SmallVector<const SCEV *, 4U> &findStrides(Instruction *Addr, ArrayRef<const Loop *> loops, ScalarEvolution &SE){
+  const SCEV *AddrS = SE.getSCEV(Addr); //SE.getSCEVAtScope(Addr, loops.back()); //we only look at the scev as contained in outermost loop
   SmallVector<const SCEV *, 4U> &strides = *(new SmallVector<const SCEV *, 4U>());
   SmallVector<const SCEV *, 2U> factors;
-  findStridesRec(Addr, loops, factors, SE, strides);
+  findStridesRec(AddrS, loops, factors, SE, strides);
   return strides;
 }
 
 Value *castToSize(Value *R, Type *ty, Instruction *InsPoint){
   const DataLayout &DL = InsPoint->getParent()->getModule()->getDataLayout();
+  IRBuilder<> builder(InsPoint);
   Type *rty = R->getType();
   if (rty == ty) return R;
   if (DL.getTypeSizeInBits(rty) > DL.getTypeSizeInBits(ty)) {
-    return CastInst::CreateTruncOrBitCast(R, ty, "scev.cast", InsPoint);
+    return builder.CreateTruncOrBitCast(R, ty, "scev.trunc");
   }
   if (DL.getTypeSizeInBits(rty) < DL.getTypeSizeInBits(ty)) {
-    return CastInst::CreateZExtOrBitCast(R, ty, "scev.cast", InsPoint);
+    return builder.CreateSExtOrBitCast(R, ty, "scev.sext");
   }
-  return CastInst::CreateBitOrPointerCast(R, ty, "scev.cast", InsPoint);
+  return builder.CreateBitOrPointerCast(R, ty, "scev.cast");
 }
 
 } //end of namespace
@@ -426,28 +473,21 @@ void AffineAccess::addAllAccesses(Instruction *Addr, const Loop *L){
   if (addresses.find(Addr) != addresses.end()) return; //already called addAllAccesses on this Addr instruction
   addresses.insert(Addr);
 
+  errs()<<"addAllAccesses: start: "<<*Addr<<"\n";
+
   //find all accesses
   std::vector<Instruction *> accesses;
   for (auto U = Addr->use_begin(); U != Addr->use_end(); ++U){
-    Instruction *Acc = dyn_cast<LoadInst>(U->getUser());
-    if (Acc){ //load inst
-      bool unvaildUser = false;
-      for (auto AU = Acc->use_begin(); AU != Acc->use_end(); ++AU){
-        auto *I = dyn_cast<Instruction>(AU->getUser());
-        unvaildUser = unvaildUser || !I || !isOnAllControlFlowPaths(I->getParent(), L, DT);
-      }
-      if (unvaildUser) continue; //skip this load it has users ouside of loop or not on all control flow paths
+    Instruction *Acc = dyn_cast<Instruction>(U->getUser());
+    if (!Acc) continue; //user is not an instruction
+    if (isa<LoadInst>(Acc) || isa<StoreInst>(Acc)){
+      if (!isOnAllControlFlowPaths(Acc->getParent(), L, DT)) continue; //access does not occur consistently in loop ==> not suitable
+      accesses.push_back(Acc);
     }
-    if (!Acc) Acc = dyn_cast<StoreInst>(U->getUser()); //try to cast to store
-    if (!Acc) continue; //both casts failed ==> not a suitable instruction
-    if (!isOnAllControlFlowPaths(Acc->getParent(), L, DT)) continue; //access does not occur consistently in loop ==> not suitable
-    accesses.push_back(Acc);
   }
   if (accesses.empty()) return; //Addr not used
 
   errs()<<"adding Access: "; Addr->dump();
-
-  const SCEV *AddrS = SE.getSCEV(Addr);
 
   //we are looking at containing loops of all the accesses (guaranteed to be all the same)
   //Addr ins might be outside of loop (licm) if 1D stride is 0
@@ -455,10 +495,10 @@ void AffineAccess::addAllAccesses(Instruction *Addr, const Loop *L){
 
   errs()<<"has "<<cloops.size()<<" containing loops\n";
 
-  auto &strides = findStrides(AddrS, cloops, SE);
+  auto &strides = findStrides(Addr, cloops, SE);
   auto Stride = strides.begin();
 
-  AffineAcc dim0(Addr, ArrayRef<Instruction *>(accesses), AddrS); //never needed -> alloc in stack
+  AffineAcc dim0(Addr, ArrayRef<Instruction *>(accesses), SE.getSCEV(Addr)); //never needed -> alloc in stack
   AffineAcc *A = &dim0;
 
   for (auto L = cloops.begin(); L != cloops.end(); ++L){
@@ -531,11 +571,11 @@ bool AffineAccess::conflictWWWR(const AffineAcc *A, const AffineAcc *B) const {
   // - all loads dominate all stores in the loop (ie. read before write)
   if ((nstA && !nstB) || (!nstA && nstB)){
     if (accessPatternsMatch(A, B)){
-      A = nstA ? A : B; //A is store
-      B = nstA ? B : A; //B is load
+      const AffineAcc *S = nstA ? A : B; //store
+      const AffineAcc *L = nstA ? B : A; //load
       bool check = true;
-      for (Instruction *IL : B->getAccesses()){
-        for (Instruction *IS : A->getAccesses()){
+      for (Instruction *IL : L->getAccesses()){
+        for (Instruction *IS : S->getAccesses()){
           check = check && DT.dominates(IL, IS);
         }
       }
@@ -557,25 +597,31 @@ const SCEV *AffineAccess::wellFormedLoopBTCount(const Loop *L) const {
   return P->getSecond();
 }
 
-Value *AffineAccess::expandData(const AffineAcc *aa, Type *ty) const {
-  Instruction *InsPoint = aa->L->getLoopPreheader()->getTerminator();
+Value *AffineAccess::expandData(const AffineAcc *aa, Type *ty, Instruction *InsertBefore) const {
+  InsertBefore = InsertBefore ? InsertBefore : aa->L->getLoopPreheader()->getTerminator();
+  assert(isSafeToExpandAt(aa->data, InsertBefore, SE) && "data not expanable here (note: only preheader guaranteed)");
   SCEVExpander ex(SE, aa->L->getHeader()->getModule()->getDataLayout(), "data");
-  ex.setInsertPoint(InsPoint);
-  return castToSize(ex.expandCodeFor(aa->data), ty, InsPoint);
+  ex.setInsertPoint(InsertBefore);
+  errs()<<"expandData: scev  "<<*aa->data<<" has type: "<<*aa->data->getType()<<"\n";
+  Value *data = ex.expandCodeFor(aa->data);
+  errs()<<"expandData: value "<<*data<<" has type: "<<*data->getType()<<"\n";
+  return castToSize(data, ty, InsertBefore);
 }
 
-Value *AffineAccess::expandBound(const AffineAcc *aa, unsigned i, Type *ty) const {
-  Instruction *InsPoint = aa->L->getLoopPreheader()->getTerminator();
+Value *AffineAccess::expandBound(const AffineAcc *aa, unsigned i, Type *ty, Instruction *InsertBefore) const {
+  InsertBefore = InsertBefore ? InsertBefore : aa->L->getLoopPreheader()->getTerminator();
+  assert(isSafeToExpandAt(aa->bounds[i], InsertBefore, SE) && "bound not expanable here (note: only preheader guaranteed)");
   SCEVExpander ex(SE, aa->L->getHeader()->getModule()->getDataLayout(), "bound");
-  ex.setInsertPoint(InsPoint);
-  return castToSize(ex.expandCodeFor(aa->bounds[i]), ty, InsPoint);
+  ex.setInsertPoint(InsertBefore);
+  return castToSize(ex.expandCodeFor(aa->bounds[i]), ty, InsertBefore);
 }
 
-Value *AffineAccess::expandStride(const AffineAcc *aa, unsigned i, Type *ty) const {
-  Instruction *InsPoint = aa->L->getLoopPreheader()->getTerminator();
+Value *AffineAccess::expandStride(const AffineAcc *aa, unsigned i, Type *ty, Instruction *InsertBefore) const {
+  InsertBefore = InsertBefore ? InsertBefore : aa->L->getLoopPreheader()->getTerminator();
+  assert(isSafeToExpandAt(aa->strides[i], InsertBefore, SE) && "bound not expanable here (note: only preheader guaranteed)");
   SCEVExpander ex(SE, aa->L->getHeader()->getModule()->getDataLayout(), "stride");
-  ex.setInsertPoint(InsPoint);
-  return castToSize(ex.expandCodeFor(aa->strides[i]), ty, InsPoint);
+  ex.setInsertPoint(InsertBefore);
+  return castToSize(ex.expandCodeFor(aa->strides[i]), ty, InsertBefore);
 }
 
 //================== Affine Acces Analysis ==================================================
@@ -608,6 +654,7 @@ AffineAccess AffineAccessAnalysis::run(Function &F, FunctionAnalysisManager &FAM
         }else{
           continue; //cannot do anything with this instruction
         }
+        errs()<<"run: "<<I<<"\n";
         Instruction *AddrIns;
         if (!(AddrIns = dyn_cast<Instruction>(Addr))) continue; //if Addr is not instruction ==> constant, or sth else (==> leave for other passes to opt)
         A->addAllAccesses(AddrIns, L);
@@ -780,4 +827,37 @@ errs()<<"finding stride in: "; CS->dump();
     }
     assert(Stride);
     errs()<<"found stride: "; Stride->dump();
+*/
+
+/*
+Optional<std::pair<const SCEV *, const SCEV *>> toSameSize(const SCEV *LHS, const SCEV *RHS, ScalarEvolution &SE, bool unsafe = false){
+  assert(LHS && RHS);
+  errs()<<"toSameSize: LHS="<<*LHS<<" with type"<<*LHS->getType()<<"\n";
+  errs()<<"toSameSize: RHS="<<*RHS<<" with type"<<*RHS->getType()<<"\n";
+  using PT = std::pair<const SCEV *, const SCEV *>;
+  if (LHS->getType() == RHS->getType()) return Optional<PT>(std::make_pair(LHS, RHS)); //trivially the same size
+  if (LHS->getType()->isPointerTy() && RHS->getType()->isPointerTy()) return Optional<PT>(std::make_pair(LHS, RHS));
+  if (!LHS->getType()->isSized() || !RHS->getType()->isSized()) return None;
+  //TODO: use datalayout for size instead
+  if (LHS->getType()->getIntegerBitWidth() > RHS->getType()->getIntegerBitWidth()) {
+    if (auto LHSx = dyn_cast<SCEVConstant>(LHS)){
+      if (LHSx->getAPInt().getActiveBits() <= RHS->getType()->getIntegerBitWidth()) {}
+        return Optional<PT>(std::make_pair(SE.getConstant(RHS->getType(), LHSx->getAPInt().getLimitedValue()), RHS));
+    } 
+    if (auto RHSx = dyn_cast<SCEVConstant>(RHS)){
+      if (RHSx->getAPInt().getActiveBits() <= LHS->getType()->getIntegerBitWidth())
+        return Optional<PT>(std::make_pair(LHS, SE.getConstant(LHS->getType(), RHSx->getAPInt().getLimitedValue())));
+    }
+    if (auto LHSx = dyn_cast<SCEVSignExtendExpr>(LHS)) return toSameSize(LHSx->getOperand(0), RHS, SE);
+    if (auto LHSx = dyn_cast<SCEVZeroExtendExpr>(LHS)) return toSameSize(LHSx->getOperand(0), RHS, SE);
+    if (auto RHSx = dyn_cast<SCEVTruncateExpr>(RHS)) return toSameSize(LHS, RHSx->getOperand(0), SE);
+    if (unsafe) return Optional<PT>(std::make_pair(SE.getTruncateExpr(LHS, RHS->getType()), RHS));
+    return None;
+  }else if (LHS->getType()->getIntegerBitWidth() < RHS->getType()->getIntegerBitWidth()){
+    auto p = toSameSize(RHS, LHS, SE, unsafe);
+    if (!p.hasValue()) return None;
+    return Optional<PT>(std::make_pair(p.getValue().second, p.getValue().first));
+  }
+  return Optional<PT>(std::make_pair(LHS, RHS));
+}
 */

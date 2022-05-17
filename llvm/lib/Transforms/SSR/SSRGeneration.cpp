@@ -51,7 +51,7 @@
 
 #define SSR_INFERENCE true
 
-#define NUM_SSR 3U
+#define NUM_SSR 3U //NOTE: if increased too much, might need to change 1st arguments to clobberRegisters(..)
 #define SSR_MAX_DIM 4U
 //both are inclusive! 
 #define SSR_SCRATCHPAD_BEGIN 0x100000
@@ -65,20 +65,20 @@ static cl::opt<bool> GenerateSSR("generate-ssr", cl::init(true), cl::Hidden);
 
 namespace{
 
-void clobberRegistersAt(ArrayRef<std::string> regs, Instruction *Before){
-  IRBuilder<> builder(Before);
+void clobberRegisters(ArrayRef<std::string> regs, IRBuilder<> &builder){
   //equivalent to asm volatile ("":::regs);
   std::string constraints = "~{dirflag},~{fpsr},~{flags}"; //TODO: what are these doing?
-  for (const std::string &r : regs){
-    constraints = (formatv("~{{{0}},", r) + Twine(constraints)).str();
+  for (const std::string r : regs){
+    constraints = "~{" + r + "}," + constraints; //(formatv("~{{{0}},", r) + Twine(constraints)).str()
   }
+  errs()<<constraints<<"\n";
   InlineAsm *IA = InlineAsm::get(
     FunctionType::get(Type::getVoidTy(builder.getContext()), false), 
     "", 
     constraints,
     true
   );
-  builder.CreateCall(IA)->dump();
+  builder.CreateCall(IA);
 }
 
 } //end of namespace
@@ -167,13 +167,16 @@ public:
     }
 
     unsigned n_reps = 0U;
+    std::string s = formatv("ft{0}", (unsigned)DMID->getValue().getLimitedValue());
+    ArrayRef<std::string> regs(s);
     if (isStore){
       Function *SSRPush = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_push);
       for (Instruction *I : Access->getAccesses()){
         std::array<Value *, 2> pusharg = {getDMID(), cast<StoreInst>(I)->getValueOperand()};
         builder.SetInsertPoint(I);
+        clobberRegisters(regs, builder);
         auto *C = builder.CreateCall(SSRPush->getFunctionType(), SSRPush, ArrayRef<Value *>(pusharg));
-        clobberRegistersAt(ArrayRef<std::string>(formatv("ft{0}", (unsigned)DMID->getValue().getLimitedValue(NUM_SSR))), C);
+        clobberRegisters(regs, builder);
         C->dump(); I->dump();
         I->eraseFromParent();
         n_reps++;
@@ -183,8 +186,9 @@ public:
       std::array<Value *, 1> poparg = {getDMID()};
       for (Instruction *I : Access->getAccesses()){
         builder.SetInsertPoint(I);
-        Instruction *V = builder.CreateCall(SSRPop->getFunctionType(), SSRPop, ArrayRef<Value *>(poparg), "ssr.pop");
-        clobberRegistersAt(ArrayRef<std::string>(formatv("ft{0}", (unsigned)DMID->getValue().getLimitedValue(NUM_SSR))), V);
+        clobberRegisters(regs, builder);
+        auto *V = builder.CreateCall(SSRPop->getFunctionType(), SSRPop, ArrayRef<Value *>(poparg), "ssr.pop");
+        clobberRegisters(regs, builder);
         V->dump(); I->dump();
         BasicBlock::iterator ii(I);
         ReplaceInstWithValue(I->getParent()->getInstList(), ii, V);
@@ -208,7 +212,7 @@ public:
     //NOTE: this starts the prefetching ==> always needs to be inserted AFTER bound/stride and repetition setups !!!
     builder.CreateCall(SSRSetup->getFunctionType(), SSRSetup, ArrayRef<Value *>(args))->dump(); 
 
-    //create an SSR barrior in exit block. TODO: needed esp. for write streams?
+    //create an SSR barrier in exit block. TODO: needed esp. for write streams?
     builder.SetInsertPoint(Access->getLoop()->getExitBlock()->getFirstNonPHI());
     Function *SSRBarrier = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_barrier);
     std::array<Value *, 1> barrargs = {getDMID()};
@@ -242,7 +246,7 @@ void copyPHIsFromPred(BasicBlock *BB){
 ///splits block, redirects all predecessor to first half of split, copies phi's
 std::pair<BasicBlock *, BasicBlock *> splitAt(Instruction *X, const Twine &name, DomTreeUpdater *DTU){
   BasicBlock *Two = X->getParent();
-  BasicBlock *One = splitBlockBefore(Two, X, DTU, nullptr, nullptr, name);
+  BasicBlock *One = splitBlockBefore(Two, X, nullptr, nullptr, nullptr, name);
   for (auto *BB : predecessors(Two)){
     if (BB == One) continue;
     Instruction *T = BB->getTerminator();
@@ -375,21 +379,19 @@ void generateSSREnDis(const Loop *L){
   Function *SSREnable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_enable);
   builder.CreateCall(SSREnable->getFunctionType(), SSREnable, ArrayRef<Value *>());
 
+  std::vector<std::string> regs;
+  for (unsigned r = 0u; r < NUM_SSR; r++){
+    regs.push_back(std::string(formatv("ft{0}", r)));
+  }
   //create inline asm that clobbers ft0-2 to make sure none of them are reordered to before ssr enable / after ssr disable
   //equivalent to asm volatile ("":::"ft0", "ft1", "ft2");
-  InlineAsm *IA = InlineAsm::get(
-    FunctionType::get(Type::getVoidTy(builder.getContext()), false), 
-    "", 
-    "~{ft0},~{ft1},~{ft2},~{dirflag},~{fpsr},~{flags}",
-    true
-  );
-  builder.CreateCall(IA);
+  clobberRegisters(ArrayRef<std::string>(regs), builder);
 
   //Function *FREPPragma = Intrinsic::getDeclaration(mod, Intrinsic::riscv_frep_infer);
   //builder.CreateCall(FREPPragma->getFunctionType(), FREPPragma, ArrayRef<Value *>());
 
   builder.SetInsertPoint(L->getExitBlock()->getTerminator()); // ----------- in exit block
-  builder.CreateCall(IA); //same here
+  clobberRegisters(ArrayRef<std::string>(regs), builder);
   Function *SSRDisable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_disable);
   builder.CreateCall(SSRDisable->getFunctionType(), SSRDisable, ArrayRef<Value *>());
 
@@ -411,7 +413,7 @@ Value *generateIntersectCheck(IRBuilder<> &builder, GenSSR *G, GenSSR *H){
   return builder.CreateOr(GhiLTHlo, HhiLTGlo, "or.memrange"); 
 }
 
-void generateSSRGuard(BranchInst *BR, ArrayRef<GenSSR *> streams){
+void generateSSRGuard(BranchInst *BR, ArrayRef<GenSSR *> streams, AffineAccess &AF){
   assert(BR->isConditional());
   if (streams.empty()) return;
   IRBuilder<> builder(BR);
@@ -421,12 +423,10 @@ void generateSSRGuard(BranchInst *BR, ArrayRef<GenSSR *> streams){
   }
   for (unsigned i = 0; i < streams.size(); i++){
     GenSSR *G = streams[i];
-    for (unsigned j = 0; j < streams.size(); j++){
-      if (G->Access->getNStore() > 0u){
-        GenSSR *H = streams[j];
-        if (j < i || (j > i && H->Access->getNStore() == 0u)){ //true if H is before G OR H is after G and a load
-          checks.push_back(generateIntersectCheck(builder, G, H));
-        }
+    for (unsigned j = 0; j < i; j++){
+      GenSSR *H = streams[j];
+      if (AF.conflictWWWR(G->Access, H->Access)){
+        generateIntersectCheck(builder, G, H);
       }
     }
   }
@@ -480,7 +480,11 @@ struct ConflictGraph{
     std::map<NodeT, Optional<unsigned>> &color = *(new std::map<NodeT, Optional<unsigned>>());
     std::vector<NodeT> accs;
     for (const auto &A : conflicts) accs.push_back(A.first);
-    auto isBetter = [](NodeT A, NodeT B){ return A->getDimension() > B->getDimension(); };
+    auto isBetter = [](NodeT A, NodeT B){ 
+      unsigned a = A->getLoop()->getLoopDepth() + 2 * A->getDimension() + (A->getNLoad() > 0u);
+      unsigned b = B->getLoop()->getLoopDepth() + 2 * B->getDimension() + (B->getNLoad() > 0u);
+      return a > b; 
+    };
     std::sort(accs.begin(), accs.end(), isBetter);
     for (const auto &A : accs){
       bool done = false;
@@ -586,7 +590,7 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
     auto p = ssrs.find(L);
     if (p != ssrs.end()){
       BranchInst *BR = cloneRegion(L->getLoopPreheader()->getTerminator(), &*L->getExitBlock()->getFirstInsertionPt(), DT, &DTU, &LI, &MSSAU);
-      generateSSRGuard(BR, ArrayRef<GenSSR *>(p->getSecond().begin(), p->getSecond().end())); //generate "SSR guard"
+      generateSSRGuard(BR, ArrayRef<GenSSR *>(p->getSecond().begin(), p->getSecond().end()), AF); //generate "SSR guard"
     }
   }
 
@@ -613,3 +617,18 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
   return PreservedAnalyses::none();
 }
 
+
+
+/*
+for (unsigned i = 0; i < streams.size(); i++){
+    GenSSR *G = streams[i];
+    for (unsigned j = 0; j < streams.size(); j++){
+      if (G->Access->getNStore() > 0u){
+        GenSSR *H = streams[j];
+        if (j < i || (j > i && H->Access->getNStore() == 0u)){ //true if H is before G OR H is after G and a load
+          checks.push_back(generateIntersectCheck(builder, G, H));
+        }
+      }
+    }
+  }
+*/

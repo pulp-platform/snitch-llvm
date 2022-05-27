@@ -53,6 +53,14 @@ unsigned AffineAcc::getDimension() const{
   return this->bounds.size();
 }
 
+unsigned AffineAcc::getUsedDimension() const{
+  unsigned d = 0u;
+  for (const SCEV *S : this->strides){
+    if (!isa<SCEVConstant>(S) || !cast<SCEVConstant>(S)->isZero()) d++; //only cound a dimension if its stride is non-zero
+  }
+  return d;
+}
+
 void AffineAcc::dump() const{
   errs()<<"Affine Access in Loop:\n";
   if (L) L->dump();
@@ -242,7 +250,7 @@ Optional<bool> predicatedICmpOutcome(ICmpInst *Cmp, const SCEV *Rep, ScalarEvolu
 }
 
 //conservative! 
-//because SCEVComparePredicate is not in this version of LLVM we have to do this manually ==> will not catch all cases
+//because SCEVComparePredicate is not in this version of LLVM we have to do this manually ==> will not catch all cases (FIXME)
 //predicate is that Rep > 0
 bool isOnAllPredicatedControlFlowPaths(BasicBlock *BB, const Loop *L, const DominatorTree &DT, const SCEV *Rep, ScalarEvolution &SE){
   if (isOnAllControlFlowPaths(BB, L, DT)) return true; //is on all paths anyway
@@ -321,7 +329,7 @@ void findStridesRec(const SCEV *Addr, ArrayRef<const Loop *> loops, SmallVector<
       bool occurs = false;
       for (const Loop *L : loops) occurs = occurs || AddRec->getLoop() == L; //loops needs to occur further up, o/w invalid
       if (!occurs) return;
-      res.push_back(SE.getConstant(APInt(64U, 0U)));
+      res.push_back(SE.getConstant(APInt(64U, 0U))); //TODO: this leads to ugly casts
       findStridesRec(AddRec, ArrayRef<const Loop *>(loops.begin()+1, loops.end()), factors, SE, res);
     }
     return;
@@ -335,7 +343,7 @@ void findStridesRec(const SCEV *Addr, ArrayRef<const Loop *> loops, SmallVector<
   case SCEVTypes::scAddExpr:
   {
     auto S = cast<SCEVAddExpr>(Addr);
-    bool lhs = SE.containsAddRecurrence(S->getOperand(0));
+    bool lhs = SE.containsAddRecurrence(S->getOperand(0)); //TODO: this does not catch all cases maybe limit SCEV to outermost loop?
     bool rhs = SE.containsAddRecurrence(S->getOperand(1));
     if (lhs && !rhs) findStridesRec(S->getOperand(0), loops, factors, SE, res);
     else if (!lhs && rhs) findStridesRec(S->getOperand(1), loops, factors, SE, res);
@@ -344,7 +352,7 @@ void findStridesRec(const SCEV *Addr, ArrayRef<const Loop *> loops, SmallVector<
   case SCEVTypes::scMulExpr:
   {
     auto S = cast<SCEVMulExpr>(Addr);
-    bool lhs = SE.containsAddRecurrence(S->getOperand(0));
+    bool lhs = SE.containsAddRecurrence(S->getOperand(0)); //TODO: this does not catch all cases maybe limit SCEV to outermost loop?
     bool rhs = SE.containsAddRecurrence(S->getOperand(1));
     if (lhs && !rhs) {
       factors.push_back(S->getOperand(1));
@@ -361,24 +369,26 @@ void findStridesRec(const SCEV *Addr, ArrayRef<const Loop *> loops, SmallVector<
   }
 }
 
-SmallVector<const SCEV *, 4U> &findStrides(const SCEV *Addr, ArrayRef<const Loop *> loops, ScalarEvolution &SE){
+SmallVector<const SCEV *, 4U> &findStrides(Instruction *Addr, ArrayRef<const Loop *> loops, ScalarEvolution &SE){
+  const SCEV *AddrS = SE.getSCEV(Addr); //SE.getSCEVAtScope(Addr, loops.back()); //we only look at the scev as contained in outermost loop
   SmallVector<const SCEV *, 4U> &strides = *(new SmallVector<const SCEV *, 4U>());
   SmallVector<const SCEV *, 2U> factors;
-  findStridesRec(Addr, loops, factors, SE, strides);
+  findStridesRec(AddrS, loops, factors, SE, strides);
   return strides;
 }
 
 Value *castToSize(Value *R, Type *ty, Instruction *InsPoint){
   const DataLayout &DL = InsPoint->getParent()->getModule()->getDataLayout();
+  IRBuilder<> builder(InsPoint);
   Type *rty = R->getType();
   if (rty == ty) return R;
   if (DL.getTypeSizeInBits(rty) > DL.getTypeSizeInBits(ty)) {
-    return CastInst::CreateTruncOrBitCast(R, ty, "scev.cast", InsPoint);
+    return builder.CreateTruncOrBitCast(R, ty, "scev.trunc");
   }
   if (DL.getTypeSizeInBits(rty) < DL.getTypeSizeInBits(ty)) {
-    return CastInst::CreateZExtOrBitCast(R, ty, "scev.cast", InsPoint);
+    return builder.CreateSExtOrBitCast(R, ty, "scev.sext");
   }
-  return CastInst::CreateBitOrPointerCast(R, ty, "scev.cast", InsPoint);
+  return builder.CreateBitOrPointerCast(R, ty, "scev.cast");
 }
 
 } //end of namespace
@@ -479,18 +489,16 @@ void AffineAccess::addAllAccesses(Instruction *Addr, const Loop *L){
 
   errs()<<"adding Access: "; Addr->dump();
 
-  const SCEV *AddrS = SE.getSCEV(Addr);
-
   //we are looking at containing loops of all the accesses (guaranteed to be all the same)
   //Addr ins might be outside of loop (licm) if 1D stride is 0
   auto &cloops = getContainingLoops(LI.getLoopsInPreorder(), accesses[0]); 
 
   errs()<<"has "<<cloops.size()<<" containing loops\n";
 
-  auto &strides = findStrides(AddrS, cloops, SE);
+  auto &strides = findStrides(Addr, cloops, SE);
   auto Stride = strides.begin();
 
-  AffineAcc dim0(Addr, ArrayRef<Instruction *>(accesses), AddrS); //never needed -> alloc in stack
+  AffineAcc dim0(Addr, ArrayRef<Instruction *>(accesses), SE.getSCEV(Addr)); //never needed -> alloc in stack
   AffineAcc *A = &dim0;
 
   for (auto L = cloops.begin(); L != cloops.end(); ++L){
@@ -533,8 +541,9 @@ ArrayRef<const AffineAcc *> AffineAccess::getAccesses() const{
 }
 
 bool AffineAccess::accessPatternsMatch(const AffineAcc *A, const AffineAcc *B) const {
-  if (!SCEVEquals(A->data, B->data, SE)) return false;
   if (A->getDimension() != B->getDimension()) return false;
+  if (A->getLoop() != B->getLoop()) return false;
+  if (!SCEVEquals(A->data, B->data, SE)) return false;
   for (unsigned i = 0; i < A->getDimension(); i++){
     if (!SCEVEquals(A->bounds[i], B->bounds[i], SE)) return false;
     if (!SCEVEquals(A->strides[i], B->strides[i], SE)) return false;
@@ -575,7 +584,7 @@ bool AffineAccess::conflictWWWR(const AffineAcc *A, const AffineAcc *B) const {
     }
   }
   
-  if (A->getLoop()->contains(B->getLoop()) || B->getLoop()->contains(A->getLoop())) return true;
+  if (A->getLoop() == B->getLoop() || A->getLoop()->contains(B->getLoop()) || B->getLoop()->contains(A->getLoop())) return true;
   return false;
 }
 
@@ -594,7 +603,10 @@ Value *AffineAccess::expandData(const AffineAcc *aa, Type *ty, Instruction *Inse
   assert(isSafeToExpandAt(aa->data, InsertBefore, SE) && "data not expanable here (note: only preheader guaranteed)");
   SCEVExpander ex(SE, aa->L->getHeader()->getModule()->getDataLayout(), "data");
   ex.setInsertPoint(InsertBefore);
-  return castToSize(ex.expandCodeFor(aa->data), ty, InsertBefore);
+  errs()<<"expandData: scev  "<<*aa->data<<" has type: "<<*aa->data->getType()<<"\n";
+  Value *data = ex.expandCodeFor(aa->data);
+  errs()<<"expandData: value "<<*data<<" has type: "<<*data->getType()<<"\n";
+  return castToSize(data, ty, InsertBefore);
 }
 
 Value *AffineAccess::expandBound(const AffineAcc *aa, unsigned i, Type *ty, Instruction *InsertBefore) const {

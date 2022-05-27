@@ -30,6 +30,7 @@ public:
   AffineAcc() = delete;
   void dump() const;
   unsigned getDimension() const;
+  unsigned getUsedDimension() const;
   const Loop *getLoop() const;
   Instruction *getAddrIns() const;
   const SmallVector<Instruction *, 2U> &getAccesses() const;

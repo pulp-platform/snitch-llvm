@@ -120,7 +120,7 @@ public:
       checks.push_back(builder.CreateICmpSGE(getBound(i), ConstantInt::get(Type::getInt32Ty(ExpandBefore->getContext()), 0U)));
     }
     Value *BaseInt = builder.CreatePtrToInt(getBase(), i64, "base.to.int");
-    MemBegin = BaseInt;
+    this->MemBegin = BaseInt;
     checks.push_back(builder.CreateICmpUGE(BaseInt, ConstantInt::get(i64, SSR_SCRATCHPAD_BEGIN), "scratchpad.begin.check"));
     Value *EndIncl = BaseInt;
     for (unsigned i = 0U; i < Access->getDimension(); i++){
@@ -129,7 +129,7 @@ public:
       Value *RangeExt = builder.CreateSExt(Range, i64, Twine("range.sext.").concat(dim));
       EndIncl = builder.CreateAdd(EndIncl, RangeExt, Twine("end.incl.").concat(dim));
     }
-    MemEnd = EndIncl;
+    this->MemEnd = EndIncl;
     checks.push_back(builder.CreateICmpULE(EndIncl, ConstantInt::get(i64, SSR_SCRATCHPAD_END), "scratchpad.end.check"));
     return builder.CreateAnd(ArrayRef<Value *>(checks));
   }
@@ -426,7 +426,7 @@ void generateSSRGuard(BranchInst *BR, ArrayRef<GenSSR *> streams, AffineAccess &
     for (unsigned j = 0; j < i; j++){
       GenSSR *H = streams[j];
       if (AF.conflictWWWR(G->Access, H->Access)){
-        generateIntersectCheck(builder, G, H);
+        checks.push_back(generateIntersectCheck(builder, G, H));
       }
     }
   }

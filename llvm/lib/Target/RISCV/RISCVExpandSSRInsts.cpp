@@ -515,19 +515,26 @@ void RISCVExpandSSR::mergePushPop(MachineBasicBlock &MBB) {
           }
         }else if(MI->getOperand(0).getReg() == ssr_reg){
           auto Op1 = MI->getOperand(1), Op2 = MI->getOperand(2);
+          //TODO: turns out the following condition is almost never true ==> use live-ness analysis instead of .isKill() ?
           if (Op1.isReg() && Op2.isReg() && Op1.getReg() == Op2.getReg() && Op1.isKill() && Op2.isKill()){ //because Op is kill will not be used later
             Register r = Op1.getReg();
             MachineOperand *O = nullptr;
-            bool done = false;
-            //find the single operand that defines this reg (no other users allowed in between)
-            for (auto MI2 = std::next(MI)/*this is prev*/; !done && MI2 != MBB.rend(); ++MI2){
-              for (auto Op = MI2->operands_begin(); Op != MI2->operands_end(); ++Op){
+            //find the most recent operand that sets this reg
+            for (auto MI2 = std::next(MI); !O && MI2 != MBB.rend(); ++MI2){
+              //FIXME: first operand is always dest operand right? otherwise require def (like below) or query llvm which operand is dest (how?)
+              if (MI2->getNumOperands() == 0u) continue;
+              MachineOperand *Op = &*MI2->operands_begin();
+              MI2->dump();
+              if (Op->isReg() && Op->getReg() == r){
+                O = Op;
+              }
+              /*for (auto Op = MI2->operands_begin(); Op != MI2->operands_end(); ++Op){
                 if (Op->isReg() && Op->getReg() == r){
                   done = true;
-                  if (Op->isDef()) O = &*Op;
+                  if (Op->isDef() || SKIP_DEF_CHECK) O = &*Op; 
                   break;
                 }
-              }
+              }*/
             }
             if (O){
               O->getParent()->dump();

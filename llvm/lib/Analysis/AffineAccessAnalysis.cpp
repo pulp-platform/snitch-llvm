@@ -541,8 +541,9 @@ ArrayRef<const AffineAcc *> AffineAccess::getAccesses() const{
 }
 
 bool AffineAccess::accessPatternsMatch(const AffineAcc *A, const AffineAcc *B) const {
-  if (!SCEVEquals(A->data, B->data, SE)) return false;
   if (A->getDimension() != B->getDimension()) return false;
+  if (A->getLoop() != B->getLoop()) return false;
+  if (!SCEVEquals(A->data, B->data, SE)) return false;
   for (unsigned i = 0; i < A->getDimension(); i++){
     if (!SCEVEquals(A->bounds[i], B->bounds[i], SE)) return false;
     if (!SCEVEquals(A->strides[i], B->strides[i], SE)) return false;
@@ -583,7 +584,7 @@ bool AffineAccess::conflictWWWR(const AffineAcc *A, const AffineAcc *B) const {
     }
   }
   
-  if (A->getLoop()->contains(B->getLoop()) || B->getLoop()->contains(A->getLoop())) return true;
+  if (A->getLoop() == B->getLoop() || A->getLoop()->contains(B->getLoop()) || B->getLoop()->contains(A->getLoop())) return true;
   return false;
 }
 

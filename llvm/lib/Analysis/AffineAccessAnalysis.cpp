@@ -22,9 +22,11 @@
 
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
+#include "llvm/Analysis/MemorySSA.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/AliasAnalysisEvaluator.h"
 #include "llvm/Analysis/AliasSetTracker.h"
+#include "llvm/Analysis/DependenceAnalysis.h"
 
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -33,7 +35,9 @@
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/TinyPtrVector.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/ilist.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/DenseMap.h"
 
 #include <array>
@@ -43,64 +47,6 @@
 
 using namespace llvm;
 
-AffineAcc::AffineAcc(Instruction *Addr, ArrayRef<Instruction *> accesses,
-    const SCEV *data) : data(data), Addr(Addr), L(nullptr){
-  for (Instruction *I : accesses) this->accesses.push_back(I);
-  return;
-}
-
-unsigned AffineAcc::getDimension() const{
-  return this->bounds.size();
-}
-
-unsigned AffineAcc::getUsedDimension() const{
-  unsigned d = 0u;
-  for (const SCEV *S : this->strides){
-    if (!isa<SCEVConstant>(S) || !cast<SCEVConstant>(S)->isZero()) d++; //only cound a dimension if its stride is non-zero
-  }
-  return d;
-}
-
-void AffineAcc::dump() const{
-  errs()<<"Affine Access in Loop:\n";
-  if (L) L->dump();
-  else errs()<<"nullptr\n";
-  errs()<<"With Addr instruction: "; Addr->dump();
-  errs()<<"And the following load/store instructions:\n";
-  for (Instruction *I : accesses){
-    I->dump();
-  }
-  errs()<<"data pointer: "; data->dump();
-  for (unsigned i = 0; i < this->getDimension(); i++){
-    errs()<<"dim "<<(i+1)<<" stride: "; strides[i]->dump();
-    errs()<<"dim "<<(i+1)<<" bound:  "; bounds[i]->dump();
-  }
-}
-
-Instruction *AffineAcc::getAddrIns() const{
-  return Addr;
-}
-
-const Loop *AffineAcc::getLoop() const{
-  return L;
-}
-
-const SmallVector<Instruction *, 2U> &AffineAcc::getAccesses() const{
-  return this->accesses;
-}
-
-unsigned AffineAcc::getNStore() const {
-  unsigned r = 0U;
-  for (Instruction *I : this->accesses) r += isa<StoreInst>(I);
-  return r;
-}
-
-unsigned AffineAcc::getNLoad() const {
-  unsigned r = 0U;
-  for (Instruction *I : this->accesses) r += isa<LoadInst>(I);
-  return r;
-}
-
 //================== AffineAcces, helper functions =========================================
 
 namespace {
@@ -109,22 +55,22 @@ namespace {
 /// L has 1 preheader and 1 dedicated exit
 /// L has 1 backedge and 1 exiting block
 /// bt SCEV can be expanded to instructions at insertionsPoint
-bool checkLoop(const Loop *L, DominatorTree &DT, ScalarEvolution &SE, Instruction *InsertionPoint){
-  if (!L->isLCSSAForm(DT)) { errs()<<"not LCSSA\n"; return false; }
-  if (!L->getLoopPreheader()) { errs()<<"no preheader\n"; return false; }
-  if (!L->getExitBlock()) { errs()<<"nr. exit blocks != 1\n"; return false; }
-  if (!L->hasDedicatedExits()) { errs()<<"exit is not dedicated\n"; return false; }
-  if (L->getNumBackEdges() != 1) { errs()<<"nr. back-edges != 1\n"; return false; }
-
+bool checkLoop(const Loop *L, DominatorTree &DT, ScalarEvolution &SE){
+  if (!L->isLCSSAForm(DT) 
+    || !L->getLoopPreheader() 
+    || !L->getExitingBlock() 
+    || !L->getExitBlock() 
+    || !L->hasDedicatedExits() 
+    || L->getNumBackEdges() != 1) { 
+    return false; 
+  }
   if (!SE.hasLoopInvariantBackedgeTakenCount(L)){
-    errs()<<"checkLoop: cannot calculate backedge taken count\n";
     return false;
   }
   const SCEV *bt = SE.getBackedgeTakenCount(L);
-  if(!isSafeToExpandAt(bt, InsertionPoint, SE) /*|| !SE->isAvailableAtLoopEntry(bt, L)*/){
-    errs()<<"cannot expand bt SCEV: "; bt->dump();
+  if(!isa<SCEVCouldNotCompute>(bt) || !SE.isAvailableAtLoopEntry(bt, L)){
+    return false;
   }
-  errs()<<"loop is well-formed: "; bt->dump();
   return true;
 }
 
@@ -291,92 +237,6 @@ bool isOnAllPredicatedControlFlowPaths(BasicBlock *BB, const Loop *L, const Domi
   return true;
 }
 
-/// get Loops containing Ins from innermost to outermost
-SmallVector<const Loop *, 3U> &getContainingLoops(ArrayRef<const Loop *> loopsPreorder, Instruction *Ins){
-  BasicBlock *BB = Ins->getParent();
-  SmallVector<const Loop *, 3U> *r = new SmallVector<const Loop *, 3U>();
-  for (auto L = loopsPreorder.rbegin(); L != loopsPreorder.rend(); ++L){ //go through loops in reverse order ==> innermost first
-    if ((*L)->contains(BB)){
-      r->push_back(*L);
-    }
-  }
-  return *r;
-}
-
-void findStridesRec(const SCEV *Addr, ArrayRef<const Loop *> loops, SmallVector<const SCEV *, 2U> &factors, ScalarEvolution &SE, SmallVector<const SCEV *, 4U> &res){
-  if (!res.empty()) { errs()<<"stride: "; res.back()->dump(); }
-  errs()<<"finding strides in "; Addr->dump();
-  if (loops.empty()) return;
-  errs()<<"loop header: "<<loops[0]->getHeader()->getNameOrAsOperand()<<"\n";
-  switch (Addr->getSCEVType())
-  {
-  case SCEVTypes::scAddRecExpr:
-  {
-    auto AddRec = cast<SCEVAddRecExpr>(Addr);
-    if (AddRec->getLoop() == *loops.begin()){
-      const SCEV *S = AddRec->getStepRecurrence(SE);
-      for (const SCEV *x : factors){
-        auto p = toSameType(S, x, SE, true);
-        if (!p.hasValue()) {
-          assert(false && "unsafe toSameType returned None!"); //TODO: change to errs()
-          return;
-        }
-        S = SE.getMulExpr(p.getValue().first, p.getValue().second);
-      }
-      res.push_back(S);
-      findStridesRec(AddRec->getStart(), ArrayRef<const Loop *>(loops.begin()+1, loops.end()), factors, SE, res);
-    }else{
-      bool occurs = false;
-      for (const Loop *L : loops) occurs = occurs || AddRec->getLoop() == L; //loops needs to occur further up, o/w invalid
-      if (!occurs) return;
-      res.push_back(SE.getConstant(APInt(64U, 0U))); //TODO: this leads to ugly casts
-      findStridesRec(AddRec, ArrayRef<const Loop *>(loops.begin()+1, loops.end()), factors, SE, res);
-    }
-    return;
-  }
-  //case SCEVTypes::scTruncate: TODO: is unsafe here, right?
-  case SCEVTypes::scSignExtend:
-  case SCEVTypes::scZeroExtend:
-    findStridesRec(cast<SCEVIntegralCastExpr>(Addr)->getOperand(0), loops, factors, SE, res);
-    return;
-
-  case SCEVTypes::scAddExpr:
-  {
-    auto S = cast<SCEVAddExpr>(Addr);
-    bool lhs = SE.containsAddRecurrence(S->getOperand(0)); //TODO: this does not catch all cases maybe limit SCEV to outermost loop?
-    bool rhs = SE.containsAddRecurrence(S->getOperand(1));
-    if (lhs && !rhs) findStridesRec(S->getOperand(0), loops, factors, SE, res);
-    else if (!lhs && rhs) findStridesRec(S->getOperand(1), loops, factors, SE, res);
-    return;
-  }
-  case SCEVTypes::scMulExpr:
-  {
-    auto S = cast<SCEVMulExpr>(Addr);
-    bool lhs = SE.containsAddRecurrence(S->getOperand(0)); //TODO: this does not catch all cases maybe limit SCEV to outermost loop?
-    bool rhs = SE.containsAddRecurrence(S->getOperand(1));
-    if (lhs && !rhs) {
-      factors.push_back(S->getOperand(1));
-      findStridesRec(S->getOperand(0), loops, factors, SE, res);
-    }else if (!lhs && rhs) {
-      factors.push_back(S->getOperand(0));
-      findStridesRec(S->getOperand(1), loops, factors, SE, res);
-    }
-    return;
-  }
-
-  default:
-    return;
-  }
-}
-
-SmallVector<const SCEV *, 4U> &findStrides(Instruction *Addr, ArrayRef<const Loop *> loops, ScalarEvolution &SE){
-  const SCEV *AddrS = SE.getSCEV(Addr); //SE.getSCEVAtScope(Addr, loops.back()); //we only look at the scev as contained in outermost loop
-  SmallVector<const SCEV *, 4U> &strides = *(new SmallVector<const SCEV *, 4U>());
-  SmallVector<const SCEV *, 2U> factors;
-  findStridesRec(AddrS, loops, factors, SE, strides);
-  return strides;
-}
-
 Value *castToSize(Value *R, Type *ty, Instruction *InsPoint){
   const DataLayout &DL = InsPoint->getParent()->getModule()->getDataLayout();
   IRBuilder<> builder(InsPoint);
@@ -393,239 +253,394 @@ Value *castToSize(Value *R, Type *ty, Instruction *InsPoint){
 
 } //end of namespace
 
-//================== AffineAcces, Result of Analysis =========================================
-AffineAccess::AffineAccess(ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI) : SE(SE), DT(DT), LI(LI){
-  auto loops = LI.getLoopsInPreorder();
-  unsigned l = 0u;
-  for (const Loop *L : loops){
-    L->dump();
+//==================  ===========================================================
 
-    if (!L->getLoopPreheader()) continue;
-    if (!checkLoop(L, DT, SE, L->getLoopPreheader()->getTerminator())) continue;
-
-    loopReps.insert(std::make_pair(L, SE.getBackedgeTakenCount(L))); l++;
-  }
-  errs()<<"FOUND "<<l<<" LOOPS\n";
-  return;
-}
-
-/// promotes a (potentially dim=0) AffineAcc to one more dimension 
-///  (1) parent loop L satisfies checkLoop
-///  (2) child loop (in particular all in aa.accesses) is on all paths in L where the inner bound + 1 > 0 
-///  (3) data ptr can be computed outside of parent loop
-///  (4) forall bd : aa.bounds. SE.isLoopInvariant(bd, L) && isSafeToExpandAt(bd, LPreheader->getTerminator(), SE)
-///  (5) forall st : aa.strides. SE.isLoopInvariant(st, L) && isSafeToExpandAt(st, LPreheader->getTerminator(), SE)
-///  (6) isSafeToExpandAt(Bound / Stride, LPreheader->getTerminator(), SE)
-AffineAcc *AffineAccess::promoteAccess(const AffineAcc &aa, const Loop *L, const SCEV *Stride){
-  assert(!aa.L || (aa.L && !aa.L->isInvalid()));
-  assert((!aa.L) || (aa.L && aa.L->getParentLoop() == L && "can only promote to parent loop")); //(1)
-  assert(this->loopReps.find(L) != this->loopReps.end() && "L is well formed"); //(1)
-
-  errs()<<"Trying to promote AA of dim="<<aa.getDimension()<<"\n";
-
-  if (aa.L){
-    const SCEV *Bd = loopReps.find(aa.L)->getSecond();
-    const SCEV *Rep = SE.getAddExpr(Bd, SE.getConstant(Bd->getType(), 1U));
-    if (!isOnAllPredicatedControlFlowPaths(aa.L->getHeader(), L, this->DT, Rep, this->SE)) return nullptr; //(2.1)
+// ==== LoopRep ====
+LoopRep::LoopRep(const Loop *L, ArrayRef<const Loop *> contLoops, ScalarEvolution &SE, DominatorTree &DT) 
+  : L(L), containingLoops(contLoops.begin(), contLoops.end()), SE(SE), DT(DT), safeExpandBound(0u)
+  {
+  if (checkLoop(L, DT, SE)){
+    const SCEV *R = SE.getBackedgeTakenCount(L);
+    RepSCEV = isa<SCEVCouldNotCompute>(R) ? nullptr : R;
   }else{
-    for (Instruction *I : aa.accesses){
-      if (!isOnAllControlFlowPaths(I->getParent(), L, DT)) return nullptr; //(2.2)
+    RepSCEV = nullptr;
+  }
+  
+  if (RepSCEV){
+    while (safeExpandBound < containingLoops.size() 
+      && isSafeToExpandAt(RepSCEV, containingLoops[safeExpandBound]->getLoopPreheader()->getTerminator(), SE)) 
+      safeExpandBound++;
+  }
+}
+
+bool LoopRep::isAvailable() const { return RepSCEV != nullptr; }
+
+const Loop *LoopRep::getLoop() const { return L; }
+
+const SCEV *LoopRep::getSCEV() const { 
+  assert(isAvailable() && "SCEV available"); //not necessary, but forces good practice
+  return RepSCEV; 
+}
+
+const SCEV *LoopRep::getSCEVPlusOne() const {
+  assert(isAvailable() && "SCEV available");
+  return SE.getAddExpr(getSCEV(), SE.getConstant(getSCEV()->getType(), 1UL));
+}
+
+bool LoopRep::isOnAllCFPathsOfParentIfExecuted() const { //FIXME: maybe cache this result once calculated?
+  assert(isAvailable() && "SCEV available");
+  return isOnAllPredicatedControlFlowPaths(L->getHeader(), L->getParentLoop(), DT, getSCEVPlusOne(), SE);
+}
+
+bool LoopRep::isSafeToExpandBefore(const Loop *L) const {
+  assert(isAvailable() && "SCEV available");
+  if (L == getLoop()) return true;
+  for (unsigned i = 0u; i < safeExpandBound; i++) { //FIXME: linear search -> use map instead
+    if (L == containingLoops[i]) return true;
+  }
+  return false;
+}
+
+Value *LoopRep::expandAt(Type *ty, Instruction *InsertBefore){
+  assert(ty);
+  if (Rep) { //FIXME: currently forces user to call first expand at a point that dominates all possible uses (improvement: could update expand point using DT)
+    assert(ty == Rep->getType() && "was already expanded with same type");
+    return Rep;
+  }
+  InsertBefore = InsertBefore ? InsertBefore : L->getLoopPreheader()->getTerminator();
+  assert(isSafeToExpandAt(RepSCEV, InsertBefore, SE) && "bound not expanable here");
+  SCEVExpander ex(SE, L->getHeader()->getModule()->getDataLayout(), "rep");
+  ex.setInsertPoint(InsertBefore);
+  return castToSize(ex.expandCodeFor(RepSCEV), ty, InsertBefore);
+}
+
+// ==== AffAcc ====
+AffAcc::AffAcc(ArrayRef<Instruction *> accesses, const SCEV *Addr, MemoryUseOrDef *MA, ArrayRef<const Loop *> contLoops, ScalarEvolution &SE) 
+  : accesses(accesses.begin(), accesses.end()), MA(MA), SE(SE)
+{
+  baseAddresses.push_back(Addr);
+  steps.push_back((const SCEV *)nullptr); //there is no step for dim=0
+  reps.push_back((LoopRep *)nullptr); //there is no rep for dim=0
+  containingLoops.push_back((const Loop *)nullptr); //there is no loop for dim=0
+  for (const Loop *L : contLoops) containingLoops.push_back(L);
+  findSteps(Addr, (const SCEV *)nullptr, 1u);
+  for (unsigned dim = 1; dim < containingLoops.size(); dim++){
+    baseAddresses.push_back(SE.SplitIntoInitAndPostInc(containingLoops[dim], Addr).first);
+  }
+}
+
+void AffAcc::findSteps(const SCEV *A, const SCEV *Factor, unsigned loop){
+  assert(baseAddresses.size() == 1 && reps.size() == 1 && "we only know dim=0 so far");
+  if (loop >= containingLoops.size() || !A) return;
+  switch (A->getSCEVType())
+  {
+  //case SCEVTypes::scZeroExtend: FIXME: this is unsafe, right?
+  case SCEVTypes::scSignExtend:
+  case SCEVTypes::scTruncate:
+    return findSteps(cast<SCEVCastExpr>(A)->getOperand(0), Factor, loop);
+  case SCEVTypes::scAddExpr: {
+    const SCEV *L = cast<SCEVAddExpr>(A)->getOperand(0);
+    const SCEV *R = cast<SCEVAddExpr>(A)->getOperand(1);
+    bool l = SE.containsAddRecurrence(L);
+    bool r = SE.containsAddRecurrence(R);
+    if (l && !r) return findSteps(L, Factor, loop);
+    else if(!l && r) return findSteps(R, Factor, loop);
+    return;
+  }
+  case SCEVTypes::scMulExpr: {
+    const SCEV *L = cast<SCEVMulExpr>(A)->getOperand(0);
+    const SCEV *R = cast<SCEVMulExpr>(A)->getOperand(1);
+    bool l = SE.containsAddRecurrence(L);
+    bool r = SE.containsAddRecurrence(R);
+    if (l == r) return;
+    if (!l && r) std::swap(L, R); 
+    assert(SE.containsAddRecurrence(L) && !SE.containsAddRecurrence(R));
+    if (Factor) {
+      auto p = toSameType(Factor, R, SE, true);
+      if (!p.hasValue()) return;
+      Factor = SE.getMulExpr(p.getValue().first, p.getValue().second);
+    }else Factor = R;
+    return findSteps(L, Factor, loop);
+  }
+  case SCEVTypes::scAddRecExpr: {
+    const auto *S = cast<SCEVAddRecExpr>(A);
+    const SCEV *Step;
+    if (S->getLoop() == containingLoops[loop]){
+      auto p = toSameType(Factor, S->getStepRecurrence(SE), SE, true);
+      if (!p.hasValue()) return;
+      Step = SE.getMulExpr(p.getValue().first, p.getValue().second);
+    }else{ //A is loop-invariant to containingLoops[loop]
+      bool occursLater = false; //loop needs to occur later 
+      for (unsigned i = loop+1; i < containingLoops.size(); i++) occursLater = occursLater || containingLoops[i] == S->getLoop();
+      if (!occursLater) return; 
+      Step = SE.getConstant(APInt(1u, 0UL, false));
+    }
+    steps.push_back(Step);
+    return findSteps(S->getStart(), Factor, loop+1);
+    
+  }
+  default:
+    return;
+  }
+}
+
+ArrayRef<Instruction *> AffAcc::getAccesses() const { return ArrayRef<Instruction *> (accesses.begin(), accesses.end()); }
+bool AffAcc::isWrite() const { return isa<MemoryDef>(MA); }
+unsigned AffAcc::getMaxDimension() const { return reps.size() - 1u; }
+bool AffAcc::isWellFormed(unsigned dimension) const { return dimension <= getMaxDimension() && baseAddresses[0]; }
+unsigned AffAcc::loopToDimension(const Loop *L) const {
+  assert(L);
+  for (unsigned d = 1u; d < containingLoops.size(); d++){ //FIXME: linear search -> improve with a map
+    if (containingLoops[d] == L) return d;
+  }
+  llvm_unreachable("The provided loop does not contain `this`!");
+}
+bool AffAcc::canExpandBefore(const Loop *L) const { return isWellFormed(loopToDimension(L)); }
+ConflictKind AffAcc::getConflictFor(const AffAcc *A, unsigned dimension) const { 
+  auto r = conflicts.find(A);
+  if (r == conflicts.end() || r->getSecond().first > dimension) return ConflictKind::None;
+  return r->getSecond().second;
+}
+ConflictKind AffAcc::getConflictInLoop(const AffAcc *A, const Loop *L) const {
+  return getConflictFor(A, loopToDimension(L) - 1u);
+}
+const SCEV *AffAcc::getBaseAddr(unsigned dim) const { assert(dim < baseAddresses.size()); return baseAddresses[dim]; }
+const SCEV *AffAcc::getStep(unsigned dim) const { assert(dim < steps.size()); return steps[dim]; }
+const SCEV *AffAcc::getRep(unsigned dim) const { assert(dim < reps.size()); return reps[dim]->getSCEV(); }
+const Loop *AffAcc::getLoop(unsigned dim) const { assert(dim < containingLoops.size()); return containingLoops[dim]; }
+void AffAcc::dump() const {
+  errs()<<"Affine Access of \n";
+  for (auto *I : accesses) errs()<<*I<<"\n";
+  for (unsigned dim = 0u; dim <= getMaxDimension(); dim++){
+    errs()<<"\tdim = "<<dim<<", step = "<<*getStep(dim)<<", rep = "<<*getRep(dim)<<"\n";
+    errs()<<"\taddress = "<<*getBaseAddr(dim)<<"\n";
+  }
+}
+
+MemoryAccess *AffAcc::getMemoryAccess() { return MA; }
+void AffAcc::addConflict(const AffAcc *A, unsigned startDimension, ConflictKind kind){
+  conflicts.insert(std::make_pair(A, std::make_pair(startDimension, kind)));
+}
+void AffAcc::addConflictInLoop(const AffAcc *A, const Loop *StartLoop, ConflictKind kind){
+  return addConflict(A, loopToDimension(StartLoop) - 1u, kind);
+}
+bool AffAcc::promote(LoopRep *LR){
+  unsigned newDim = getMaxDimension() + 1u;
+  if (getLoop(newDim) != LR->getLoop()) return false;
+  bool possible = true;
+  Instruction *Point = LR->getLoop()->getLoopPreheader()->getTerminator();
+  //check all current reps and steps
+  for (unsigned dim = 1u; possible && dim < newDim; dim++){ 
+    possible = possible && isSafeToExpandAt(getStep(dim), Point, SE);
+    possible = possible && reps[dim]->isSafeToExpandBefore(LR->getLoop());
+  }
+  //check rep and step of new dimension
+  possible &= steps.size() > newDim && isSafeToExpandAt(getStep(newDim), Point, SE);
+  possible &= LR->isSafeToExpandBefore(LR->getLoop());
+  //check base address
+  possible &= isSafeToExpandAt(getBaseAddr(newDim), Point, SE);
+  if (!possible) return false;
+
+  reps.push_back(LR); //changes getMaxDimension()
+  return true;
+}
+Value *AffAcc::expandBaseAddr(unsigned dimension, Type *ty, Instruction *InsertBefore){
+  assert(isWellFormed(dimension));
+  InsertBefore = InsertBefore ? InsertBefore : reps[dimension]->getLoop()->getLoopPreheader()->getTerminator();
+  assert(isSafeToExpandAt(getBaseAddr(dimension), InsertBefore, SE) && "data not expanable here (note: only preheader guaranteed)");
+  SCEVExpander ex(SE, reps[dimension]->getLoop()->getHeader()->getModule()->getDataLayout(), "addr");
+  ex.setInsertPoint(InsertBefore);
+  return castToSize(ex.expandCodeFor(getBaseAddr(dimension)), ty, InsertBefore);
+}
+Value *AffAcc::expandStep(unsigned dimension, Type *ty, Instruction *InsertBefore){
+  assert(isWellFormed(dimension) && dimension > 0u);
+  InsertBefore = InsertBefore ? InsertBefore : reps[dimension]->getLoop()->getLoopPreheader()->getTerminator();
+  assert(isSafeToExpandAt(getStep(dimension), InsertBefore, SE) && "data not expanable here (note: only preheader guaranteed)");
+  SCEVExpander ex(SE, reps[dimension]->getLoop()->getHeader()->getModule()->getDataLayout(), "addr");
+  ex.setInsertPoint(InsertBefore);
+  return castToSize(ex.expandCodeFor(getStep(dimension)), ty, InsertBefore);
+}
+Value *AffAcc::expandRep(unsigned dimension, Type *ty, Instruction *InsertBefore){
+  assert(isWellFormed(dimension) && dimension > 0u);
+  InsertBefore = InsertBefore ? InsertBefore : reps[dimension]->getLoop()->getLoopPreheader()->getTerminator();
+  assert(isSafeToExpandAt(getRep(dimension), InsertBefore, SE) && "data not expanable here (note: only preheader guaranteed)");
+  return reps[dimension]->expandAt(ty, InsertBefore);
+}
+
+//================== Affine Access ===========================================================
+
+AffineAccess::AffineAccess(Function &F, ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI, MemorySSA &MSSA, AAResults &AA) 
+  : SE(SE), DT(DT), LI(LI), MSSA(MSSA), AA(AA){
+  for (const Loop *L : LI.getTopLevelLoops()){
+    std::vector<const Loop *> p;
+    analyze(L, p);
+    assert(p.empty());
+  }
+
+}
+
+DenseSet<AffAcc *> AffineAccess::analyze(const Loop *Parent, std::vector<const Loop *> &loopPath){
+  LoopRep *ParentLR = new LoopRep(Parent, ArrayRef<const Loop *>(loopPath), SE, DT);
+  reps.insert(std::make_pair(Parent, ParentLR)); //add Parent to LoopReps
+  loopPath.push_back(Parent); //add Parent to path
+  expandableAccesses.insert(std::make_pair(Parent, SmallVector<AffAcc *, 4U>()));
+  DenseSet<AffAcc *> all;
+
+  for (const Loop *L : Parent->getSubLoops()){
+    DenseSet<AffAcc *> accs = analyze(L, loopPath);
+    LoopRep *LR = reps.find(L)->second; //guaranteed to exist, no check needed
+    if (LR->isAvailable() && LR->isOnAllCFPathsOfParentIfExecuted()){ //L is well-formed and on all CF-paths if its rep is >0 at run-time
+      for (AffAcc *A : accs){
+        all.insert(A);
+        if (ParentLR->isAvailable() && A->promote(ParentLR)){
+          expandableAccesses.find(Parent)->getSecond().push_back(A); //guaranteed to exist
+        }
+      }
     }
   }
 
-  errs()<<"passed (2), ";
-
-  const SCEV *Bound = this->loopReps.find(L)->getSecond();
-  Instruction *InsPoint = L->getLoopPreheader()->getTerminator();
-
-  if (!SE.hasComputableLoopEvolution(aa.data, L) && !SE.isLoopInvariant(aa.data, L)) return nullptr; //(3.1)
-  const SCEV *Data = SE.SplitIntoInitAndPostInc(L, aa.data).first;
-  if (!isSafeToExpandAt(Data, InsPoint, SE)) return nullptr;      //(3.2)
-
-  errs()<<"passed (3), ";
-
-  for (const SCEV *Bd : aa.bounds){
-    if (!(SE.isLoopInvariant(Bd, L) && isSafeToExpandAt(Bd, InsPoint, SE))) return nullptr; //(4)
-  }
-
-  errs()<<"passed (4), ";
-
-  for (const SCEV *Str : aa.strides){
-    if (!(SE.isLoopInvariant(Str, L) && isSafeToExpandAt(Str, InsPoint, SE))) return nullptr; //(5)
-  }
-
-  errs()<<"passed (5), ";
-
-  if (!isSafeToExpandAt(Bound, InsPoint, SE) || !isSafeToExpandAt(Stride, InsPoint, SE)) return nullptr; //(6)
-
-  errs()<<"passed (6)";
-
-  AffineAcc *A = new AffineAcc(aa);
-  A->data = Data;
-  A->L = L;
-  A->bounds.push_back(Bound);
-  A->strides.push_back(Stride);
-  return A;
-}
-
-/// adds all affine accesses that use Addr in loop L
-void AffineAccess::addAllAccesses(Instruction *Addr, const Loop *L){
-  if (addresses.find(Addr) != addresses.end()) return; //already called addAllAccesses on this Addr instruction
-  addresses.insert(Addr);
-
-  errs()<<"addAllAccesses: start: "<<*Addr<<"\n";
-
-  //find all accesses
-  std::vector<Instruction *> accesses;
-  for (auto U = Addr->use_begin(); U != Addr->use_end(); ++U){
-    Instruction *Acc = dyn_cast<Instruction>(U->getUser());
-    if (!Acc) continue; //user is not an instruction
-    if (isa<LoadInst>(Acc) || isa<StoreInst>(Acc)){
-      if (!isOnAllControlFlowPaths(Acc->getParent(), L, DT)) continue; //access does not occur consistently in loop ==> not suitable
-      accesses.push_back(Acc);
+  std::vector<AffAcc *> toAdd;
+  for (BasicBlock *BB : Parent->getBlocks()){
+    for (Instruction &I : *BB){
+      MemoryUseOrDef *MA = MSSA.getMemoryAccess(&I);
+      AffAcc *A;
+      if (MA && access.find(MA) == access.end()){ //no AffAcc for this memory access yet!
+        if (isa<LoadInst>(I)){
+          A = new AffAcc(ArrayRef<Instruction *>(&I), SE.getSCEV(cast<LoadInst>(I).getPointerOperand()), MA, ArrayRef<const Loop *>(loopPath), SE);
+        } else if (isa<StoreInst>(I)) {
+          A = new AffAcc(ArrayRef<Instruction *>(&I), SE.getSCEV(cast<StoreInst>(I).getPointerOperand()), MA, ArrayRef<const Loop *>(loopPath), SE);
+        } else {
+          //this is probably a call in the loop that modifies memory or sth like that
+          A = new AffAcc(ArrayRef<Instruction *>(&I), nullptr, MA, ArrayRef<const Loop *>(loopPath), SE);
+        }
+        access.insert(std::make_pair(MA, A));
+        toAdd.push_back(A);
+        if (ParentLR->isAvailable()){
+          bool onAllCFPaths = true;
+          for (Instruction *I : A->getAccesses()) onAllCFPaths &= isOnAllControlFlowPaths(I->getParent(), Parent, DT);
+          if (onAllCFPaths && A->promote(ParentLR)){
+            expandableAccesses.find(Parent)->getSecond().push_back(A); //guaranteed to exist
+          }
+        }
+      }
     }
   }
-  if (accesses.empty()) return; //Addr not used
 
-  errs()<<"adding Access: "; Addr->dump();
+  for (AffAcc *A : toAdd){
+    if (A->isWrite()) addConflictsForDef(A, Parent);
+    else addConflictsForUse(A, Parent);
+    all.insert(A);
+  }
 
-  //we are looking at containing loops of all the accesses (guaranteed to be all the same)
-  //Addr ins might be outside of loop (licm) if 1D stride is 0
-  auto &cloops = getContainingLoops(LI.getLoopsInPreorder(), accesses[0]); 
+  assert(loopPath.back() == Parent);
+  loopPath.pop_back(); //remove Parent again
+  
+  return std::move(all);
+}
 
-  errs()<<"has "<<cloops.size()<<" containing loops\n";
-
-  auto &strides = findStrides(Addr, cloops, SE);
-  auto Stride = strides.begin();
-
-  AffineAcc dim0(Addr, ArrayRef<Instruction *>(accesses), SE.getSCEV(Addr)); //never needed -> alloc in stack
-  AffineAcc *A = &dim0;
-
-  for (auto L = cloops.begin(); L != cloops.end(); ++L){
-    if (loopReps.find(*L) == loopReps.end()) break; //this loop is malformed ==> this and all more outer loops cannot be used
-    const SCEV *Str;
-    if (Stride != strides.end()) Str = *(Stride++);
-    else Str = SE.getConstant(IntegerType::getInt32Ty((*L)->getHeader()->getContext()), 0U); //if we run out of strides we can still promote with stride=0
-
-    A = promoteAccess(*A, *L, Str);
-    errs()<<"\n";
-    if (A){
-      errs()<<"found AffineAcc:\n"; A->dump();
-      this->accesses.push_back(A);
-    }else{
-      break; //did not manage to promote ==> cannot promote for loops further out
+///we can prefetch a use before the loop iff its MemoryUse only depends on MemoryDefs that dominate the loop
+///this adds conflicts between A and all MemoryDefs that stand in the way of that
+void AffineAccess::addConflictsForUse(AffAcc *A, const Loop *L){
+  Value *AAddr = getAddress(A->getAccesses()[0]);
+  auto *W = MSSA.getSkipSelfWalker();
+  std::deque<MemoryAccess *> worklist;
+  worklist.push_back(W->getClobberingMemoryAccess(A->getMemoryAccess()));
+  while (!worklist.empty()){
+    MemoryAccess *C = worklist.front(); worklist.pop_front();
+    if (!C) continue;
+    if (isa<MemoryDef>(C)){
+      MemoryDef *MA = cast<MemoryDef>(C);
+      Value *MAAddr = getAddress(MA->getMemoryInst());
+      if (L->contains(cast<MemoryDef>(MA)->getMemoryInst()) && (!AAddr || !MAAddr || AA.alias(AAddr, MAAddr))) { //we have a conflict inside loop
+        auto p = access.find(cast<MemoryUseOrDef>(MA));
+        assert(p != access.end() && "by this point all accesses in L should have an AffAcc!");
+        AffAcc *O = p->second;
+        //FIXME: should only consider cf-paths where the reps are > 0?
+        if (!A->isWellFormed(A->loopToDimension(L)) || !O->isWellFormed(O->loopToDimension(L))){
+          addConflict(A, O, L, ConflictKind::Bad); //not well formed ==> cannot generate intersection checks
+        }else if (!MSSA.dominates(A->getMemoryAccess(), MA)){ //O might happen before A! 
+          addConflict(A, O, L, ConflictKind::MustNotIntersect); //RaW
+        } else { //A always happens before O
+          bool sameBaseAddrSCEV = SCEVEquals(A->getBaseAddr(A->loopToDimension(L)), O->getBaseAddr(O->loopToDimension(L)), SE);
+          if (accessPatternsMatch(A, O, L)){ 
+            if (!sameBaseAddrSCEV){
+              //TODO: use baseAddrSCEV to catch cases where they are for sure not the same
+              addConflict(A, O, L, ConflictKind::MustBeSame); //WaR
+            }
+          } else {
+            //if (sameBaseAddrSCEV) addConflict(A, O, L, ConflictKind::Bad); // this might not hold but might be useful 
+            addConflict(A, O, L, ConflictKind::MustNotIntersect); //WaR
+          }
+        }
+        worklist.push_back(W->getClobberingMemoryAccess(C));
+        //aliasing is transitive and once an memory def is before loop it will not depend on other defs inside loop
+        //so we only add more defs inside the `if`
+      }
+    } else if (isa<MemoryPhi>(C)){
+      MemoryPhi *P = cast<MemoryPhi>(C);
+      for (unsigned i = 0u; i < P->getNumOperands(); i++){
+        worklist.push_back(P->getOperand(i)); //this adds MemoryDefs that do not alias, but will be be removed when pop-ed
+      }
     }
   }
-  errs()<<"we now have "<<this->accesses.size()<<" affine accesses\n";
-  return;
 }
 
-std::pair<const AffineAcc *, const AffineAcc *> AffineAccess::splitLoadStore(const AffineAcc *Acc) const{
-  unsigned nLoad = Acc->getNLoad(), nStore = Acc->getNStore();
-  if (nLoad > 0U && nStore == 0U) return std::make_pair(Acc, nullptr);
-  if (nLoad == 0U && nStore > 0U) return std::make_pair(nullptr, Acc);
-  AffineAcc *L = new AffineAcc(*Acc); //copy
-  AffineAcc *S = new AffineAcc(*Acc); //copy
-  L->accesses.clear();
-  S->accesses.clear();
-  for (Instruction *I : Acc->getAccesses()){
-    if (isa<LoadInst>(I)) L->accesses.push_back(I);
-    else if(isa<StoreInst>(I)) S->accesses.push_back(I);
+//we can delay a store up to after the loop if it is not redefined or used in the loop anymore
+void AffineAccess::addConflictsForDef(AffAcc *A, const Loop *L){
+  
+}
+
+void AffineAccess::addConflict(AffAcc *A, AffAcc *B, const Loop *L, ConflictKind kind){
+  if (!A->canExpandBefore(L) || !B->canExpandBefore(L)) {
+    kind = ConflictKind::Bad;
   }
-  return std::make_pair(L, S);
+  A->addConflictInLoop(B, L, kind);
+  B->addConflictInLoop(A, L, kind);
 }
 
-ArrayRef<const AffineAcc *> AffineAccess::getAccesses() const{
-  ArrayRef<const AffineAcc *> *ar = new ArrayRef<const AffineAcc *>(accesses.begin(), accesses.end());
-  return *ar; 
-}
-
-bool AffineAccess::accessPatternsMatch(const AffineAcc *A, const AffineAcc *B) const {
-  if (A->getDimension() != B->getDimension()) return false;
-  if (A->getLoop() != B->getLoop()) return false;
-  if (!SCEVEquals(A->data, B->data, SE)) return false;
-  for (unsigned i = 0; i < A->getDimension(); i++){
-    if (!SCEVEquals(A->bounds[i], B->bounds[i], SE)) return false;
-    if (!SCEVEquals(A->strides[i], B->strides[i], SE)) return false;
+bool AffineAccess::accessPatternsMatch(const AffAcc *A, const AffAcc *B, const Loop *L) const {
+  unsigned dimA = A->loopToDimension(L);
+  unsigned dimB = B->loopToDimension(L);
+  if (dimA != dimB) return false;
+  for (unsigned i = 1u; i <= dimA; i++){
+    if (A->getLoop(i) != B->getLoop(i)) return false;
+    if (!SCEVEquals(A->getRep(i), B->getRep(i), SE)) return false;
+    if (!SCEVEquals(A->getStep(i), B->getStep(i), SE)) return false;
   }
   return true;
 }
 
-bool AffineAccess::shareInsts(const AffineAcc *A, const AffineAcc *B) const{
-  for (Instruction *IA : A->getAccesses()){
-    for (Instruction *IB : B->getAccesses()){
-      if (IA == IB) return true;
-    }
-  }
-  return false;
+ScalarEvolution &AffineAccess::getSE() const { return this->SE; }
+
+DominatorTree &AffineAccess::getDT()const { return this->DT; }
+
+LoopInfo &AffineAccess::getLI() const { return this->LI; }
+
+MemorySSA &AffineAccess::getMSSA() const { return this->MSSA; }
+
+AAResults &AffineAccess::getAA() const { return this->AA; }
+
+ArrayRef<const Loop *> AffineAccess::getLoopsInPreorder() const { return this->LI.getLoopsInPreorder(); }
+
+Value *AffineAccess::getAddress(Instruction *I) {
+  if (auto *L = dyn_cast<LoadInst>(I)) return L->getPointerOperand();
+  if (auto *S = dyn_cast<StoreInst>(I)) return S->getPointerOperand();
+  return nullptr;
 }
 
-bool AffineAccess::conflictWWWR(const AffineAcc *A, const AffineAcc *B) const {
-  assert(!shareInsts(A, B) && "these AffineAcc's share instructions ==> one of them should be filtered");
-  unsigned nstA = A->getNStore(), nstB = B->getNStore();
-  if (nstA == 0U && nstB == 0U) return false; //can intersect read streams
-  //at this point at least one of them is store
-
-  //special case: no conflict, if
-  // - exactly one of them is a store
-  // - they have the same access pattern (AffineAccessAnalysis::accessPatternsMatch)
-  // - all loads dominate all stores in the loop (ie. read before write)
-  if ((nstA && !nstB) || (!nstA && nstB)){
-    if (accessPatternsMatch(A, B)){
-      const AffineAcc *S = nstA ? A : B; //store
-      const AffineAcc *L = nstA ? B : A; //load
-      bool check = true;
-      for (Instruction *IL : L->getAccesses()){
-        for (Instruction *IS : S->getAccesses()){
-          check = check && DT.dominates(IL, IS);
-        }
-      }
-      if (check) return false;
-    }
-  }
-  
-  if (A->getLoop() == B->getLoop() || A->getLoop()->contains(B->getLoop()) || B->getLoop()->contains(A->getLoop())) return true;
-  return false;
+ArrayRef<const AffAcc *> AffineAccess::getExpandableAccesses(const Loop *L) const {
+  return ArrayRef<const AffAcc *>(expandableAccesses.find(L)->getSecond());
 }
 
-bool AffineAccess::shareLoops(const AffineAcc *A, const AffineAcc *B) const {
-  return A->getLoop() == B->getLoop() || A->getLoop()->contains(B->getLoop()) || B->getLoop()->contains(A->getLoop());
+const AffAcc *AffineAccess::getAccess(Instruction *I) const {
+  MemoryUseOrDef *MA = MSSA.getMemoryAccess(I);
+  if (!MA) return nullptr;
+  auto p = access.find(MA);
+  if (p == access.end()) return nullptr;
+  return p->second;
 }
 
-const SCEV *AffineAccess::wellFormedLoopBTCount(const Loop *L) const {
-  auto P = loopReps.find(L);
-  if (P == loopReps.end()) return nullptr; //loop not well-formed;
-  return P->getSecond();
-}
-
-Value *AffineAccess::expandData(const AffineAcc *aa, Type *ty, Instruction *InsertBefore) const {
-  InsertBefore = InsertBefore ? InsertBefore : aa->L->getLoopPreheader()->getTerminator();
-  assert(isSafeToExpandAt(aa->data, InsertBefore, SE) && "data not expanable here (note: only preheader guaranteed)");
-  SCEVExpander ex(SE, aa->L->getHeader()->getModule()->getDataLayout(), "data");
-  ex.setInsertPoint(InsertBefore);
-  errs()<<"expandData: scev  "<<*aa->data<<" has type: "<<*aa->data->getType()<<"\n";
-  Value *data = ex.expandCodeFor(aa->data);
-  errs()<<"expandData: value "<<*data<<" has type: "<<*data->getType()<<"\n";
-  return castToSize(data, ty, InsertBefore);
-}
-
-Value *AffineAccess::expandBound(const AffineAcc *aa, unsigned i, Type *ty, Instruction *InsertBefore) const {
-  InsertBefore = InsertBefore ? InsertBefore : aa->L->getLoopPreheader()->getTerminator();
-  assert(isSafeToExpandAt(aa->bounds[i], InsertBefore, SE) && "bound not expanable here (note: only preheader guaranteed)");
-  SCEVExpander ex(SE, aa->L->getHeader()->getModule()->getDataLayout(), "bound");
-  ex.setInsertPoint(InsertBefore);
-  return castToSize(ex.expandCodeFor(aa->bounds[i]), ty, InsertBefore);
-}
-
-Value *AffineAccess::expandStride(const AffineAcc *aa, unsigned i, Type *ty, Instruction *InsertBefore) const {
-  InsertBefore = InsertBefore ? InsertBefore : aa->L->getLoopPreheader()->getTerminator();
-  assert(isSafeToExpandAt(aa->strides[i], InsertBefore, SE) && "bound not expanable here (note: only preheader guaranteed)");
-  SCEVExpander ex(SE, aa->L->getHeader()->getModule()->getDataLayout(), "stride");
-  ex.setInsertPoint(InsertBefore);
-  return castToSize(ex.expandCodeFor(aa->strides[i]), ty, InsertBefore);
-}
-
-//================== Affine Acces Analysis ==================================================
+//================== Affine Access Analysis ==================================================
 
 AnalysisKey AffineAccessAnalysis::Key;
 
@@ -636,229 +651,22 @@ AffineAccess AffineAccessAnalysis::run(Function &F, FunctionAnalysisManager &FAM
   LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
   DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
   ScalarEvolution &SE = FAM.getResult<ScalarEvolutionAnalysis>(F);
-  //AAResults &AA = FAM.getResult<AAManager>(F);
-
-  AffineAccess *A = new AffineAccess(SE, DT, LI);
-
-  for (const Loop *L : LI.getLoopsInPreorder()){
-    assert(L);
-    assert(!L->isInvalid());
-    if (!A->wellFormedLoopBTCount(L)) continue; //loop not well-formed
-    for (BasicBlock *BB : L->getBlocks()){
-      if (!isOnAllControlFlowPaths(BB, L, DT)) continue;
-      for (Instruction &I : *BB){
-        Value *Addr;
-        if (LoadInst *Load = dyn_cast<LoadInst>(&I)){
-          Addr = Load->getPointerOperand();
-        }else if (StoreInst *Store = dyn_cast<StoreInst>(&I)){
-          Addr = Store->getPointerOperand();
-        }else{
-          continue; //cannot do anything with this instruction
-        }
-        errs()<<"run: "<<I<<"\n";
-        Instruction *AddrIns;
-        if (!(AddrIns = dyn_cast<Instruction>(Addr))) continue; //if Addr is not instruction ==> constant, or sth else (==> leave for other passes to opt)
-        A->addAllAccesses(AddrIns, L);
-      }
-    }
-  }
-
-  return std::move(*A);
+  auto &MSSAA = FAM.getResult<MemorySSAAnalysis>(F);
+  MemorySSA &MSSA = MSSAA.getMSSA();
+  AAResults &AA = FAM.getResult<AAManager>(F);
+  //DependenceInfo &DI = FAM.getResult<DependenceAnalysis>(F);
+  
+  return AffineAccess(F, SE, DT, LI, MSSA, AA);
 }
 
 //================== Affine Acces Analysis Pass for opt =======================================
 PreservedAnalyses AffineAccessAnalysisPass::run(Function &F, FunctionAnalysisManager &FAM) {
   AffineAccess AA = FAM.getResult<AffineAccessAnalysis>(F);
-  for (const auto *A : AA.getAccesses()){
-    A->dump();
+  for (const Loop *L : AA.getLI().getLoopsInPreorder()){
+    L->dump();
+    for (const AffAcc *A : AA.getAccesses(L)){
+      A->dump();
+    }
   }
   return PreservedAnalyses::all();
 }
-
-
-/*
-/// Fold over AddrSCEV
-/// All AddRecSCEVs are dependent on L or loops contained in L (TODO: and on all paths?)
-/// All steps in ADDRecSCEVs can be calculated in preheader of L
-bool canFindStrides(ScalarEvolution &SE, const ArrayRef<const Loop *> &loops, const SCEV *AddrSCEV, const SCEV *SetupAddrSCEV){
-  errs()<<"finding strides in: "; AddrSCEV->dump();
-  if (SCEVEquals(AddrSCEV, SetupAddrSCEV, SE)) return true;
-  
-  if (loops.empty()) { errs()<<"not enough loops\n"; return false; } //need at least one more loop here for SCEVAddRecvExpr
-
-  if (const auto *AR = dyn_cast<SCEVAddRecExpr>(AddrSCEV)){
-    auto L = loops.begin();
-    while (L != loops.end() && AR->getLoop() != *L) ++L; //do header comparison instead?
-    if (L == loops.end()) { errs()<<"loops of addRecExpr not found\n"; return false; }
-
-    const SCEV *Stride = AR->getStepRecurrence(SE);
-    const SCEV *Rest = AR->getStart();
-    if (isSafeToExpandAt(Stride, (*L)->getLoopPreheader()->getTerminator(), SE)) { //if we can expand stride at loop entry
-      errs()<<"can expand stride: "; Stride->dump();
-      return canFindStrides(SE, ArrayRef<const Loop *>(++L, loops.end()), Rest, SetupAddrSCEV); //check Rest recursively
-    }
-  }
-  return false;
-}
-*/
-
-/*
-/// can promote if: 
-  (1) parent loop Outer satisfies checkLoop
-  (2) child loop Inner is on all paths in Outer where Inner.backedgetakencount +1 > 0
-  (3) Stride for Outer can be found
-  (4) forall bd : aa.bounds. SE.isLoopInvariant(bd, Outer) && isSafeToExpandAt(bd, OuterPreheader->getTerminator(), SE)
-  (5) forall st : aa.strides. SE.isLoopInvariant(st, Outer) && isSafeToExpandAt(st, OuterPreheader->getTerminator(), SE)
-bool promoteAffineAccess(AffineAcc &aa, ScalarEvolution &SE, DominatorTree &DT, DenseMap<const Loop *, const SCEV *> &LR){
-  const Loop *Inner = aa.getLoop();
-  const Loop *Outer = Inner->getParentLoop();
-  const auto &R = LR.find_as(Outer); 
-  if (R == LR.end()) return false; //Outer violates (1)
-  const SCEV *Bound = R->getSecond();
-  BasicBlock *OuterPreheader = Outer->getLoopPreheader();
-  BasicBlock *InnerPreheader = Inner->getLoopPreheader();
-  const SCEV *Rep = SE.getAddExpr(SE.getBackedgeTakenCount(Inner), SE.getConstant(APInt(64U, 1U))); //trip count of Inner loop
-  if (!isOnAllPredicatedControlFlowPaths(InnerPreheader, Outer, DT, Rep, SE)) return false;  //violates (2)
-  
-}
-*/
-
-/*
-AffineAccess &runOnFunction(Function &F, LoopInfo &LI, DominatorTree &DT, ScalarEvolution &SE, AAResults &AA){
-  AffineAccess *aa = new AffineAccess(SE, DT, LI);
-
-  auto loops = LI.getLoopsInPreorder();
-  errs()<<"contains "<<loops.size()<<" loops\n";
-
-  //loops contained in this are guatanteed to have passed checkLoop
-  DenseMap<const Loop *, const SCEV *> loopReps;
-
-  for (const Loop *L : loops){
-    errs()<<"LOOP:\n";
-    L->dump();
-
-    if (!L->getLoopPreheader()) continue;
-    if (!checkLoop(L, DT, SE, L->getLoopPreheader()->getTerminator())) continue;
-
-    loopReps.insert(std::make_pair(L, SE.getBackedgeTakenCount(L)));
-
-    for (const auto &BB : L->getBlocks()){
-      
-      if (!isOnAllControlFlowPaths(BB, L, DT)) continue;
-
-      for (auto &I : *BB){
-        Value *Addr;
-        if (LoadInst *Load = dyn_cast<LoadInst>(&I)){
-          Addr = Load->getPointerOperand();
-        }else if (StoreInst *Store = dyn_cast<StoreInst>(&I)){
-          Addr = Store->getPointerOperand();
-        }else{
-          continue; //cannot do anything with this instruction
-        }
-        Instruction *AddrIns;
-        if (!(AddrIns = dyn_cast<Instruction>(Addr))) continue; //if Addr is not instruction ==> constant, or sth else (==> leave for other passes to opt)
-        errs()<<"looking at: "; AddrIns->dump();
-
-        aa->addAllAccesses(AddrIns);
-
-        //Address SCEV
-        const SCEV *AddrSCEV = SE.getSCEV(Addr);
-        if (!SE.hasComputableLoopEvolution(AddrSCEV, L)) continue;
-        errs()<<"has computable loop evolution: "; AddrSCEV->dump();
-
-        //Base Pointer (=data) SCEV
-        auto split = SE.SplitIntoInitAndPostInc(L, AddrSCEV);
-        const SCEV *SetupAddrSCEV = split.first; //const SCEV *PostIncSCEV = split.second;
-        if (!isSafeToExpandAt(SetupAddrSCEV, L->getLoopPreheader()->getTerminator(), SE)) continue;
-        errs()<<"can expand setup addr scev in preheader: "; SetupAddrSCEV->dump();
-        
-        //Stride Check
-        if (!canFindStride(L, AddrSCEV, SetupAddrSCEV, SE)) continue;
-        errs()<<"can find loop Stride: "; AddrSCEV->dump();
-
-        std::vector<Instruction *> accesses;
-        for (auto U = Addr->use_begin(); U != Addr->use_end(); ++U){
-          Instruction *Acc = dyn_cast<LoadInst>(U->getUser());
-          if (!Acc) Acc = dyn_cast<StoreInst>(U->getUser());
-          
-          if (!Acc) continue; //both casts failed ==> not a suitable instruction
-          if (!isOnAllControlFlowPaths(Acc->getParent(), L, DT)) continue; //access does not occur consitently in loop ==> not suitable
-
-          accesses.push_back(Acc);
-        }
-
-        const SCEV *TC = loopReps.find(L)->getSecond();
-        const auto *AddrRecSCEV = cast<SCEVAddRecExpr>(AddrSCEV);
-        const SCEV *Str;
-        if (AddrRecSCEV->getLoop() == L){
-          Str = cast<SCEVAddRecExpr>(AddrSCEV)->getStepRecurrence(SE); //because 1D for now
-        }else{
-          Str = SE.getConstant(APInt(64U, 0U));
-        }
-
-        aa->addAccess(new AffineAcc(L, AddrIns, ArrayRef<Instruction *>(accesses), SetupAddrSCEV, TC, Str));
-        errs()<<"added new AffineAcc\n";
-
-        //TODO: dimension promotion: if preheader has only one predecessor -> if cond for "skipping loop" is bt+1 == 0 -> if parent loop passes checks -> promote
-      }
-    }
-
-  }
-  
-  return *aa;
-}
-
-*/
-
-/*
-errs()<<"finding stride in: "; CS->dump();
-    const SCEV *Stride;
-    if (const auto *Rec = dyn_cast<SCEVAddRecExpr>(CS)){
-      if (Rec->getLoop() == *L) {
-        CS = Rec->getStart();
-        Stride = Rec->getStepRecurrence(SE);
-      }else{
-        bool occurs = false;
-        for (auto L_ = L; L_ != cloops.end(); ++L_) occurs = occurs && Rec->getLoop() == *L_;
-        if (!occurs) break; //AddRecExpr references a loop that is not a containing loop ==> cannot guarantee anything
-        Stride = SE.getConstant(APInt(64U, 0U)); //addrSCEV does not step in this loop ==> stride is 0
-      }
-    }else{
-      break; //did not manage to compute stride
-    }
-    assert(Stride);
-    errs()<<"found stride: "; Stride->dump();
-*/
-
-/*
-Optional<std::pair<const SCEV *, const SCEV *>> toSameSize(const SCEV *LHS, const SCEV *RHS, ScalarEvolution &SE, bool unsafe = false){
-  assert(LHS && RHS);
-  errs()<<"toSameSize: LHS="<<*LHS<<" with type"<<*LHS->getType()<<"\n";
-  errs()<<"toSameSize: RHS="<<*RHS<<" with type"<<*RHS->getType()<<"\n";
-  using PT = std::pair<const SCEV *, const SCEV *>;
-  if (LHS->getType() == RHS->getType()) return Optional<PT>(std::make_pair(LHS, RHS)); //trivially the same size
-  if (LHS->getType()->isPointerTy() && RHS->getType()->isPointerTy()) return Optional<PT>(std::make_pair(LHS, RHS));
-  if (!LHS->getType()->isSized() || !RHS->getType()->isSized()) return None;
-  //TODO: use datalayout for size instead
-  if (LHS->getType()->getIntegerBitWidth() > RHS->getType()->getIntegerBitWidth()) {
-    if (auto LHSx = dyn_cast<SCEVConstant>(LHS)){
-      if (LHSx->getAPInt().getActiveBits() <= RHS->getType()->getIntegerBitWidth()) {}
-        return Optional<PT>(std::make_pair(SE.getConstant(RHS->getType(), LHSx->getAPInt().getLimitedValue()), RHS));
-    } 
-    if (auto RHSx = dyn_cast<SCEVConstant>(RHS)){
-      if (RHSx->getAPInt().getActiveBits() <= LHS->getType()->getIntegerBitWidth())
-        return Optional<PT>(std::make_pair(LHS, SE.getConstant(LHS->getType(), RHSx->getAPInt().getLimitedValue())));
-    }
-    if (auto LHSx = dyn_cast<SCEVSignExtendExpr>(LHS)) return toSameSize(LHSx->getOperand(0), RHS, SE);
-    if (auto LHSx = dyn_cast<SCEVZeroExtendExpr>(LHS)) return toSameSize(LHSx->getOperand(0), RHS, SE);
-    if (auto RHSx = dyn_cast<SCEVTruncateExpr>(RHS)) return toSameSize(LHS, RHSx->getOperand(0), SE);
-    if (unsafe) return Optional<PT>(std::make_pair(SE.getTruncateExpr(LHS, RHS->getType()), RHS));
-    return None;
-  }else if (LHS->getType()->getIntegerBitWidth() < RHS->getType()->getIntegerBitWidth()){
-    auto p = toSameSize(RHS, LHS, SE, unsafe);
-    if (!p.hasValue()) return None;
-    return Optional<PT>(std::make_pair(p.getValue().second, p.getValue().first));
-  }
-  return Optional<PT>(std::make_pair(LHS, RHS));
-}
-*/

@@ -53,6 +53,40 @@ using namespace llvm;
 
 namespace {
 
+struct SCEVUknownSetFinder {
+  DenseSet<Value *> values;
+  // return true to follow this node.
+  bool follow(const SCEV *S) {
+    if (S->getSCEVType() == SCEVTypes::scUnknown) {
+      values.insert(cast<SCEVUnknown>(S)->getValue());
+    }
+    return true; //always true
+  }
+  // return true to terminate the search.
+  bool isDone() { return false; /*continue forever*/ }
+};
+
+bool shareValues(const SCEV *A, const SCEV *B) {
+  SCEVUknownSetFinder finderA;
+  SCEVTraversal<SCEVUknownSetFinder> trA(finderA);
+  trA.visitAll(A);
+  SCEVUknownSetFinder finderB;
+  SCEVTraversal<SCEVUknownSetFinder> trB(finderB);
+  trB.visitAll(B);
+  bool shareValues = false;
+  for (Value *V : finderA.values) {
+    for (Value *W : finderB.values) {
+      shareValues |= V == W;
+    }
+  }
+  return shareValues;
+}
+
+bool SCEVContainsCouldNotCompute(const SCEV *S) {
+  auto pred = [](const SCEV *X) { return !X || X->getSCEVType() == SCEVTypes::scCouldNotCompute || isa<SCEVCouldNotCompute>(X); };
+  return SCEVExprContains(S, std::move(pred));
+}
+
 /// guarantees: 
 /// L has 1 preheader and 1 dedicated exit
 /// L has 1 backedge and 1 exiting block
@@ -70,7 +104,7 @@ const SCEV *getLoopBTSCEV(const Loop *L, DominatorTree &DT, ScalarEvolution &SE)
     return nullptr;
   }
   const SCEV *bt = SE.getBackedgeTakenCount(L);
-  if(!bt || isa<SCEVCouldNotCompute>(bt) || !SE.isAvailableAtLoopEntry(bt, L)){
+  if(!bt || isa<SCEVCouldNotCompute>(bt) || !SE.isAvailableAtLoopEntry(bt, L) || SCEVContainsCouldNotCompute(bt)){
     return nullptr;
   }
   return bt;
@@ -289,35 +323,6 @@ Value *goodAnd(IRBuilder<> &builder, ArrayRef<Value *> bools){
 
 bool hasMemInst(MemoryUseOrDef *MA) { return MA && MA->getMemoryInst(); }
 
-struct SCEVUknownSetFinder {
-  DenseSet<Value *> values;
-  // return true to follow this node.
-  bool follow(const SCEV *S) {
-    if (S->getSCEVType() == SCEVTypes::scUnknown) {
-      values.insert(cast<SCEVUnknown>(S)->getValue());
-    }
-    return true; //always true
-  }
-  // return true to terminate the search.
-  bool isDone() { return false; /*continue forever*/ }
-};
-
-bool shareValues(const SCEV *A, const SCEV *B) {
-  SCEVUknownSetFinder finderA;
-  SCEVTraversal<SCEVUknownSetFinder> trA(finderA);
-  trA.visitAll(A);
-  SCEVUknownSetFinder finderB;
-  SCEVTraversal<SCEVUknownSetFinder> trB(finderB);
-  trB.visitAll(B);
-  bool shareValues = false;
-  for (Value *V : finderA.values) {
-    for (Value *W : finderB.values) {
-      shareValues |= V == W;
-    }
-  }
-  return shareValues;
-}
-
 } //end of namespace
 
 //==================  ===========================================================
@@ -392,6 +397,7 @@ AffAcc::AffAcc(ArrayRef<Instruction *> accesses, const SCEV *Addr, MemoryUseOrDe
 {
   assert(!accesses.empty());
   assert(MA); 
+  if (Addr && SCEVContainsCouldNotCompute(Addr)) Addr = nullptr; //set to null if contains SCEVCouldNotCompute
   baseAddresses.push_back(Addr);
   steps.push_back((const SCEV *)nullptr); //there is no step for dim=0
   reps.push_back((LoopRep *)nullptr); //there is no rep for dim=0
@@ -478,7 +484,7 @@ unsigned AffAcc::loopToDimension(const Loop *L) const {
   for (unsigned d = 1u; d < containingLoops.size(); d++){ //FIXME: linear search -> improve with a map
     if (containingLoops[d] == L) return d;
   }
-  assert(false && "The provided loop does not contain `this`!");
+  llvm_unreachable("The provided loop does not contain `this`!");
 }
 bool AffAcc::canExpandBefore(const Loop *L) const { return isWellFormed(loopToDimension(L)); }
 const SCEV *AffAcc::getBaseAddr(unsigned dim) const { assert(dim < baseAddresses.size()); return baseAddresses[dim]; }
@@ -531,7 +537,7 @@ void AffAcc::addConflict(AffAcc *A, const Loop *StartL, AffAccConflict kind){
   assert(conflicts.find(A) == conflicts.end() && "no conflict for A yet");
   assert(kind == AffAccConflict::Bad || (isWellFormed(StartL) && A->isWellFormed(StartL)));
   conflicts.insert(std::make_pair(A, std::make_pair(StartL, kind)));
-  errs()<<"conflict for:\n"; dumpInLoop(StartL); errs()<<"with:\n"; A->dumpInLoop(StartL); errs()<<"is ===========>";
+  /*errs()<<"conflict for:\n"; dumpInLoop(StartL); errs()<<"with:\n"; A->dumpInLoop(StartL); errs()<<"is ===========>";
   switch (kind)
   {
   case AffAccConflict::Bad:
@@ -546,7 +552,7 @@ void AffAcc::addConflict(AffAcc *A, const Loop *StartL, AffAccConflict kind){
   default:
     break;
   }
-  errs()<<"\n";
+  errs()<<"\n"; */
 }
 bool AffAcc::promote(LoopRep *LR){
   if (!LR->isAvailable()) return false;
@@ -567,7 +573,7 @@ bool AffAcc::promote(LoopRep *LR){
   possible &= LR->isSafeToExpandBefore(LR->getLoop());
   if (possible) errs()<<"(3) new rep & step can be expanded, ";
   //check base address
-  possible &= isSafeToExpandAt(getBaseAddr(newDim), Point, SE);
+  possible &= !SCEVContainsCouldNotCompute(getBaseAddr(newDim)) && isSafeToExpandAt(getBaseAddr(newDim), Point, SE);
   if (possible) errs()<<"(4) new base addr can be expanded";
   errs()<<"\n";
   if (!possible) return false;
@@ -739,7 +745,7 @@ std::vector<AffAcc *> AffineAccess::analyze(const Loop *Parent, ArrayRef<const L
   for (const Loop *L : Parent->getSubLoops()){
     std::vector<AffAcc *> accs = analyze(L, ArrayRef<const Loop *>(path));
     LoopRep *LR = reps.find(L)->second; //guaranteed to exist, no check needed
-    bool canPromote = LR->isOnAllCFPathsOfParentIfExecuted() && ParentLR->isAvailable() && LR->isAvailable();
+    bool canPromote = LR->isAvailable() && ParentLR->isAvailable() && LR->isOnAllCFPathsOfParentIfExecuted();
     for (AffAcc *A : accs){
       all.push_back(A);
       if (canPromote){ //L is well-formed and on all CF-paths if its rep is >0 at run-time

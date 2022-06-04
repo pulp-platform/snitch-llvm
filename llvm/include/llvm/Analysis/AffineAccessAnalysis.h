@@ -19,6 +19,8 @@ class LoopInfo;
 class ScalarEvolution;
 class MemorySSA;
 class MemoryUseOrDef;
+class MemoryDef;
+struct ExpandedAffAcc;
 
 struct LoopRep{
 private:
@@ -42,9 +44,10 @@ public:
 
   ///expands LoopRep::RepSCEV at InsertBefore (if nullptr in preheader of loop)
   Value *expandAt(Type *ty, Instruction *InsertBefore = (Instruction *)nullptr);
+  Value *expandLoopGuard(Instruction *InsertBefore = (Instruction *)nullptr);
 };
 
-enum ConflictKind {NoConflict = 0, MustNotIntersect, MustBeSame, Bad };
+enum AffAccConflict { NoConflict = 0, MustNotIntersect = 1, Bad = 10};
 
 struct AffAcc{
 private:
@@ -55,7 +58,7 @@ private:
   SmallVector<const SCEV *, 4U> steps;           //steps per loop (0 if loop-inv) 
   SmallVector<LoopRep *, 4U> reps;               //loop reps 
   SmallVector<const Loop *, 4U> containingLoops; //from inner- to outermost
-  DenseMap<const AffAcc *, std::pair<unsigned, ConflictKind>> conflicts; //conflicts to other Affine Accesses and starting from which dimension
+  DenseMap<AffAcc *, std::pair<const Loop *, AffAccConflict>> conflicts;
   void findSteps(const SCEV *A, const SCEV *Factor, unsigned loop);
 
 public:
@@ -66,26 +69,61 @@ public:
   bool isWrite() const;
   unsigned getMaxDimension() const;
   bool isWellFormed(unsigned dimension) const;
+  bool isWellFormed(const Loop *L) const;
   bool canExpandBefore(const Loop *L) const;
   void dump() const;
+  void dumpInLoop(const Loop *L) const;
   unsigned loopToDimension(const Loop *L) const;
-  ConflictKind getConflictFor(const AffAcc *A, unsigned dimension) const;
-  ConflictKind getConflictInLoop(const AffAcc *A, const Loop *L) const;
   const SCEV *getBaseAddr(unsigned dim) const;
   const SCEV *getStep(unsigned dim) const;
   const SCEV *getRep(unsigned dim) const;
   const Loop *getLoop(unsigned dim) const;
+  ArrayRef<const Loop *> getContainingLoops() const;
+  AffAccConflict getConflict(AffAcc *A, const Loop *L) const;
 
-  MemoryAccess *getMemoryAccess();
-  ///finds all MemoryDefs that clobber this access's memory that prevent it from being prefetched before the loop
-  ArrayRef<MemoryDef *> getAllClobberingFor(const Loop *L); 
-  void addConflict(const AffAcc *A, unsigned startDimension, ConflictKind kind);
-  void addConflictInLoop(const AffAcc *A, const Loop *StartLoop, ConflictKind kind);  
+  MemoryUseOrDef *getMemoryAccess();
+  void addConflict(AffAcc *A, const Loop *StartL, AffAccConflict kind);
   bool promote(LoopRep *LR); ///does not check whether it is on all CF-paths for LR->getLoop()
   ///code gen:
   Value *expandBaseAddr(unsigned dimension, Type *ty, Instruction *InsertBefore = (Instruction *)nullptr);
   Value *expandStep(unsigned dimension, Type *ty, Instruction *InsertBefore = (Instruction *)nullptr);
   Value *expandRep(unsigned dimension, Type *ty, Instruction *InsertBefore = (Instruction *)nullptr);
+  ExpandedAffAcc expandAt(const Loop *L, Instruction *Point, Type *PtrTy, IntegerType *ParamTy, IntegerType *AgParamTy);
+};
+
+struct MemDep {
+private:
+  DenseMap<MemoryUseOrDef *, DenseSet<MemoryDef *>> clobbers;
+  DenseMap<MemoryUseOrDef *, DenseSet<MemoryUseOrDef *>> clobberUsers;
+  MemorySSA &MSSA;
+  AAResults &AA;
+  bool alias(Value *A, Value *B);
+  bool alias(MemoryUseOrDef *A, MemoryUseOrDef *B);
+
+public:
+  MemDep(MemorySSA &MSSA, AAResults &AA) : MSSA(MSSA), AA(AA) {}
+  const DenseSet<MemoryDef *> &findClobbers(MemoryUseOrDef *MA);
+  std::vector<MemoryDef *> findClobbersInLoop(MemoryUseOrDef *MA, const Loop *L);
+  const DenseSet<MemoryUseOrDef *> &findClobberUsers(MemoryDef *MA);
+  std::vector<MemoryUseOrDef *> findClobberUsersInLoop(MemoryDef *MA, const Loop *L);
+};
+
+struct ExpandedAffAcc {
+public:
+  AffAcc *const Access;
+  Value *const Addr;
+  const SmallVector<Value *, 3U> Steps;
+  const SmallVector<Value *, 3U> Reps;
+  const SmallVector<Value *, 3U> Ranges;
+  const SmallVector<Value *, 3U> PrefixSumRanges;
+  Value *const LowerBound;
+  Value *const UpperBound;
+  unsigned getDimension() const { return Steps.size(); }
+  ExpandedAffAcc (AffAcc *A, Value *Addr, ArrayRef<Value *> Steps, ArrayRef<Value *> Reps, 
+    ArrayRef<Value *> Ranges, ArrayRef<Value *> PSRanges, Value *LowerBound, Value *UpperBound) 
+    : Access(A), Addr(Addr), Steps(Steps.begin(), Steps.end()), Reps(Reps.begin(), Reps.end()), 
+      Ranges(Ranges.begin(), Ranges.end()), PrefixSumRanges(PSRanges.begin(), PSRanges.end()), 
+      LowerBound(LowerBound), UpperBound(UpperBound) { }
 };
 
 class AffineAccess{
@@ -95,29 +133,31 @@ private:
   LoopInfo &LI;
   MemorySSA &MSSA;
   AAResults &AA;
+  MemDep MD;
   DenseMap<MemoryUseOrDef *, AffAcc *> access;
   DenseMap<const Loop *, LoopRep *> reps;
-  DenseMap<const Loop *, SmallVector<AffAcc *, 4U>> expandableAccesses;
+  DenseMap<const Loop *, SmallVector<AffAcc *, 4U>> wellformedAccesses;
+  DenseMap<const Loop *, SmallVector<AffAcc *, 3U>> expandableAccesses;
 
-  DenseSet<AffAcc *> analyze(const Loop *Parent, std::vector<const Loop *> &loopPath);
-  void addConflictsForUse(AffAcc *A, const Loop *L);
-  void addConflictsForDef(AffAcc *A, const Loop *L);
-  void addConflict(AffAcc *A, AffAcc *B, const Loop *L, ConflictKind kind);
+  std::vector<AffAcc *> analyze(const Loop *Parent, ArrayRef<const Loop *> loopPath);
+  void addAllConflicts(const std::vector<AffAcc *> &all);
+  AffAccConflict getRWConflict(AffAcc *Read, AffAcc *Write, const Loop *L);
   
 public:
   AffineAccess(Function &F, ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI, MemorySSA &MSSA, AAResults &AA);
   AffineAccess() = delete;
   bool accessPatternsMatch(const AffAcc *A, const AffAcc *B, const Loop *L) const;
+  bool accessPatternsAndAddressesMatch(const AffAcc *A, const AffAcc *B, const Loop *L) const;
   ScalarEvolution &getSE() const;
   DominatorTree &getDT() const;
   LoopInfo &getLI() const;
   MemorySSA &getMSSA() const;
   AAResults &getAA() const;
-  ArrayRef<const Loop *> getLoopsInPreorder() const;
-  ArrayRef<const AffAcc *> getExpandableAccesses(const Loop *L) const;
-  const AffAcc *getAccess(Instruction *I) const;
+  SmallVector<Loop *, 4U> getLoopsInPreorder() const;
 
-  static Value *getAddress(Instruction *I);
+  ArrayRef<AffAcc *> getExpandableAccesses(const Loop *L);
+  std::vector<ExpandedAffAcc> expandAllAt(ArrayRef<AffAcc *> Accs, const Loop *L, Instruction *Point, 
+    Value *&BoundCheck, Type *PtrTy, IntegerType *ParamTy, IntegerType *AgParamTy);
 };
 
 class AffineAccessAnalysis : public AnalysisInfoMixin<AffineAccessAnalysis> {

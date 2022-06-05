@@ -128,29 +128,57 @@ void clobberRegisters(ArrayRef<std::string> regs, IRBuilder<> &builder){
 }
 
 void copyPHIsFromPred(BasicBlock *BB){
-  BasicBlock *Pred = BB->getSinglePredecessor();
-  assert(Pred && "BB has single predecessor");
+  BasicBlock *Pred = nullptr;
+  for (BasicBlock *B : predecessors(BB)) {
+    if (!Pred) Pred = B;
+    assert(Pred == B && "BB has only one predecessor");
+  }
+  assert(Pred && "BB has a Predecessor");
   for (Instruction &I : *Pred){
     if (auto *Phi = dyn_cast<PHINode>(&I)){
       PHINode *PhiC = PHINode::Create(Phi->getType(), 1u, Twine(Phi->getName()).concat(".copy"), BB->getFirstNonPHI());
       Phi->replaceAllUsesWith(PhiC);
       PhiC->addIncoming(Phi, Pred);
-      errs()<<"replaced all uses of "<<*Phi<<" with "<<*PhiC<<"\n";
     }
   }
 }
 
 ///splits block, redirects all predecessor to first half of split, copies phi's
-std::pair<BasicBlock *, BasicBlock *> splitAt(Instruction *X, const Twine &name){
+std::pair<BasicBlock *, BasicBlock *> splitAt(Instruction *X, const Twine &name, DomTreeUpdater &DTU){
+  assert(!isa<PHINode>(X) && "should not split at phi");
   BasicBlock *Two = X->getParent();
-  BasicBlock *One = splitBlockBefore(Two, X, nullptr, nullptr, nullptr, name);
+  BasicBlock *One = BasicBlock::Create(Two->getContext(), name, Two->getParent(), Two);
+  Instruction *BR = BranchInst::Create(Two, One);
+  DTU.applyUpdates(cfg::Update<BasicBlock *>(cfg::UpdateKind::Insert, One, Two));
+  BasicBlock::iterator it = Two->begin();
+  while (it != X->getIterator()) {
+    BasicBlock::iterator it_next = std::next(it);
+    it->removeFromParent();
+    it->insertBefore(BR);
+    it = it_next;
+  }
+  //BasicBlock *One = splitBlockBefore(Two, X, &DTU, nullptr, nullptr, name);
+  std::vector<Instruction *> toChange;
   for (auto *BB : predecessors(Two)){
     if (BB == One) continue;
     Instruction *T = BB->getTerminator();
     for (unsigned i = 0; i < T->getNumOperands(); i++){
       Value *OP = T->getOperand(i);
       if (dyn_cast<BasicBlock>(OP) == Two){
+        toChange.push_back(T);
+      }
+    }
+  }
+  for (Instruction *T : toChange) {
+    for (unsigned i = 0; i < T->getNumOperands(); i++){
+      Value *OP = T->getOperand(i);
+      if (dyn_cast<BasicBlock>(OP) == Two){
         T->setOperand(i, One); //if an operand of the terminator of a predecessor of Two points to Two it should now point to One
+        cfg::Update<BasicBlock *> upd[]{
+          cfg::Update<BasicBlock *>(cfg::UpdateKind::Insert, T->getParent(), One),
+          cfg::Update<BasicBlock *>(cfg::UpdateKind::Delete, T->getParent(), Two),
+        };
+        DTU.applyUpdates(upd);
       }
     }
   }
@@ -161,14 +189,14 @@ std::pair<BasicBlock *, BasicBlock *> splitAt(Instruction *X, const Twine &name)
 ///clones code from BeginWith up to EndBefore
 ///assumes all cf-paths from begin lead to end (or return)
 ///assumes there is a phi node for each value defined in the region that will be cloned in the block of EndBefore that is live after EndBefore
-BranchInst *cloneRegion(Instruction *BeginWith, Instruction *EndBefore, DominatorTree &DT){
+BranchInst *cloneRegion(Instruction *BeginWith, Instruction *EndBefore, DominatorTree &DT, DomTreeUpdater &DTU){
   errs()<<"cloning from "<<*BeginWith<<" up to "<<*EndBefore<<"\n";
-  
-  auto p = splitAt(BeginWith, "split.before");
+
+  auto p = splitAt(BeginWith, "split.before", DTU);
   BasicBlock *Head = p.first;
   BasicBlock *Begin = p.second;
 
-  p = splitAt(EndBefore, "fuse.prep");
+  p = splitAt(EndBefore, "fuse.prep", DTU);
   BasicBlock *Fuse = p.first;
   BasicBlock *End = p.second;
 
@@ -196,6 +224,7 @@ BranchInst *cloneRegion(Instruction *BeginWith, Instruction *EndBefore, Dominato
           Ic->setOperand(i, A->second); //this also updates uses of A->second
           //check users update in A->second
           bool userUpdate = false; for (User *U : A->second->users()) {userUpdate = userUpdate || U == Ic; } assert(userUpdate && "user is updated on setOperand");
+          if (isa<BasicBlock>(A->first)) DTU.applyUpdates(cfg::Update<BasicBlock *>(cfg::UpdateKind::Insert, Cc, cast<BasicBlock>(A->second)));
         }else{
           operandsCleanup.push_back(std::make_pair(i, Ic));
         }
@@ -212,6 +241,7 @@ BranchInst *cloneRegion(Instruction *BeginWith, Instruction *EndBefore, Dominato
     auto A = clones.find(p.second->getOperand(p.first));
     if (A != clones.end()){
       p.second->setOperand(p.first, A->second);
+      if (isa<BasicBlock>(A->first)) DTU.applyUpdates(cfg::Update<BasicBlock *>(cfg::UpdateKind::Insert, p.second->getParent(), cast<BasicBlock>(A->second)));
     }//else did not find ==> was defined before region 
   }
   //incoming blocks of phi nodes are not operands ==> handle specially
@@ -228,23 +258,15 @@ BranchInst *cloneRegion(Instruction *BeginWith, Instruction *EndBefore, Dominato
   //change terminator of Head to be CondBr with TakeOrig as cond
   BranchInst *HeadBr = cast<BranchInst>(Head->getTerminator()); //always BranchInst because of splitBlockBefore
   BasicBlock *HeadSucc = HeadBr->getSuccessor(0);
+  BasicBlock *HeadSuccClone = cast<BasicBlock>(clones.find(HeadSucc)->second);
   HeadBr->eraseFromParent();
   HeadBr = BranchInst::Create(
     HeadSucc, //branch-cond = true -> go to non-clone (here SSR will be inserted)
-    cast<BasicBlock>(clones.find(HeadSucc)->second),
+    HeadSuccClone,
     ConstantInt::get(Type::getInt1Ty(HeadSucc->getContext()), 0u), 
     Head
   );
-  const auto edge = BasicBlockEdge(std::make_pair(Fuse, End));
-  for (auto &p : clones){
-    for (User *U : p.first->users()){
-      auto *I = dyn_cast<Instruction>(U);
-      if (I && DT.dominates(edge, I->getParent())){
-        errs()<<*I<<" makes use of "<<*p.first<<" after cloned region ==> add phi node at end!\n";
-        //assert(false && "did not declare phi node for live-out value");
-      }
-    }
-  }
+  DTU.applyUpdates(cfg::Update<BasicBlock *>(cfg::UpdateKind::Insert, Head, HeadSuccClone));
   //handle phi nodes in End
   for (Instruction &I : *End){
     if (auto *Phi = dyn_cast<PHINode>(&I)){
@@ -263,6 +285,16 @@ BranchInst *cloneRegion(Instruction *BeginWith, Instruction *EndBefore, Dominato
       }
     }
   }
+  const auto edge = BasicBlockEdge(std::make_pair(Fuse, End));
+  for (auto &p : clones){
+    for (User *U : p.first->users()){
+      auto *I = dyn_cast<Instruction>(U);
+      if (I && DT.dominates(edge, I->getParent())){
+        errs()<<*I<<" makes use of "<<*p.first<<" after cloned region ==> add phi node at end!\n";
+        //assert(false && "did not declare phi node for live-out value");
+      }
+    }
+  }
   errs()<<"done cloning \n";
 
   return HeadBr;
@@ -277,10 +309,12 @@ Value *GenerateTCDMCheck(ExpandedAffAcc &E, Instruction *Point) {
 }
 
 void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
+  assert(Point);
   Module *mod = Point->getModule();
   IRBuilder<> builder(Point);
   Type *i32 = Type::getInt32Ty(Point->getContext());
   unsigned dim = E.getDimension();
+  assert(dim > 0u);
   Constant *Dim = ConstantInt::get(i32, dim - 1U); //dimension - 1, ty=i32
   Constant *DMid = ConstantInt::get(i32, dmid); //ty=i32
   bool isStore = E.Access->isWrite();
@@ -293,6 +327,7 @@ void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
   };
 
   for (unsigned i = 0u; i < dim; i++) {
+    errs()<<"for dim = "<<(i+1)<<"\n";
     Value *Stride = E.Steps[i];
     if (i > 0) Stride = builder.CreateSub(Stride, E.PrefixSumRanges[i-1], formatv("stride.{0}d", i+1));
     Value *Bound = builder.CreateSub(E.Reps[i], ConstantInt::get(i32, 1u), formatv("bound.{0}d", i+1));
@@ -387,6 +422,7 @@ void generateSSREnDis(const Loop *L){
 }
 
 void expandInLoop(const std::vector<AffAcc *> &accs, const Loop *L, AffineAccess &AAA) {
+  assert(!accs.empty());
   assert(accs.size() <= NUM_SSR);
   assert(L);
 
@@ -397,7 +433,16 @@ void expandInLoop(const std::vector<AffAcc *> &accs, const Loop *L, AffineAccess
   IntegerType *i64 = IntegerType::getInt64Ty(ctxt);
   Type *i8Ptr = Type::getInt8PtrTy(ctxt);
 
-  BranchInst *BR = cloneRegion(L->getLoopPreheader()->getTerminator(), &*L->getExitBlock()->getFirstInsertionPt(), AAA.getDT());
+  //for some reason sometimes the loop has multiple exits but they are the same (this is the case if a CondBr has two operands to same block)
+  SmallVector<BasicBlock *, 1U> exits;
+  L->getExitBlocks(exits);
+  BasicBlock *Ex = nullptr;
+  for (BasicBlock *BB : exits){
+    if (!Ex) Ex = BB;
+    assert(Ex == BB);
+  }
+  DomTreeUpdater DTU(&AAA.getDT(), DomTreeUpdater::UpdateStrategy::Lazy);
+  BranchInst *BR = cloneRegion(L->getLoopPreheader()->getTerminator(), &*Ex->getFirstInsertionPt(), AAA.getDT(), DTU);
 
   //generate Stride, Bound, base addresses, and intersect checks
   Value *Cond = nullptr;
@@ -418,15 +463,19 @@ void expandInLoop(const std::vector<AffAcc *> &accs, const Loop *L, AffineAccess
   }
 
   generateSSREnDis(L);
+
+  DTU.flush(); //only change DT after everything
 }
 
-bool isValid(AffAcc *A) {
+bool isValid(AffAcc *A, const Loop *L) {
+  assert(A->isWellFormed(L));
   bool valid = true;
   bool write = A->isWrite();
   for (Instruction *I : A->getAccesses()) {
     if (write) valid &= CHECK_TYPE(cast<StoreInst>(I)->getValueOperand()->getType(), I);
     else valid &= CHECK_TYPE(I->getType(), I);
   }
+  valid &= A->loopToDimension(L) <= SSR_MAX_DIM;
   return valid;
 }
 
@@ -435,14 +484,13 @@ void visitLoop(const Loop *L, DenseMap<const Loop *, std::vector<AffAcc *>> &pos
   ArrayRef<AffAcc *> accs = AAA.getExpandableAccesses(L);
   std::vector<AffAcc *> valid;
   for (AffAcc *A : accs) {
-    if (isValid(A)) valid.push_back(A);
+    if (isValid(A, L)) valid.push_back(A);
   }
-  if (valid.empty()) return;
   //sort by dimension (with read beeing preferred over write)
   auto comp = [L](const AffAcc *A, const AffAcc *B) { 
     unsigned dimA = A->loopToDimension(L);
     unsigned dimB = B->loopToDimension(L);
-    return dimA < dimB || (dimA == dimB && !(A->isWrite() && !B->isWrite()));
+    return dimA < dimB || (dimA == dimB && (!A->isWrite() && B->isWrite()));
   };
   std::sort(valid.begin(), valid.end(), comp);
   //add possible:
@@ -483,12 +531,14 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
 
     //expand them
     for (const Loop *L : best) {
-      expandInLoop(possible.find(L)->getSecond(), L, AAA);
+      auto &acc = possible.find(L)->getSecond();
+      if (!acc.empty()) expandInLoop(acc, L, AAA);
     }
 
     changed |= !best.empty();
   }
 
-  if (changed) return PreservedAnalyses::all();
+  if (!changed) return PreservedAnalyses::all();
+  F.addFnAttr(Attribute::AttrKind::NoInline);
   return PreservedAnalyses::none();
 }

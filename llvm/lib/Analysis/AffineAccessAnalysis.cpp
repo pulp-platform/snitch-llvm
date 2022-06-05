@@ -512,11 +512,16 @@ void AffAcc::dumpInLoop(const Loop *L) const {
     errs()<<", rep = ";
     if (r) errs()<<*r;
     else errs()<<"<nullptr>";
+    errs()<<", well-formed = "<<this->isWellFormed(dim);
     errs()<<"\n";
     errs()<<"\taddress = ";
     if (a) errs()<<*a;
     else errs()<<"<nullptr>";
-    errs()<<" is well-formed = "<<this->isWellFormed(dim)<<"\n";
+    errs()<<"\n";
+    errs()<<"\tloop header = ";
+    if (getLoop(dim)) errs()<<getLoop(dim)->getHeader()->getNameOrAsOperand();
+    else errs()<<"<nullptr>";
+    errs()<<"\n";
   }
 }
 void AffAcc::dump() const { dumpInLoop(nullptr); }
@@ -585,7 +590,14 @@ bool AffAcc::promote(LoopRep *LR){
 Value *AffAcc::expandBaseAddr(unsigned dimension, Type *ty, Instruction *InsertBefore){
   assert(isWellFormed(dimension));
   InsertBefore = InsertBefore ? InsertBefore : reps[dimension]->getLoop()->getLoopPreheader()->getTerminator();
-  assert(isSafeToExpandAt(getBaseAddr(dimension), InsertBefore, SE) && "data not expanable here (note: only preheader guaranteed)");
+  if (!isSafeToExpandAt(getBaseAddr(dimension), InsertBefore, SE)){
+    errs()<<"data not expanable here (note: only preheader guaranteed)\n";
+    errs()<<"SCEV (dim = "<<dimension<<")= "<<*getBaseAddr(dimension)<<"\n";
+    errs()<<"in block:\n"; InsertBefore->getParent()->dump();
+    errs()<<"before inst: "<<*InsertBefore<<"\n";
+    this->dump();
+    llvm_unreachable("cannot expand SCEV at desired location");
+  }
   SCEVExpander ex(SE, reps[dimension]->getLoop()->getHeader()->getModule()->getDataLayout(), "addr");
   ex.setInsertPoint(InsertBefore);
   return castToSize(ex.expandCodeFor(getBaseAddr(dimension)), ty, InsertBefore);
@@ -607,6 +619,7 @@ Value *AffAcc::expandRep(unsigned dimension, Type *ty, Instruction *InsertBefore
 ExpandedAffAcc AffAcc::expandAt(const Loop *L, Instruction *Point, 
   Type *PtrTy, IntegerType *ParamTy, IntegerType *AgParamTy) 
 {
+  errs()<<"expanding for Loop with header: "<<L->getHeader()->getNameOrAsOperand()<<"\n";
   if (!Point) Point = L->getLoopPreheader()->getTerminator();
   IRBuilder<> builder(Point);
   assert(isWellFormed(L));
@@ -639,87 +652,59 @@ bool MemDep::alias(MemoryUseOrDef *A, MemoryUseOrDef *B) {
   else return alias(getAddress(A), getAddress(B)); 
 }
 
-const DenseSet<MemoryDef *> &MemDep::findClobbers(MemoryUseOrDef *MA){
-  if (clobbers.find(MA) == clobbers.end()) {
-    clobbers.insert(std::make_pair(MA, std::move(DenseSet<MemoryDef *>())));
-    auto &res = clobbers.find(MA)->getSecond();
-    std::deque<MemoryAccess *> worklist;
-    DenseSet<MemoryAccess *> vis;
-    worklist.push_back(MA->getDefiningAccess());
-    while (!worklist.empty()) {
-      MemoryAccess *A = worklist.front(); worklist.pop_front();
-      if (!A) continue;
-      if (vis.find(A) != vis.end()) continue;
-      if (A == MA) continue;
-      vis.insert(A);
-      if (MemoryDef *D = dyn_cast<MemoryDef>(A)) {
-        if (alias(D, MA)) {
-          auto &s = findClobbers(D);
-          res.insert(D);
-          for (auto *A : s) res.insert(A);
-        } else {
-          worklist.push_back(D);
-        }
-      } else {
-        MemoryPhi *P = cast<MemoryPhi>(A);
-        for (unsigned i = 0u; i < P->getNumOperands(); i++) {
-          worklist.push_back(P->getOperand(i));
-        }
+DenseSet<MemoryDef *> MemDep::findClobbers(MemoryUseOrDef *MA){
+  DenseSet<MemoryDef *> res;
+  std::deque<MemoryAccess *> worklist;
+  DenseSet<MemoryAccess *> vis;
+  worklist.push_back(MA->getDefiningAccess());
+  while (!worklist.empty()) {
+    MemoryAccess *A = worklist.front(); worklist.pop_front();
+    if (!A) continue;
+    if (vis.find(A) != vis.end()) continue;
+    if (A == MA) continue;
+    vis.insert(A);
+    if (MemoryDef *D = dyn_cast<MemoryDef>(A)) {
+      if (alias(D, MA)) {
+        res.insert(D);
+      }
+      worklist.push_back(D);
+    } else {
+      MemoryPhi *P = cast<MemoryPhi>(A);
+      for (unsigned i = 0u; i < P->getNumOperands(); i++) {
+        worklist.push_back(P->getOperand(i));
       }
     }
   }
-  return clobbers.find(MA)->getSecond();
-}
-  
-std::vector<MemoryDef *> MemDep::findClobbersInLoop(MemoryUseOrDef *MA, const Loop *L) {
-  auto &s = findClobbers(MA);
-  std::vector<MemoryDef *> r;
-  for (auto *A : s)
-    if (L && L->contains(A->getBlock())) r.push_back(A);
-  return r;
+  return res;
 }
 
-const DenseSet<MemoryUseOrDef *> &MemDep::findClobberUsers(MemoryDef *MA) {
-  if (clobberUsers.find(MA) == clobberUsers.end()) {
-    clobberUsers.insert(std::make_pair(MA, std::move(DenseSet<MemoryUseOrDef *>())));
-    auto &res = clobberUsers.find(MA)->getSecond();
-    std::deque<MemoryAccess *> worklist;
-    DenseSet<MemoryAccess *> vis;
-    for (auto U = MA->use_begin(); U != MA->use_end(); ++U) {
-      worklist.push_back(cast<MemoryAccess>(U->getUser()));
-    }
-    while (!worklist.empty()){
-      MemoryAccess *A = worklist.front(); worklist.pop_front();
-      if (!A) continue;
-      if (vis.find(A) != vis.end()) continue;
-      vis.insert(A);
-      if (MemoryUse *U = dyn_cast<MemoryUse>(A)) {
-        if (alias(U, MA)) res.insert(U);
-      } else if (MemoryDef *D = dyn_cast<MemoryDef>(A)) {
-        if (alias(D, MA)) {
-          auto &s = findClobberUsers(D);
-          res.insert(D);
-          for (auto *A : s) res.insert(A);
-        } else {
-          worklist.push_back(D);
-        }
-      } else {
-        assert(isa<MemoryPhi>(A));
-        for (auto U = A->use_begin(); U != A->use_end(); ++U) {
-          worklist.push_back(cast<MemoryAccess>(U->getUser()));
-        }
+DenseSet<MemoryUseOrDef *> MemDep::findClobberUsers(MemoryDef *MA) {
+  DenseSet<MemoryUseOrDef *> res;
+  std::deque<MemoryAccess *> worklist;
+  DenseSet<MemoryAccess *> vis;
+  for (auto U = MA->use_begin(); U != MA->use_end(); ++U) {
+    worklist.push_back(cast<MemoryAccess>(U->getUser()));
+  }
+  while (!worklist.empty()){
+    MemoryAccess *A = worklist.front(); worklist.pop_front();
+    if (!A) continue;
+    if (vis.find(A) != vis.end()) continue;
+    vis.insert(A);
+    if (MemoryUse *U = dyn_cast<MemoryUse>(A)) {
+      if (alias(U, MA)) res.insert(U);
+    } else if (MemoryDef *D = dyn_cast<MemoryDef>(A)) {
+      if (alias(D, MA)) {
+        res.insert(D);
+      }
+      worklist.push_back(D);
+    } else {
+      assert(isa<MemoryPhi>(A));
+      for (auto U = A->use_begin(); U != A->use_end(); ++U) {
+        worklist.push_back(cast<MemoryAccess>(U->getUser()));
       }
     }
   }
-  return clobberUsers.find(MA)->getSecond();
-}
-  
-std::vector<MemoryUseOrDef *> MemDep::findClobberUsersInLoop(MemoryDef *MA, const Loop *L) {
-  auto &s = findClobberUsers(MA);
-  std::vector<MemoryUseOrDef *> r;
-  for (auto *A : s)
-    if (L && L->contains(A->getBlock())) r.push_back(A);
-  return r;
+  return res;
 }
 
 //================== Affine Access ===========================================================
@@ -905,7 +890,9 @@ ArrayRef<AffAcc *> AffineAccess::getExpandableAccesses(const Loop *L) {
 std::vector<ExpandedAffAcc> 
 AffineAccess::expandAllAt(ArrayRef<AffAcc *> Accs, const Loop *L, 
   Instruction *Point, Value *&BoundCheck, 
-  Type *PtrTy, IntegerType *ParamTy, IntegerType *AgParamTy) {
+  Type *PtrTy, IntegerType *ParamTy, IntegerType *AgParamTy) 
+{
+  assert(Point);
   std::vector<ExpandedAffAcc> res;
   IRBuilder<> builder(Point);
   for (AffAcc *A : Accs) {

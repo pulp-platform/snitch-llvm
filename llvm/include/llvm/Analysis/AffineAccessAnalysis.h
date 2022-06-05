@@ -93,8 +93,6 @@ public:
 
 struct MemDep {
 private:
-  DenseMap<MemoryUseOrDef *, DenseSet<MemoryDef *>> clobbers;
-  DenseMap<MemoryUseOrDef *, DenseSet<MemoryUseOrDef *>> clobberUsers;
   MemorySSA &MSSA;
   AAResults &AA;
   bool alias(Value *A, Value *B);
@@ -102,10 +100,8 @@ private:
 
 public:
   MemDep(MemorySSA &MSSA, AAResults &AA) : MSSA(MSSA), AA(AA) {}
-  const DenseSet<MemoryDef *> &findClobbers(MemoryUseOrDef *MA);
-  std::vector<MemoryDef *> findClobbersInLoop(MemoryUseOrDef *MA, const Loop *L);
-  const DenseSet<MemoryUseOrDef *> &findClobberUsers(MemoryDef *MA);
-  std::vector<MemoryUseOrDef *> findClobberUsersInLoop(MemoryDef *MA, const Loop *L);
+  DenseSet<MemoryDef *> findClobbers(MemoryUseOrDef *MA);
+  DenseSet<MemoryUseOrDef *> findClobberUsers(MemoryDef *MA);
 };
 
 struct ExpandedAffAcc {

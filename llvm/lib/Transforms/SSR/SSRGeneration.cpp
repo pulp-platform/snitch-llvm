@@ -314,7 +314,8 @@ void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
   IRBuilder<> builder(Point);
   Type *i32 = Type::getInt32Ty(Point->getContext());
   unsigned dim = E.getDimension();
-  assert(dim > 0u);
+  errs()<<"SSR Setup for stream with dim = "<<dim<<"\n";
+  assert(dim <= SSR_MAX_DIM);
   Constant *Dim = ConstantInt::get(i32, dim - 1U); //dimension - 1, ty=i32
   Constant *DMid = ConstantInt::get(i32, dmid); //ty=i32
   bool isStore = E.Access->isWrite();
@@ -327,10 +328,9 @@ void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
   };
 
   for (unsigned i = 0u; i < dim; i++) {
-    errs()<<"for dim = "<<(i+1)<<"\n";
     Value *Stride = E.Steps[i];
     if (i > 0) Stride = builder.CreateSub(Stride, E.PrefixSumRanges[i-1], formatv("stride.{0}d", i+1));
-    Value *Bound = builder.CreateSub(E.Reps[i], ConstantInt::get(i32, 1u), formatv("bound.{0}d", i+1));
+    Value *Bound = E.Reps[i];
     Function *SSRBoundStrideSetup = Intrinsic::getDeclaration(mod, functions[i]);
     std::array<Value *, 3> bsargs = {DMid, Bound, Stride};
     builder.CreateCall(SSRBoundStrideSetup->getFunctionType(), SSRBoundStrideSetup, ArrayRef<Value *>(bsargs))->dump();
@@ -415,9 +415,6 @@ void generateSSREnDis(const Loop *L){
 
   errs()<<"generated ssr_enable and ssr_disable\n";
 
-  L->getLoopPreheader()->getSinglePredecessor()->dump();
-  L->getLoopPreheader()->dump();
-
   return;
 }
 
@@ -433,6 +430,13 @@ void expandInLoop(const std::vector<AffAcc *> &accs, const Loop *L, AffineAccess
   IntegerType *i64 = IntegerType::getInt64Ty(ctxt);
   Type *i8Ptr = Type::getInt8PtrTy(ctxt);
 
+  //generate Stride, Bound, base addresses, and intersect checks
+  Value *Cond = nullptr;
+  auto exp = AAA.expandAllAt(accs, L, L->getLoopPreheader()->getTerminator(), Cond, i8Ptr, i32, i64);
+  assert(Cond);
+
+  //errs()<<"expanded All in Loop Preheader:\n"; L->getLoopPreheader()->dump();
+
   //for some reason sometimes the loop has multiple exits but they are the same (this is the case if a CondBr has two operands to same block)
   SmallVector<BasicBlock *, 1U> exits;
   L->getExitBlocks(exits);
@@ -444,10 +448,7 @@ void expandInLoop(const std::vector<AffAcc *> &accs, const Loop *L, AffineAccess
   DomTreeUpdater DTU(&AAA.getDT(), DomTreeUpdater::UpdateStrategy::Lazy);
   BranchInst *BR = cloneRegion(L->getLoopPreheader()->getTerminator(), &*Ex->getFirstInsertionPt(), AAA.getDT(), DTU);
 
-  //generate Stride, Bound, base addresses, and intersect checks
-  Value *Cond = nullptr;
-  auto exp = AAA.expandAllAt(accs, L, BR, Cond, i8Ptr, i32, i64);
-  assert(Cond);
+  //errs()<<"done cloning, Loop Preheader:\n"; L->getLoopPreheader()->dump();
 
   //TCDM Checks
   IRBuilder<> builder(BR);
@@ -537,6 +538,12 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
 
     changed |= !best.empty();
   }
+
+  /*
+  errs()<<"dumping Module ============================\n";
+  F.getParent()->dump();
+  errs()<<"done dumping Module ============================\n";
+  */
 
   if (!changed) return PreservedAnalyses::all();
   F.addFnAttr(Attribute::AttrKind::NoInline);

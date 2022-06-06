@@ -29,6 +29,7 @@ private:
   const Loop *L;
   const SCEV *RepSCEV;
   Value *Rep = nullptr;
+  Value *RepPlusOne = nullptr;
   SmallVector<const Loop *, 4U> containingLoops; //from inner- to outermost
   unsigned safeExpandBound; //exclusive bound
 
@@ -114,7 +115,7 @@ public:
   const SmallVector<Value *, 3U> PrefixSumRanges;
   Value *const LowerBound;
   Value *const UpperBound;
-  unsigned getDimension() const { return Steps.size(); }
+  unsigned getDimension() const { return Steps.size(); } //returns the nr of steps/reps/etc... there are
   ExpandedAffAcc (AffAcc *A, Value *Addr, ArrayRef<Value *> Steps, ArrayRef<Value *> Reps, 
     ArrayRef<Value *> Ranges, ArrayRef<Value *> PSRanges, Value *LowerBound, Value *UpperBound) 
     : Access(A), Addr(Addr), Steps(Steps.begin(), Steps.end()), Reps(Reps.begin(), Reps.end()), 

@@ -376,19 +376,21 @@ Value *LoopRep::expandAt(Type *ty, Instruction *InsertBefore){
     return Rep;
   }
   InsertBefore = InsertBefore ? InsertBefore : L->getLoopPreheader()->getTerminator();
-  const SCEV *RepPlusOne = getSCEVPlusOne();
-  assert(isSafeToExpandAt(RepPlusOne, InsertBefore, SE) && "bound not expanable here");
+  const SCEV *RepP1 = getSCEVPlusOne(); //we go over the +1 version here because getSCEV() is usually sth like %n-1 so then this becomes just %n
+  assert(isSafeToExpandAt(RepP1, InsertBefore, SE) && "bound not expandable here");
   SCEVExpander ex(SE, L->getHeader()->getModule()->getDataLayout(), "rep");
   ex.setInsertPoint(InsertBefore);
-  Rep = castToSize(ex.expandCodeFor(RepPlusOne), ty, InsertBefore);
+  RepPlusOne = castToSize(ex.expandCodeFor(RepP1), ty, InsertBefore);
+  IRBuilder<> builder(InsertBefore);
+  Rep = builder.CreateSub(RepPlusOne, ConstantInt::get(ty, 1u), "rep");
   return Rep;
 }
 
 Value *LoopRep::expandLoopGuard(Instruction *InsertBefore) {
-  assert(Rep && "expandAt has to be called before this");
+  assert(RepPlusOne && "expandAt has to be called before this");
   InsertBefore = InsertBefore ? InsertBefore : L->getLoopPreheader()->getTerminator();
   IRBuilder<> builder(InsertBefore);
-  return builder.CreateICmpSGT(Rep, ConstantInt::get(Rep->getType(), 0u, true)); //FIXME: this only works for unsigned Rep's that are < 2^30 (for i32)
+  return builder.CreateICmpSGT(RepPlusOne, ConstantInt::get(Rep->getType(), 0u, true)); //FIXME: this only works for unsigned Rep's that are < 2^30 (for i32)
 }
 
 // ==== AffAcc ====
@@ -619,7 +621,8 @@ Value *AffAcc::expandRep(unsigned dimension, Type *ty, Instruction *InsertBefore
 ExpandedAffAcc AffAcc::expandAt(const Loop *L, Instruction *Point, 
   Type *PtrTy, IntegerType *ParamTy, IntegerType *AgParamTy) 
 {
-  errs()<<"expanding for Loop with header: "<<L->getHeader()->getNameOrAsOperand()<<"\n";
+  errs()<<"expanding for Loop with header: "<<L->getHeader()->getNameOrAsOperand()<<" the following:\n";
+  dumpInLoop(L);
   if (!Point) Point = L->getLoopPreheader()->getTerminator();
   IRBuilder<> builder(Point);
   assert(isWellFormed(L));

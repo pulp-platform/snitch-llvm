@@ -50,17 +50,50 @@
 #include <queue>
 #include <limits>
 
+//immediately return in pass if false
 #define SSR_INFERENCE true
+
+//flags for runtime checks (true = disabled)
+#define SSR_NO_INTERSECTCHECK false
+#define SSR_NO_TCDMCHECK false
+#define SSR_NO_BOUNDCHECK false
+
+//if you feel like there is somehow still some weird reordering going on, enable these:
+#define SSR_CLOBBER_REGS_FOR_PUSH false
+#define SSR_CLOBBER_REGS_FOR_POP false
 
 #define NUM_SSR 3U //NOTE: if increased too much, might need to change 1st arguments to clobberRegisters(..)
 #define SSR_MAX_DIM 4U
+
 //both are inclusive! 
 #define SSR_SCRATCHPAD_BEGIN 0x100000
 #define SSR_SCRATCHPAD_END 0x120000
+
 //current state of hw: only allow doubles
 #define CHECK_TYPE(T, I) (T == Type::getDoubleTy(I->getParent()->getContext()))
 
+static constexpr char SSRFnAttr[] = "SSR"; //used to tag functions that contain SSR streams
+
 using namespace llvm;
+
+static constexpr Intrinsic::ID riscSSRIntrinsics[] = {
+  Intrinsic::RISCVIntrinsics::riscv_ssr_barrier, 
+  Intrinsic::RISCVIntrinsics::riscv_ssr_disable,
+  Intrinsic::RISCVIntrinsics::riscv_ssr_enable,
+  Intrinsic::RISCVIntrinsics::riscv_ssr_setup_repetition,
+  Intrinsic::RISCVIntrinsics::riscv_ssr_pop,
+  Intrinsic::RISCVIntrinsics::riscv_ssr_push, 
+  Intrinsic::RISCVIntrinsics::riscv_ssr_read,
+  Intrinsic::RISCVIntrinsics::riscv_ssr_read_imm,
+  Intrinsic::RISCVIntrinsics::riscv_ssr_write,
+  Intrinsic::RISCVIntrinsics::riscv_ssr_write_imm,
+  Intrinsic::RISCVIntrinsics::riscv_ssr_setup_1d_r,
+  Intrinsic::RISCVIntrinsics::riscv_ssr_setup_1d_w,
+  Intrinsic::RISCVIntrinsics::riscv_ssr_setup_bound_stride_1d,
+  Intrinsic::RISCVIntrinsics::riscv_ssr_setup_bound_stride_2d,
+  Intrinsic::RISCVIntrinsics::riscv_ssr_setup_bound_stride_3d,
+  Intrinsic::RISCVIntrinsics::riscv_ssr_setup_bound_stride_4d,
+};
 
 namespace{
 
@@ -137,19 +170,20 @@ void copyPHIsFromPred(BasicBlock *BB){
   for (Instruction &I : *Pred){
     if (auto *Phi = dyn_cast<PHINode>(&I)){
       PHINode *PhiC = PHINode::Create(Phi->getType(), 1u, Twine(Phi->getName()).concat(".copy"), BB->getFirstNonPHI());
-      Phi->replaceAllUsesWith(PhiC);
+      //Phi->replaceAllUsesWith(PhiC);
+      Phi->replaceUsesOutsideBlock(PhiC, Pred); //all users outside of Pred are now using PhiC
       PhiC->addIncoming(Phi, Pred);
     }
   }
 }
 
 ///splits block, redirects all predecessor to first half of split, copies phi's
-std::pair<BasicBlock *, BasicBlock *> splitAt(Instruction *X, const Twine &name, DomTreeUpdater &DTU){
+std::pair<BasicBlock *, BasicBlock *> splitAt(Instruction *X, const Twine &name){
   assert(!isa<PHINode>(X) && "should not split at phi");
   BasicBlock *Two = X->getParent();
   BasicBlock *One = BasicBlock::Create(Two->getContext(), name, Two->getParent(), Two);
   Instruction *BR = BranchInst::Create(Two, One);
-  DTU.applyUpdates(cfg::Update<BasicBlock *>(cfg::UpdateKind::Insert, One, Two));
+  //DTU.applyUpdates(cfg::Update<BasicBlock *>(cfg::UpdateKind::Insert, One, Two));
   BasicBlock::iterator it = Two->begin();
   while (it != X->getIterator()) {
     BasicBlock::iterator it_next = std::next(it);
@@ -174,31 +208,30 @@ std::pair<BasicBlock *, BasicBlock *> splitAt(Instruction *X, const Twine &name,
       Value *OP = T->getOperand(i);
       if (dyn_cast<BasicBlock>(OP) == Two){
         T->setOperand(i, One); //if an operand of the terminator of a predecessor of Two points to Two it should now point to One
-        cfg::Update<BasicBlock *> upd[]{
+        /*cfg::Update<BasicBlock *> upd[]{
           cfg::Update<BasicBlock *>(cfg::UpdateKind::Insert, T->getParent(), One),
           cfg::Update<BasicBlock *>(cfg::UpdateKind::Delete, T->getParent(), Two),
         };
-        DTU.applyUpdates(upd);
+        DTU.applyUpdates(upd);*/
       }
     }
   }
-  copyPHIsFromPred(Two); //copy Phi's from One to Two
   return std::make_pair(One, Two);
 }
 
 ///clones code from BeginWith up to EndBefore
 ///assumes all cf-paths from begin lead to end (or return)
 ///assumes there is a phi node for each value defined in the region that will be cloned in the block of EndBefore that is live after EndBefore
-BranchInst *cloneRegion(Instruction *BeginWith, Instruction *EndBefore, DominatorTree &DT, DomTreeUpdater &DTU){
+BranchInst *cloneRegion(Instruction *BeginWith, Instruction *EndBefore){
   errs()<<"cloning from "<<*BeginWith<<" up to "<<*EndBefore<<"\n";
 
-  auto p = splitAt(BeginWith, "split.before", DTU);
+  auto p = splitAt(BeginWith, "split.before");
   BasicBlock *Head = p.first;
   BasicBlock *Begin = p.second;
 
-  p = splitAt(EndBefore, "fuse.prep", DTU);
-  BasicBlock *Fuse = p.first;
+  p = splitAt(EndBefore, "fuse.prep");
   BasicBlock *End = p.second;
+  copyPHIsFromPred(End); //copy Phi's from Fuse to End
 
   std::deque<BasicBlock *> q; //bfs queue
   q.push_back(Begin);
@@ -224,7 +257,7 @@ BranchInst *cloneRegion(Instruction *BeginWith, Instruction *EndBefore, Dominato
           Ic->setOperand(i, A->second); //this also updates uses of A->second
           //check users update in A->second
           bool userUpdate = false; for (User *U : A->second->users()) {userUpdate = userUpdate || U == Ic; } assert(userUpdate && "user is updated on setOperand");
-          if (isa<BasicBlock>(A->first)) DTU.applyUpdates(cfg::Update<BasicBlock *>(cfg::UpdateKind::Insert, Cc, cast<BasicBlock>(A->second)));
+          //if (isa<BasicBlock>(A->first)) DTU.applyUpdates(cfg::Update<BasicBlock *>(cfg::UpdateKind::Insert, Cc, cast<BasicBlock>(A->second)));
         }else{
           operandsCleanup.push_back(std::make_pair(i, Ic));
         }
@@ -241,7 +274,7 @@ BranchInst *cloneRegion(Instruction *BeginWith, Instruction *EndBefore, Dominato
     auto A = clones.find(p.second->getOperand(p.first));
     if (A != clones.end()){
       p.second->setOperand(p.first, A->second);
-      if (isa<BasicBlock>(A->first)) DTU.applyUpdates(cfg::Update<BasicBlock *>(cfg::UpdateKind::Insert, p.second->getParent(), cast<BasicBlock>(A->second)));
+      //if (isa<BasicBlock>(A->first)) DTU.applyUpdates(cfg::Update<BasicBlock *>(cfg::UpdateKind::Insert, p.second->getParent(), cast<BasicBlock>(A->second)));
     }//else did not find ==> was defined before region 
   }
   //incoming blocks of phi nodes are not operands ==> handle specially
@@ -266,7 +299,7 @@ BranchInst *cloneRegion(Instruction *BeginWith, Instruction *EndBefore, Dominato
     ConstantInt::get(Type::getInt1Ty(HeadSucc->getContext()), 0u), 
     Head
   );
-  DTU.applyUpdates(cfg::Update<BasicBlock *>(cfg::UpdateKind::Insert, Head, HeadSuccClone));
+  //DTU.applyUpdates(cfg::Update<BasicBlock *>(cfg::UpdateKind::Insert, Head, HeadSuccClone));
   //handle phi nodes in End
   for (Instruction &I : *End){
     if (auto *Phi = dyn_cast<PHINode>(&I)){
@@ -285,25 +318,27 @@ BranchInst *cloneRegion(Instruction *BeginWith, Instruction *EndBefore, Dominato
       }
     }
   }
-  const auto edge = BasicBlockEdge(std::make_pair(Fuse, End));
-  for (auto &p : clones){
-    for (User *U : p.first->users()){
-      auto *I = dyn_cast<Instruction>(U);
-      if (I && DT.dominates(edge, I->getParent())){
-        errs()<<*I<<" makes use of "<<*p.first<<" after cloned region ==> add phi node at end!\n";
-        //assert(false && "did not declare phi node for live-out value");
-      }
-    }
-  }
   errs()<<"done cloning \n";
 
   return HeadBr;
 }
 
+BasicBlock *getSingleExitBlock(const Loop *L) {
+  SmallVector<BasicBlock *, 1U> exits;
+  L->getExitBlocks(exits);
+  BasicBlock *Ex = nullptr;
+  for (BasicBlock *BB : exits){
+    if (!Ex) Ex = BB;
+    assert(Ex == BB);
+  }
+  assert(Ex);
+  return Ex;
+}
+
 Value *GenerateTCDMCheck(ExpandedAffAcc &E, Instruction *Point) {
   IRBuilder<> builder(Point);
   IntegerType *i64 = IntegerType::getInt64Ty(Point->getContext());
-  Value *c1 = builder.CreateICmpUGE(ConstantInt::get(i64, SSR_SCRATCHPAD_BEGIN), E.LowerBound, "beg.check");
+  Value *c1 = builder.CreateICmpULE(ConstantInt::get(i64, SSR_SCRATCHPAD_BEGIN), E.LowerBound, "beg.check");
   Value *c2 = builder.CreateICmpULE(E.UpperBound, ConstantInt::get(i64, SSR_SCRATCHPAD_END), "end.check");
   return builder.CreateAnd(c1, c2, "tcdm.check");
 }
@@ -344,9 +379,8 @@ void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
     for (Instruction *I : E.Access->getAccesses()){
       std::array<Value *, 2> pusharg = {DMid, cast<StoreInst>(I)->getValueOperand()};
       builder.SetInsertPoint(I);
-      clobberRegisters(regs, builder);
+      if (SSR_CLOBBER_REGS_FOR_PUSH) clobberRegisters(regs, builder);
       auto *C = builder.CreateCall(SSRPush->getFunctionType(), SSRPush, ArrayRef<Value *>(pusharg));
-      clobberRegisters(regs, builder);
       C->dump(); I->dump();
       I->eraseFromParent();
       n_reps++;
@@ -356,9 +390,8 @@ void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
     std::array<Value *, 1> poparg = {DMid};
     for (Instruction *I : E.Access->getAccesses()){
       builder.SetInsertPoint(I);
-      clobberRegisters(regs, builder);
       auto *V = builder.CreateCall(SSRPop->getFunctionType(), SSRPop, ArrayRef<Value *>(poparg), "ssr.pop");
-      clobberRegisters(regs, builder);
+      if (SSR_CLOBBER_REGS_FOR_POP) clobberRegisters(regs, builder);
       V->dump(); I->dump();
       BasicBlock::iterator ii(I);
       ReplaceInstWithValue(I->getParent()->getInstList(), ii, V);
@@ -391,9 +424,9 @@ void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
 }
 
 ///generates SSR enable & disable calls
-void generateSSREnDis(const Loop *L){
-  IRBuilder<> builder(L->getLoopPreheader()->getTerminator()); // ----------- in preheader 
-  Module *mod = L->getHeader()->getModule();
+void generateSSREnDis(Instruction *PhP, Instruction *ExP){
+  IRBuilder<> builder(PhP); // ----------- in preheader 
+  Module *mod = PhP->getParent()->getModule();
   Function *SSREnable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_enable);
   builder.CreateCall(SSREnable->getFunctionType(), SSREnable, ArrayRef<Value *>());
 
@@ -408,7 +441,7 @@ void generateSSREnDis(const Loop *L){
   //Function *FREPPragma = Intrinsic::getDeclaration(mod, Intrinsic::riscv_frep_infer);
   //builder.CreateCall(FREPPragma->getFunctionType(), FREPPragma, ArrayRef<Value *>());
 
-  builder.SetInsertPoint(L->getExitBlock()->getTerminator()); // ----------- in exit block
+  builder.SetInsertPoint(ExP); // ----------- in exit block
   clobberRegisters(ArrayRef<std::string>(regs), builder);
   Function *SSRDisable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_disable);
   builder.CreateCall(SSRDisable->getFunctionType(), SSRDisable, ArrayRef<Value *>());
@@ -418,7 +451,8 @@ void generateSSREnDis(const Loop *L){
   return;
 }
 
-void expandInLoop(const std::vector<AffAcc *> &accs, const Loop *L, AffineAccess &AAA) {
+///expands AffAcc's in L's preheader and inserts TCDM checks, returns ExpandedAffAcc's and writes the final Value* of the checks into Cond
+std::vector<ExpandedAffAcc> expandInLoop(const std::vector<AffAcc *> &accs, const Loop *L, AffineAccess &AAA, Value *&Cond) {
   assert(!accs.empty());
   assert(accs.size() <= NUM_SSR);
   assert(L);
@@ -430,42 +464,51 @@ void expandInLoop(const std::vector<AffAcc *> &accs, const Loop *L, AffineAccess
   IntegerType *i64 = IntegerType::getInt64Ty(ctxt);
   Type *i8Ptr = Type::getInt8PtrTy(ctxt);
 
-  //generate Stride, Bound, base addresses, and intersect checks
-  Value *Cond = nullptr;
-  auto exp = AAA.expandAllAt(accs, L, L->getLoopPreheader()->getTerminator(), Cond, i8Ptr, i32, i64);
+  Instruction *PhT = L->getLoopPreheader()->getTerminator();
+
+  //generate Steps, Reps, base addresses, intersect checks, and bound checks
+  auto exp = AAA.expandAllAt(accs, L, PhT, Cond, i8Ptr, i32, i64, !SSR_NO_INTERSECTCHECK, !SSR_NO_BOUNDCHECK);
   assert(Cond);
 
-  //errs()<<"expanded All in Loop Preheader:\n"; L->getLoopPreheader()->dump();
-
-  //for some reason sometimes the loop has multiple exits but they are the same (this is the case if a CondBr has two operands to same block)
-  SmallVector<BasicBlock *, 1U> exits;
-  L->getExitBlocks(exits);
-  BasicBlock *Ex = nullptr;
-  for (BasicBlock *BB : exits){
-    if (!Ex) Ex = BB;
-    assert(Ex == BB);
-  }
-  DomTreeUpdater DTU(&AAA.getDT(), DomTreeUpdater::UpdateStrategy::Lazy);
-  BranchInst *BR = cloneRegion(L->getLoopPreheader()->getTerminator(), &*Ex->getFirstInsertionPt(), AAA.getDT(), DTU);
-
-  //errs()<<"done cloning, Loop Preheader:\n"; L->getLoopPreheader()->dump();
-
   //TCDM Checks
-  IRBuilder<> builder(BR);
-  for (auto &E : exp) {
-    Cond = builder.CreateAnd(Cond, GenerateTCDMCheck(E, BR));
+  if (!SSR_NO_TCDMCHECK) {
+    IRBuilder<> builder(PhT);
+    for (auto &E : exp) {
+      Cond = builder.CreateAnd(Cond, GenerateTCDMCheck(E, PhT));
+    }
+  }
+  
+  assert(Cond->getType() == Type::getInt1Ty(Cond->getContext()) && "Cond has type bool (i1)");
+
+  return exp;
+}
+
+///clones from L's preheader to L's exit uses Cond for CBr between clone and non-clone
+///then generates the instrinsics for all in exp
+void cloneAndSetup(const Loop *L, Value *Cond, std::vector<ExpandedAffAcc> &exp) {
+  assert(exp.size() <= NUM_SSR);
+  if (exp.size() == 0u) return;
+
+  errs()<<"cloning in "<<L->getHeader()->getNameOrAsOperand()<<"\n";
+
+  Instruction *PhT = L->getLoopPreheader()->getTerminator();
+
+  if (!isa<ConstantInt>(Cond)){ //if Cond is not a constant we cannot make the decision at compile time ==> clone whole region for if-else
+    BranchInst *BR = cloneRegion(L->getLoopPreheader()->getTerminator(), &*getSingleExitBlock(L)->getFirstInsertionPt());
+    BR->setCondition(Cond);
+  } else {
+    //this should never happen, but it means the runtime checks were somehow known at compile time and turned out false:
+    if(cast<ConstantInt>(Cond)->getLimitedValue() == 0u) return; 
   }
 
-  BR->setCondition(Cond);
-
+  Instruction *ExP = &*getSingleExitBlock(L)->getFirstInsertionPt(); //this changes if clone is executed!
+  
   unsigned dmid = 0u;
   for (auto &E : exp) {
-    GenerateSSRSetup(E, dmid++, L->getLoopPreheader()->getTerminator());
+    GenerateSSRSetup(E, dmid++, PhT);
   }
 
-  generateSSREnDis(L);
-
-  DTU.flush(); //only change DT after everything
+  generateSSREnDis(PhT, ExP);
 }
 
 bool isValid(AffAcc *A, const Loop *L) {
@@ -480,9 +523,45 @@ bool isValid(AffAcc *A, const Loop *L) {
   return valid;
 }
 
+
+//TODO: could do this faster by precomputing for whole function
+bool isValidLoop(const Loop *L) {
+
+  DenseSet<Intrinsic::ID> ids;
+  for (Intrinsic::ID x : riscSSRIntrinsics){
+    ids.insert(x); //put intrinsics into set for faster lookup
+  }
+
+  for (BasicBlock *BB : L->getBlocks()){
+    for (Instruction &i : *BB) {
+      Instruction *I = &i;
+      if (CallBase *C = dyn_cast<CallBase>(I)) {
+        //if L contains call to function that uses SSR streams ==> cannot have streams itself (potential conflict of streams using the same DMIDs)
+        if (C->hasFnAttr(SSRFnAttr)) {
+          errs()<<"Loop "<<L->getHeader()->getNameOrAsOperand()<<" is invalid, because of:\n"<<*C<<"\n";
+          return false; 
+        }
+        if (IntrinsicInst *II = dyn_cast<IntrinsicInst>(C)) {
+          if (ids.contains(II->getIntrinsicID())) {
+            errs()<<"Loop "<<L->getHeader()->getNameOrAsOperand()<<" is invalid, because it already contains intrinsic:\n"<<*II<<"\n";
+            return false;
+          }
+        }
+      }
+    }
+  }
+  return true;
+}
+
 void visitLoop(const Loop *L, DenseMap<const Loop *, std::vector<AffAcc *>> &possible, ConflictTree<Loop> &tree, AffineAccess &AAA) {
   assert(L);
+
+  //NOTE: cannot return early in this function, as `possible` and `tree` need to be expanded even if L is not suitable for streams
+  
   ArrayRef<AffAcc *> accs = AAA.getExpandableAccesses(L);
+
+  if (!isValidLoop(L)) accs = ArrayRef<AffAcc*>(); //make accs empty
+
   std::vector<AffAcc *> valid;
   for (AffAcc *A : accs) {
     if (isValid(A, L)) valid.push_back(A);
@@ -507,17 +586,25 @@ void visitLoop(const Loop *L, DenseMap<const Loop *, std::vector<AffAcc *>> &pos
 } //end of namespace
 
 PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &FAM){
+  if (!SSR_INFERENCE) return PreservedAnalyses::all();
+  if (F.hasFnAttribute(SSRFnAttr)) return PreservedAnalyses::all(); //this function already contains streams ==> skip
 
   AffineAccess &AAA = FAM.getResult<AffineAccessAnalysis>(F);
 
   errs()<<"SSR Generation Pass on function: "<<F.getNameOrAsOperand()<<" ---------------------------------------------------\n";
 
   bool changed = false;
-  for (const Loop *T : AAA.getLI().getTopLevelLoops()){
-    DenseMap<const Loop *, std::vector<AffAcc *>> possible;
-    ConflictTree<Loop> tree;
+  auto &toploops = AAA.getLI().getTopLevelLoops();
+  DenseMap<const Loop *, ConflictTree<Loop>> trees; //keep track of the conflict tree for each top-level loop
+  DenseMap<const Loop *, std::vector<const Loop *>> bestLoops; //keep track of the best results for each tree
+  DenseMap<const Loop *, std::vector<AffAcc *>> possible; //keep track of the AffAcc's that can be expanded in each loop
+  DenseMap<const Loop*, Value*> conds; //keep track of the condition of the run-time check for each loop
+  DenseMap<const Loop*, std::vector<ExpandedAffAcc>> exps; //keep track of the expanded AffAcc's for each loop
 
-    //go through all loops in this tree to build conflict-tree and find possible expands
+  for (const Loop *T : toploops){
+    ConflictTree<Loop> &tree = trees.insert(std::make_pair(T, ConflictTree<Loop>())).first->getSecond();
+
+    //go through all loops in sub-tree of T to build conflict-tree and find possible expands
     std::deque<const Loop *> worklist;
     worklist.push_back(T);
     while (!worklist.empty()) {
@@ -533,19 +620,36 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
     //expand them
     for (const Loop *L : best) {
       auto &acc = possible.find(L)->getSecond();
-      if (!acc.empty()) expandInLoop(acc, L, AAA);
+      if (!acc.empty()) {
+        changed = true;
+        Value *Cond = nullptr;
+        auto exp = expandInLoop(acc, L, AAA, Cond);
+        assert(Cond);
+        conds.insert(std::make_pair(L, Cond));
+        exps.insert(std::make_pair(L, std::move(exp)));
+      }
     }
 
-    changed |= !best.empty();
+    bestLoops.insert(std::make_pair(T, std::move(best)));
   }
 
-  /*
-  errs()<<"dumping Module ============================\n";
-  F.getParent()->dump();
-  errs()<<"done dumping Module ============================\n";
-  */
+  ///NOTE: as soon as we start cloning (so after this comment), all the analyses are falsified and we do not want to update them 
+  ///because that would falsify the AAA (which we do not want to update because it would find less solutions after the cloning).
+  ///So all the code that follows only makes use of simple stuff like Loop::getLoopPreheader() which luckily still works
+
+  for (const Loop *T : toploops) {
+    std::vector<const Loop *> &best = bestLoops.find(T)->getSecond(); 
+    for (const Loop *L : best) {
+      auto p = conds.find(L);
+      if (p != conds.end()) {
+        errs()<<"clone and setup in "<<L->getHeader()->getNameOrAsOperand()<<"\n";
+        cloneAndSetup(L, p->second, exps.find(L)->getSecond());
+      }
+    }
+  }
 
   if (!changed) return PreservedAnalyses::all();
+  F.addFnAttr(StringRef(SSRFnAttr));
   F.addFnAttr(Attribute::AttrKind::NoInline);
   return PreservedAnalyses::none();
 }

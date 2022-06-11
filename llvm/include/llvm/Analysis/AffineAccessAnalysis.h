@@ -61,14 +61,16 @@ private:
   SmallVector<const Loop *, 4U> containingLoops; //from inner- to outermost
   DenseMap<AffAcc *, std::pair<const Loop *, AffAccConflict>> conflicts;
   void findSteps(const SCEV *A, const SCEV *Factor, unsigned loop);
+  AffAccConflict fromConflictPair(const detail::DenseMapPair<AffAcc*, std::pair<const Loop*, AffAccConflict>> &p, const Loop *L) const;
 
 public:
   AffAcc() = delete;
-  //immediately copies the contens of accesses and containingLoops
+  ///immediately copies the contens of accesses and containingLoops
   AffAcc(ArrayRef<Instruction *> accesses, const SCEV *Addr, MemoryUseOrDef *MA, ArrayRef<const Loop *> containingLoops, ScalarEvolution &SE);
   ArrayRef<Instruction *> getAccesses() const;
   bool isWrite() const;
-  unsigned getMaxDimension() const;
+  int getMaxDimension() const; 
+  const Loop *getDeepestMalformed() const;
   bool isWellFormed(unsigned dimension) const;
   bool isWellFormed(const Loop *L) const;
   bool canExpandBefore(const Loop *L) const;
@@ -76,11 +78,13 @@ public:
   void dumpInLoop(const Loop *L) const;
   unsigned loopToDimension(const Loop *L) const;
   const SCEV *getBaseAddr(unsigned dim) const;
+  const SCEV *getBaseAddr(const Loop *L) const;
   const SCEV *getStep(unsigned dim) const;
   const SCEV *getRep(unsigned dim) const;
   const Loop *getLoop(unsigned dim) const;
   ArrayRef<const Loop *> getContainingLoops() const;
   AffAccConflict getConflict(AffAcc *A, const Loop *L) const;
+  std::vector<std::pair<AffAcc*, AffAccConflict>> getConflicts(const Loop *L) const;
 
   MemoryUseOrDef *getMemoryAccess();
   void addConflict(AffAcc *A, const Loop *StartL, AffAccConflict kind);
@@ -101,7 +105,7 @@ private:
 
 public:
   MemDep(MemorySSA &MSSA, AAResults &AA) : MSSA(MSSA), AA(AA) {}
-  DenseSet<MemoryDef *> findClobbers(MemoryUseOrDef *MA);
+  DenseSet<MemoryUseOrDef *> findClobbers(MemoryUseOrDef *MA);
   DenseSet<MemoryUseOrDef *> findClobberUsers(MemoryDef *MA);
 };
 
@@ -138,7 +142,8 @@ private:
 
   std::vector<AffAcc *> analyze(const Loop *Parent, ArrayRef<const Loop *> loopPath);
   void addAllConflicts(const std::vector<AffAcc *> &all);
-  AffAccConflict getRWConflict(AffAcc *Read, AffAcc *Write, const Loop *L);
+  AffAccConflict calcRWConflict(AffAcc *Read, AffAcc *Write, const Loop *L) const;
+  std::pair<AffAccConflict, const Loop*> calcConflict(AffAcc *A, AffAcc *B) const;
   
 public:
   AffineAccess(Function &F, ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI, MemorySSA &MSSA, AAResults &AA);
@@ -154,7 +159,7 @@ public:
 
   ArrayRef<AffAcc *> getExpandableAccesses(const Loop *L);
   std::vector<ExpandedAffAcc> expandAllAt(ArrayRef<AffAcc *> Accs, const Loop *L, Instruction *Point, 
-    Value *&BoundCheck, Type *PtrTy, IntegerType *ParamTy, IntegerType *AgParamTy);
+    Value *&BoundCheck, Type *PtrTy, IntegerType *ParamTy, IntegerType *AgParamTy, bool conflictChecks = true, bool repChecks = false);
 };
 
 class AffineAccessAnalysis : public AnalysisInfoMixin<AffineAccessAnalysis> {

@@ -236,7 +236,6 @@ Optional<bool> predicatedICmpOutcome(ICmpInst *Cmp, const SCEV *Rep, ScalarEvolu
 //predicate is that Rep > 0
 bool isOnAllPredicatedControlFlowPaths(BasicBlock *BB, const Loop *L, const DominatorTree &DT, const SCEV *Rep, ScalarEvolution &SE){
   if (isOnAllControlFlowPaths(BB, L, DT)) return true; //is on all paths anyway
-  Rep->dump();
   DenseSet<BasicBlock *> vis; //visited set
   std::deque<BasicBlock *> q(1U, L->getHeader()); //iterative BFS with queue
   while (!q.empty()){
@@ -305,7 +304,7 @@ const Loop *findFirstContaining(ArrayRef<const Loop *> loops, BasicBlock *BB){
   return nullptr;
 }
 
-Value *goodAnd(IRBuilder<> &builder, ArrayRef<Value *> bools){
+/*Value *goodAnd(IRBuilder<> &builder, ArrayRef<Value *> bools){
   assert(!bools.empty());
   std::vector<Value *> b1, b2;
   for (Value *b : bools) b1.push_back(b);
@@ -319,9 +318,36 @@ Value *goodAnd(IRBuilder<> &builder, ArrayRef<Value *> bools){
     b2.clear();
   }
   return b1[0]; //return the last value
-}
+}*/
 
 bool hasMemInst(MemoryUseOrDef *MA) { return MA && MA->getMemoryInst(); }
+
+//updates L<-M if M is a descendant of L (or if L is nullptr)
+void updateIfDescendant(const Loop *&L, const Loop *M) {
+  if (!L || (M && L->contains(M))) L = M;
+}
+
+//updates L<-M if L is descendant of M OR if M is nullptr
+void updateIfAncestor(const Loop *&L, const Loop *M) {
+  if (!M || M->contains(L)) L = M;
+}
+
+void updateOutermostExpandableExcl(const Loop *&outerMostExpandableExl, AffAccConflict kind, const Loop *innermostCommon, const Loop *deepestMalformed) {
+  switch (kind) {
+  case AffAccConflict::NoConflict:
+    break;
+  case AffAccConflict::MustNotIntersect: 
+    errs()<<"must-not-intersect\n";
+    updateIfAncestor(innermostCommon, deepestMalformed); //updates innermostCommon to deepestMalformed if that one is less "deep"
+    LLVM_FALLTHROUGH;
+  case AffAccConflict::Bad: 
+    errs()<<"bad\n";
+    updateIfDescendant(outerMostExpandableExl, innermostCommon);
+    break;
+  default:
+    llvm_unreachable("unknown conflict type");
+  }
+}
 
 } //end of namespace
 
@@ -399,13 +425,18 @@ AffAcc::AffAcc(ArrayRef<Instruction *> accesses, const SCEV *Addr, MemoryUseOrDe
 {
   assert(!accesses.empty());
   assert(MA); 
-  if (Addr && SCEVContainsCouldNotCompute(Addr)) Addr = nullptr; //set to null if contains SCEVCouldNotCompute
-  baseAddresses.push_back(Addr);
-  steps.push_back((const SCEV *)nullptr); //there is no step for dim=0
-  reps.push_back((LoopRep *)nullptr); //there is no rep for dim=0
+
   containingLoops.push_back((const Loop *)nullptr); //there is no loop for dim=0
   containingLoops.append(contLoops.begin(), contLoops.end());
+
+  bool isVolatile = false;
+  for (Instruction *I : accesses) 
+    isVolatile |= (isa<LoadInst>(I) && cast<LoadInst>(I)->isVolatile()) || (isa<StoreInst>(I) && cast<StoreInst>(I)->isVolatile());
+  if (Addr && (SCEVContainsCouldNotCompute(Addr) || isVolatile)) Addr = nullptr; //set to null if contains SCEVCouldNotCompute
+  baseAddresses.push_back(Addr);
   if (!Addr) return; //do not look for steps or addresses if SCEV of address is unknown
+  steps.push_back((const SCEV *)nullptr); //there is no step for dim=0
+  reps.push_back((LoopRep *)nullptr); //there is no rep for dim=0
   findSteps(Addr, (const SCEV *)nullptr, 1u); //find steps
   for (unsigned dim = 1; dim < containingLoops.size(); dim++){
     Addr = SE.SplitIntoInitAndPostInc(containingLoops[dim], Addr).first;
@@ -477,10 +508,35 @@ void AffAcc::findSteps(const SCEV *A, const SCEV *Factor, unsigned loop){
 }
 
 ArrayRef<Instruction *> AffAcc::getAccesses() const { return accesses; }
+
 bool AffAcc::isWrite() const { return isa<MemoryDef>(MA); }
-unsigned AffAcc::getMaxDimension() const { return reps.size() - 1u; }
-bool AffAcc::isWellFormed(unsigned dimension) const { return dimension <= getMaxDimension() && baseAddresses[0]; }
+
+///the nr of times `this` was promoted (-1 means the address is not known)
+int AffAcc::getMaxDimension() const { return (int)reps.size() - 1; }
+
+///return the first (as in deepest) Loop L where this->isWellFormed(L) is false
+///returns null if there is no such loop
+const Loop *AffAcc::getDeepestMalformed() const {
+  for (const Loop *L : containingLoops) {
+    if (L && !isWellFormed(L)) return L;
+  }
+  return nullptr;
+  /*unsigned malformedStart = (unsigned)(getMaxDimension() + 2); //getMaxDimension() >= -1
+  if (containingLoops.size() > malformedStart) return containingLoops[malformedStart];
+  else return nullptr;*/
+}
+
+///true if this was successfully promoted to the given dimension (ie. nr of promotions is at least `dimension`)
+bool AffAcc::isWellFormed(unsigned dimension) const { 
+  int md = getMaxDimension();
+  return md >= 0 && dimension <= (unsigned)md; 
+}
+
+///true if this was successfully promoted to the given dimension (ie. nr of promotions is `dimension`)
+///if true, this means that `this` can be expanded in the preheader of `L`
 bool AffAcc::isWellFormed(const Loop *L) const { return isWellFormed(loopToDimension(L)); }
+
+///returns the dimension that is defined by `L` (starts at 1)
 unsigned AffAcc::loopToDimension(const Loop *L) const {
   assert(L && "L not nullptr");
   for (unsigned d = 1u; d < containingLoops.size(); d++){ //FIXME: linear search -> improve with a map
@@ -488,23 +544,36 @@ unsigned AffAcc::loopToDimension(const Loop *L) const {
   }
   llvm_unreachable("The provided loop does not contain `this`!");
 }
-bool AffAcc::canExpandBefore(const Loop *L) const { return isWellFormed(loopToDimension(L)); }
+
+///SCEV of base Address for the base address at a given dimension
 const SCEV *AffAcc::getBaseAddr(unsigned dim) const { assert(dim < baseAddresses.size()); return baseAddresses[dim]; }
+
+///SCEV of base Address outside of `L`
+const SCEV *AffAcc::getBaseAddr(const Loop *L) const { return getBaseAddr(loopToDimension(L)); }
+
+///SCEV of step for the dimension `dim` (that means there is no step for `dim` = 0)
 const SCEV *AffAcc::getStep(unsigned dim) const { assert(dim < steps.size()); return steps[dim]; }
+
+///SCEV of rep for the dimension `dim` (that means there is no rep for `dim` = 0)
 const SCEV *AffAcc::getRep(unsigned dim) const { 
   assert(dim < reps.size()); 
   if (!reps[dim] || !reps[dim]->isAvailable()) return nullptr;
   return reps[dim]->getSCEV(); 
 }
+
+///get Loop for given `dim` (that means there is no Loop for `dim` = 0)
 const Loop *AffAcc::getLoop(unsigned dim) const { assert(dim < containingLoops.size()); return containingLoops[dim]; }
+
+///get containing loops from inner- to outermost
 ArrayRef<const Loop *> AffAcc::getContainingLoops() const { return ArrayRef<const Loop *>(containingLoops); }
+
 void AffAcc::dumpInLoop(const Loop *L) const {
   errs()<<"Affine Access of \n";
-  unsigned dimension;
-  if (L) dimension = loopToDimension(L);
-  else dimension = getMaxDimension();
+  int dimension = getMaxDimension();
+  if (L) dimension = std::min((int)loopToDimension(L), dimension);
   for (auto *I : accesses) errs()<<*I<<"\n";
-  for (unsigned dim = 0u; dim <= dimension  && dim <= getMaxDimension(); dim++){
+  if (dimension < 0) errs()<<"\t<malformed>\n";
+  for (int dim = 0; dim <= dimension && dim <= getMaxDimension(); dim++){
     const SCEV *s = getStep(dim);
     const SCEV *r = getRep(dim);
     const SCEV *a = getBaseAddr(dim);
@@ -526,26 +595,46 @@ void AffAcc::dumpInLoop(const Loop *L) const {
     errs()<<"\n";
   }
 }
+
 void AffAcc::dump() const { dumpInLoop(nullptr); }
-AffAccConflict AffAcc::getConflict(AffAcc *A, const Loop *L) const {
-  auto p = conflicts.find(A);
-  if (p != conflicts.end()) {
-    const Loop *S = p->getSecond().first;
-    if (S == L || L->contains(S)) { //if start is L or more "inner" loop
-      if (!isWellFormed(L) || !A->isWellFormed(L)) return AffAccConflict::Bad; //if either is not well-formed "demote" the conflict to bad (but only if exists)
-      return p->getSecond().second;
-    }
+
+AffAccConflict AffAcc::fromConflictPair(const detail::DenseMapPair<AffAcc*, std::pair<const Loop*, AffAccConflict>> &p, const Loop *L) const {
+  const Loop *S = p.getSecond().first;
+  if (S == L || L->contains(S)) { //if start is L or more "inner" loop
+    if (!isWellFormed(L) || !p.first->isWellFormed(L)) return AffAccConflict::Bad; //if either is not well-formed "demote" the conflict to bad (but only if exists)
+    return p.getSecond().second;
   }
   return AffAccConflict::NoConflict;
 }
 
+AffAccConflict AffAcc::getConflict(AffAcc *A, const Loop *L) const {
+  auto p = conflicts.find(A);
+  if (p != conflicts.end()) {
+    return fromConflictPair(*p, L);
+  }
+  return AffAccConflict::NoConflict;
+}
+
+std::vector<std::pair<AffAcc*, AffAccConflict>> AffAcc::getConflicts(const Loop *L) const {
+  std::vector<std::pair<AffAcc*, AffAccConflict>> res;
+  for (const auto &p : conflicts) {
+    assert(p.first);
+    assert(p.getSecond().first);
+    AffAccConflict kind = fromConflictPair(p, L);
+    if (kind != AffAccConflict::NoConflict) res.push_back(std::make_pair(p.first, kind));
+  }
+  return res;
+}
+
 MemoryUseOrDef *AffAcc::getMemoryAccess() { return MA; }
+
 void AffAcc::addConflict(AffAcc *A, const Loop *StartL, AffAccConflict kind){
+  assert(StartL);
   assert(conflicts.find(A) == conflicts.end() && "no conflict for A yet");
   assert(kind == AffAccConflict::Bad || (isWellFormed(StartL) && A->isWellFormed(StartL)));
   conflicts.insert(std::make_pair(A, std::make_pair(StartL, kind)));
-  /*errs()<<"conflict for:\n"; dumpInLoop(StartL); errs()<<"with:\n"; A->dumpInLoop(StartL); errs()<<"is ===========>";
-  switch (kind)
+  errs()<<"conflict for:\n"; dumpInLoop(StartL); errs()<<"with:\n"; A->dumpInLoop(StartL); errs()<<"is ===> ";
+  /*switch (kind)
   {
   case AffAccConflict::Bad:
     errs()<<"Bad";
@@ -561,27 +650,27 @@ void AffAcc::addConflict(AffAcc *A, const Loop *StartL, AffAccConflict kind){
   }
   errs()<<"\n"; */
 }
+
 bool AffAcc::promote(LoopRep *LR){
   if (!LR->isAvailable()) return false;
-  unsigned newDim = getMaxDimension() + 1u;
-  if (!isWellFormed(getMaxDimension())) return false;
+  unsigned newDim = (unsigned)(getMaxDimension() + 1); //getMaxDimension() >= -1
   if (getLoop(newDim) != LR->getLoop()) return false;
   errs()<<"promote: (1) loops match, ";
   bool possible = true;
   Instruction *Point = LR->getLoop()->getLoopPreheader()->getTerminator();
   //check all current reps and steps
-  for (unsigned dim = 1u; possible && dim < newDim; dim++){ 
-    possible = possible && isSafeToExpandAt(getStep(dim), Point, SE);
-    possible = possible && reps[dim]->isSafeToExpandBefore(LR->getLoop());
+  for (int dim = 1; possible && dim < getMaxDimension(); dim++){ 
+    possible &= isSafeToExpandAt(getStep(dim), Point, SE);
+    possible &= reps[dim]->isSafeToExpandBefore(LR->getLoop());
   }
-  if (possible) errs()<<"(2) current rep & step can be expanded, ";
+  if (possible) errs()<<"can expand (2) current rep & step, ";
   //check rep and step of new dimension
   possible &= steps.size() > newDim && isSafeToExpandAt(getStep(newDim), Point, SE);
   possible &= LR->isSafeToExpandBefore(LR->getLoop());
-  if (possible) errs()<<"(3) new rep & step can be expanded, ";
+  if (possible) errs()<<"(3) new rep & step, ";
   //check base address
   possible &= !SCEVContainsCouldNotCompute(getBaseAddr(newDim)) && isSafeToExpandAt(getBaseAddr(newDim), Point, SE);
-  if (possible) errs()<<"(4) new base addr can be expanded";
+  if (possible) errs()<<"and (4) new base addr!";
   errs()<<"\n";
   if (!possible) return false;
 
@@ -604,6 +693,7 @@ Value *AffAcc::expandBaseAddr(unsigned dimension, Type *ty, Instruction *InsertB
   ex.setInsertPoint(InsertBefore);
   return castToSize(ex.expandCodeFor(getBaseAddr(dimension)), ty, InsertBefore);
 }
+
 Value *AffAcc::expandStep(unsigned dimension, Type *ty, Instruction *InsertBefore){
   assert(isWellFormed(dimension) && dimension > 0u);
   InsertBefore = InsertBefore ? InsertBefore : reps[dimension]->getLoop()->getLoopPreheader()->getTerminator();
@@ -612,17 +702,20 @@ Value *AffAcc::expandStep(unsigned dimension, Type *ty, Instruction *InsertBefor
   ex.setInsertPoint(InsertBefore);
   return castToSize(ex.expandCodeFor(getStep(dimension)), ty, InsertBefore);
 }
+
 Value *AffAcc::expandRep(unsigned dimension, Type *ty, Instruction *InsertBefore){
   assert(isWellFormed(dimension) && dimension > 0u);
   InsertBefore = InsertBefore ? InsertBefore : reps[dimension]->getLoop()->getLoopPreheader()->getTerminator();
   assert(isSafeToExpandAt(getRep(dimension), InsertBefore, SE) && "data not expanable here (note: only preheader guaranteed)");
   return reps[dimension]->expandAt(ty, InsertBefore);
 }
+
 ExpandedAffAcc AffAcc::expandAt(const Loop *L, Instruction *Point, 
   Type *PtrTy, IntegerType *ParamTy, IntegerType *AgParamTy) 
 {
   errs()<<"expanding for Loop with header: "<<L->getHeader()->getNameOrAsOperand()<<" the following:\n";
   dumpInLoop(L);
+  
   if (!Point) Point = L->getLoopPreheader()->getTerminator();
   IRBuilder<> builder(Point);
   assert(isWellFormed(L));
@@ -655,8 +748,8 @@ bool MemDep::alias(MemoryUseOrDef *A, MemoryUseOrDef *B) {
   else return alias(getAddress(A), getAddress(B)); 
 }
 
-DenseSet<MemoryDef *> MemDep::findClobbers(MemoryUseOrDef *MA){
-  DenseSet<MemoryDef *> res;
+DenseSet<MemoryUseOrDef *> MemDep::findClobbers(MemoryUseOrDef *MA){
+  DenseSet<MemoryUseOrDef *> res;
   std::deque<MemoryAccess *> worklist;
   DenseSet<MemoryAccess *> vis;
   worklist.push_back(MA->getDefiningAccess());
@@ -772,70 +865,46 @@ std::vector<AffAcc *> AffineAccess::analyze(const Loop *Parent, ArrayRef<const L
 void AffineAccess::addAllConflicts(const std::vector<AffAcc *> &all) {
   for (AffAcc *A : all) {
     assert(A);
-    ArrayRef<const Loop *> loops = A->getContainingLoops();
-    const Loop *outerMostExpandableExl = nullptr;
+    const Loop *outerMostExpandableExl = A->getDeepestMalformed();
+    DenseSet<MemoryUseOrDef *> c;
     if (A->isWrite()){
-      MemoryDef *MA = cast<MemoryDef>(A->getMemoryAccess());
-      const DenseSet<MemoryUseOrDef *> &cu = MD.findClobberUsers(MA);
-      for (MemoryUseOrDef *D : cu) {
-        if (MA == D || !hasMemInst(D)) continue;
-        const Loop *innermostCommon = findFirstContaining(loops, D->getBlock());
-        if (!innermostCommon) continue;
-        auto p = access.find(D);
-        if (p == access.end()) continue; //no AffAcc for D ==> skip
-        AffAcc *B = p->second;
-        AffAccConflict kind = AffAccConflict::Bad;
-        if (A->isWellFormed(innermostCommon) && B->isWellFormed(innermostCommon)) {
-          if (B->isWrite()) kind = AffAccConflict::MustNotIntersect; //WaW
-          else kind = getRWConflict(B, A, innermostCommon);
-        }
-        //at this point, even if the two do not alias, we assume the chance is high that they do at runtime 
-        //if their base addresses share some SCEVUnknowns (ie. some Value's) (FIXME: CONSERVATIVE)
-        if (kind == AffAccConflict::MustNotIntersect){
-          if (shareValues(A->getBaseAddr(A->loopToDimension(innermostCommon)), B->getBaseAddr(B->loopToDimension(innermostCommon))))
-            kind = AffAccConflict::Bad;
-        }
-        if (kind != AffAccConflict::NoConflict) A->addConflict(B, innermostCommon, kind);
-        if (kind == AffAccConflict::Bad) outerMostExpandableExl = innermostCommon;
-      }
+      c = MD.findClobberUsers(cast<MemoryDef>(A->getMemoryAccess()));
     } else {
-      MemoryUseOrDef *MA = A->getMemoryAccess();
-      const DenseSet<MemoryDef *> &cs = MD.findClobbers(MA);
-      for (MemoryDef *D : cs) {
-        if (MA == D || !hasMemInst(D)) continue;
-        const Loop *innermostCommon = findFirstContaining(loops, D->getBlock());
-        if (!innermostCommon) continue;
-        auto p = access.find(D);
-        if (p == access.end()) continue; //no AffAcc for D ==> skip
-        AffAcc *B = p->second;
-        AffAccConflict kind = getRWConflict(A, B, innermostCommon);
-        //at this point, even if the two do not alias, we assume the chance is high that they do at runtime 
-        //if their base addresses share some SCEVUnknowns (ie. some Value's) (FIXME: CONSERVATIVE)
-        if (kind == AffAccConflict::MustNotIntersect){
-          if (shareValues(A->getBaseAddr(A->loopToDimension(innermostCommon)), B->getBaseAddr(B->loopToDimension(innermostCommon))))
-            kind = AffAccConflict::Bad;
-        }
-        if (kind != AffAccConflict::NoConflict) A->addConflict(B, innermostCommon, kind);
-        if (kind == AffAccConflict::Bad) outerMostExpandableExl = innermostCommon;
-      }
+      c = MD.findClobbers(A->getMemoryAccess());
     }
+    for (MemoryUseOrDef *D : c) {
+      if (A->getMemoryAccess() == D || !hasMemInst(D)) continue;
+      auto p = access.find(D);
+      if (p == access.end()) continue;
+      AffAcc *B = p->second;
+      AffAcc *x = A; //copy, TODO: remove this check
+      auto r = calcConflict(A, B);
+      assert(A == x && "swap does not affect");
+      if (r.first != AffAccConflict::NoConflict) A->addConflict(B, r.second, r.first);
+      updateOutermostExpandableExcl(outerMostExpandableExl, r.first, r.second, B->getDeepestMalformed());
+      assert(!outerMostExpandableExl || outerMostExpandableExl->contains(A->getMemoryAccess()->getBlock()));
+    }
+    ArrayRef<const Loop *> loops = A->getContainingLoops();
     for (const Loop *L : loops) {
       if (!L) continue;
       if (L == outerMostExpandableExl) break;
-      if (!A->isWellFormed(L)) break;
+      if (!(!L || A->isWellFormed(L))){
+        errs()<<"HERE\n";
+        if (L) L->dump();
+        if (outerMostExpandableExl) outerMostExpandableExl->dump();
+        A->dump();
+      }
+      assert(!L || A->isWellFormed(L));
       auto p = expandableAccesses.find(L);
       if (p == expandableAccesses.end()){
-        SmallVector<AffAcc *, 3U> l;
-        l.push_back(A);
-        expandableAccesses.insert(std::make_pair(L, std::move(l)));
-      } else {
-        p->getSecond().push_back(A);
-      }
+        p = expandableAccesses.insert(std::make_pair(L, SmallVector<AffAcc*, 3U>())).first;
+      } 
+      p->getSecond().push_back(A);
     }
   }
 }
 
-AffAccConflict AffineAccess::getRWConflict(AffAcc *Read, AffAcc *Write, const Loop *L) {
+AffAccConflict AffineAccess::calcRWConflict(AffAcc *Read, AffAcc *Write, const Loop *L) const {
   assert(!Read->isWrite());
   assert(Write->isWrite());
   if (!L->contains(Read->getMemoryAccess()->getBlock()) || !L->contains(Write->getMemoryAccess()->getBlock())) return AffAccConflict::NoConflict;
@@ -848,15 +917,40 @@ AffAccConflict AffineAccess::getRWConflict(AffAcc *Read, AffAcc *Write, const Lo
     kind = AffAccConflict::MustNotIntersect;
   } else { //read dominates write ==> WaR
     kind = AffAccConflict::MustNotIntersect;
-    //exception we know that the store always happens to a position already written from if the store is to same address as write (FIXME: CONSERVATIVE)
+    //exception: we know that the store always happens to a position already written from if the store is to same address as write (FIXME: CONSERVATIVE)
     if ((Addr && DAddr && AA.alias(Addr, DAddr) == MustAlias)
       || accessPatternsAndAddressesMatch(Read, Write, L)) 
     {
       kind = AffAccConflict::NoConflict;
     }
   }
-  
   return kind;
+}
+
+///returns the kind of conflict (and innermost common loop) that A and B have assuming there is some memory dependency
+///does not check for the memory dependency itself for to peformance
+std::pair<AffAccConflict, const Loop*> AffineAccess::calcConflict(AffAcc *A, AffAcc *B) const {
+  assert((A->isWrite() || B->isWrite()) && "conflict between two reads ???");
+  const Loop *const innermostCommon = findFirstContaining(A->getContainingLoops(), B->getMemoryAccess()->getBlock());
+  if (!innermostCommon) return std::make_pair(AffAccConflict::NoConflict, innermostCommon);
+  if (!A->isWrite()) std::swap(A, B); //we know at least one of them is write, swap so that one is A
+  AffAccConflict kind = AffAccConflict::Bad; //assume Bad at beginning
+  if (A->isWellFormed(innermostCommon) && B->isWellFormed(innermostCommon)) {
+    if (B->isWrite()) kind = AffAccConflict::MustNotIntersect; //WaW
+    else kind = calcRWConflict(B, A, innermostCommon); //B is read and A is write
+  }
+  //at this point, even if the two do not alias, we assume the chance is high that they do at runtime 
+  //if their base addresses share some SCEVUnknowns (ie. some Value's) (FIXME: this is CONSERVATIVE)
+  if (kind == AffAccConflict::MustNotIntersect){
+    const Loop *L = innermostCommon->getParentLoop();
+    const Loop *Last = innermostCommon;
+    while (L && A->isWellFormed(L) && B->isWellFormed(L)) { //traverse up the loop-tree up to the point where one of them is not wellformed anymore
+      Last = L;
+      L = L->getParentLoop();
+    }
+    if (shareValues(A->getBaseAddr(Last), B->getBaseAddr(Last))) kind = AffAccConflict::Bad;
+  }
+  return std::make_pair(kind, innermostCommon);
 }
 
 bool AffineAccess::accessPatternsMatch(const AffAcc *A, const AffAcc *B, const Loop *L) const {
@@ -889,54 +983,78 @@ ArrayRef<AffAcc *> AffineAccess::getExpandableAccesses(const Loop *L) {
   return ArrayRef<AffAcc *>(p->getSecond());
 }
 
-
 std::vector<ExpandedAffAcc> 
 AffineAccess::expandAllAt(ArrayRef<AffAcc *> Accs, const Loop *L, 
   Instruction *Point, Value *&BoundCheck, 
-  Type *PtrTy, IntegerType *ParamTy, IntegerType *AgParamTy) 
+  Type *PtrTy, IntegerType *ParamTy, IntegerType *AgParamTy, bool conflictChecks, bool repChecks) 
 {
   assert(Point);
-  std::vector<ExpandedAffAcc> res;
   IRBuilder<> builder(Point);
-  for (AffAcc *A : Accs) {
-    res.push_back(std::move(A->expandAt(L, Point, PtrTy, ParamTy, AgParamTy)));
+
+  DenseMap<AffAcc*, ExpandedAffAcc> exps;
+  for (AffAcc *A : Accs) { //expand the requested AffAcc's
+    exps.insert(std::make_pair(A, std::move(A->expandAt(L, Point, PtrTy, ParamTy, AgParamTy))));
   }
+
   std::vector<Value *> checks;
-  for (auto A = res.begin(); A != res.end(); ++A) {
-    for (auto B = res.begin(); B != A; ++B){
-      AffAccConflict kind = std::max(A->Access->getConflict(B->Access, L), B->Access->getConflict(A->Access, L));
-      switch (kind)
-      {
-      case AffAccConflict::NoConflict:
-        break; //nothing to add
-      case AffAccConflict::MustNotIntersect: {
-        Value *x = builder.CreateICmpULT(A->UpperBound, B->LowerBound, "no.inter.ab");
-        Value *y = builder.CreateICmpULT(B->UpperBound, A->LowerBound, "no.inter.ba");
-        checks.push_back(builder.CreateOr(x, y, "no.intersect"));
-        break;
-      }
-      case AffAccConflict::Bad:
-        assert(false && "cannot expand the given access because some of them have a bad conflict!");
-        break;
-      default:
-        llvm_unreachable("unknown conflict type");
+  if (conflictChecks) {
+    DenseSet<AffAcc*> done; //keep track of which were done to not make duplicate checks
+    for (AffAcc *A : Accs) {
+      auto conflicts = A->getConflicts(L); //get all AffAcc's with which A conflicts
+      for (const auto &p : conflicts) {
+        AffAcc *B = p.first;
+        if (done.find(B) != done.end()) continue; //this conflict was already handled when A was B (symmetry)
+        AffAccConflict kind = std::max(p.second, B->getConflict(A, L)); //take worse conflict
+        switch (kind)
+        {
+        case AffAccConflict::NoConflict:
+          break; //nothing to do
+        case AffAccConflict::MustNotIntersect: {
+          auto e = exps.find(B);
+          if (e == exps.end()) { //if B was not yet expanded, do that and update the iterator for the pair in exps
+            e = exps.insert(std::make_pair(B, std::move(B->expandAt(L, Point, PtrTy, ParamTy, AgParamTy)))).first;
+          }
+          assert(e->first == B);
+          ExpandedAffAcc &expB = e->getSecond();
+          ExpandedAffAcc &expA = exps.find(A)->getSecond(); //guaranteed to exist
+          Value *x = builder.CreateICmpULT(expA.UpperBound, expB.LowerBound, "no.inter.ab");
+          Value *y = builder.CreateICmpULT(expB.UpperBound, expA.LowerBound, "no.inter.ba");
+          checks.push_back(builder.CreateOr(x, y, "no.intersect"));
+          break;
+        }
+        case AffAccConflict::Bad:
+          llvm_unreachable("cannot expand the given accesses because some of them have a bad conflict in L!");
+          break;
+        default:
+          llvm_unreachable("unknown conflict type");
+        }
       }
     }
   }
-  DenseSet<const Loop *> loops; //find all relevant loops
-  for (AffAcc *A : Accs) {
-    for (unsigned d = 0u; d < A->loopToDimension(L); d++) {
-      const Loop *x = A->getLoop(d);
-      if (x) loops.insert(x);
+
+  if (repChecks) {
+    DenseSet<const Loop *> loops; //find all relevant loops
+    for (auto &p : exps) {
+      AffAcc *A = p.first;
+      for (unsigned d = 0u; d < A->loopToDimension(L); d++) {
+        const Loop *x = A->getLoop(d);
+        if (x) loops.insert(x);
+      }
+    }
+    for (const Loop *M : loops) { //generate checks for the loops
+      auto p = reps.find(M);
+      assert(p != reps.end());
+      checks.push_back(p->second->expandLoopGuard(Point));
     }
   }
-  for (const Loop *M : loops) { //generate checks for the loops
-    auto p = reps.find(M);
-    assert(p != reps.end());
-    checks.push_back(p->second->expandLoopGuard(Point));
-  }
+
   if (checks.empty()) BoundCheck = builder.getTrue();
   else BoundCheck = builder.CreateAnd(checks);
+
+  std::vector<ExpandedAffAcc> res;
+  for (AffAcc *A : Accs) {
+    res.push_back(std::move(exps.find(A)->getSecond())); //(can move because exps not needed anymore)
+  }
   return res;
 }
 

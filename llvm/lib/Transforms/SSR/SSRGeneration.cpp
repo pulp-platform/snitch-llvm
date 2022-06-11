@@ -59,8 +59,8 @@
 #define SSR_NO_BOUNDCHECK false
 
 //if you feel like there is somehow still some weird reordering going on, enable these:
-#define SSR_CLOBBER_REGS_FOR_PUSH false
-#define SSR_CLOBBER_REGS_FOR_POP false
+#define SSR_CLOBBER_REGS_FOR_PUSH true
+#define SSR_CLOBBER_REGS_FOR_POP true
 
 #define NUM_SSR 3U //NOTE: if increased too much, might need to change 1st arguments to clobberRegisters(..)
 #define SSR_MAX_DIM 4U

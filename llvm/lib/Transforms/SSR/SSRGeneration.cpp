@@ -50,17 +50,9 @@
 #include <queue>
 #include <limits>
 
-//immediately return in pass if false
-#define SSR_INFERENCE true
-
-//flags for runtime checks (true = disabled)
-#define SSR_NO_INTERSECTCHECK false
-#define SSR_NO_TCDMCHECK false
-#define SSR_NO_BOUNDCHECK false
-
 //if you feel like there is somehow still some weird reordering going on, enable these:
-#define SSR_CLOBBER_REGS_FOR_PUSH true
-#define SSR_CLOBBER_REGS_FOR_POP true
+#define SSR_CLOBBER_REGS_FOR_PUSH false
+#define SSR_CLOBBER_REGS_FOR_POP false
 
 #define NUM_SSR 3U //NOTE: if increased too much, might need to change 1st arguments to clobberRegisters(..)
 #define SSR_MAX_DIM 4U
@@ -72,9 +64,55 @@
 //current state of hw: only allow doubles
 #define CHECK_TYPE(T, I) (T == Type::getDoubleTy(I->getParent()->getContext()))
 
-static constexpr char SSRFnAttr[] = "SSR"; //used to tag functions that contain SSR streams
+//for gain estimation
+#define EST_LOOP_TC 25
+#define EST_MUL_COST 3
+#define EST_MEMOP_COST 2
 
 using namespace llvm;
+
+namespace llvm {
+
+cl::opt<bool> InferSSR(
+  "infer-ssr", 
+  cl::init(false), 
+  cl::desc("Enable inference of SSR streams.")
+);
+
+cl::opt<bool> SSRNoIntersectCheck(
+  "ssr-no-intersect-check", 
+  cl::init(false), 
+  cl::desc("Do not generate intersection checks (unsafe). Use `restrict` key-word instead if possible.")
+);
+
+cl::opt<bool> SSRNoTCDMCheck(
+  "ssr-no-tcdm-check", 
+  cl::init(false),
+  cl::desc("Assume all data of inferred streams is inside TCDM.")
+);
+
+cl::opt<bool> SSRNoBoundCheck(
+  "ssr-no-bound-check", 
+  cl::init(false),
+  cl::desc("Do not generate checks that make sure the inferred stream's access is executed at least once.")
+);
+
+cl::opt<bool> SSRConflictFreeOnly(
+  "ssr-conflict-free-only", 
+  cl::init(false),
+  cl::desc("Only infer streams if they have no conflicts with other memory accesses.")
+);
+
+cl::opt<bool> SSRInline(
+  "ssr-inline", 
+  cl::init(false),
+  cl::desc("allow functions that contain SSR streams to be inlined")
+);
+
+} //end of namespace llvm
+
+
+static constexpr char SSRFnAttr[] = "SSR"; //used to tag functions that contain SSR streams
 
 static constexpr Intrinsic::ID riscSSRIntrinsics[] = {
   Intrinsic::RISCVIntrinsics::riscv_ssr_barrier, 
@@ -95,7 +133,8 @@ static constexpr Intrinsic::ID riscSSRIntrinsics[] = {
   Intrinsic::RISCVIntrinsics::riscv_ssr_setup_bound_stride_4d,
 };
 
-namespace{
+
+namespace {
 
 template<typename NodeT>
 struct ConflictTree {
@@ -113,7 +152,8 @@ struct ConflictTree {
     }
   }
 
-  //picks the nodes in the tree such that their combined value (conmbineFunc, needs to be associative & commutative) is the highest possible
+  //picks nodes in the tree such that their combined value (conmbineFunc, needs to be associative & commutative) is the highest possible
+  //prioritizes parent over children
   std::vector<const NodeT *> findBest(const std::function<unsigned(unsigned, unsigned)> &combineFunc) {
     std::vector<const NodeT *> res;
     if (!Root) return res;
@@ -145,10 +185,9 @@ private:
 };
 
 void clobberRegisters(ArrayRef<std::string> regs, IRBuilder<> &builder){
-  //equivalent to asm volatile ("":::regs);
-  std::string constraints = "~{dirflag},~{fpsr},~{flags}"; //TODO: what are these doing?
+  std::string constraints = "";
   for (const std::string r : regs){
-    constraints = "~{" + r + "}," + constraints; //(formatv("~{{{0}},", r) + Twine(constraints)).str()
+    constraints = "~{" + r + "}," + constraints;
   }
   errs()<<constraints<<"\n";
   InlineAsm *IA = InlineAsm::get(
@@ -222,7 +261,8 @@ std::pair<BasicBlock *, BasicBlock *> splitAt(Instruction *X, const Twine &name)
 ///clones code from BeginWith up to EndBefore
 ///assumes all cf-paths from begin lead to end (or return)
 ///assumes there is a phi node for each value defined in the region that will be cloned in the block of EndBefore that is live after EndBefore
-BranchInst *cloneRegion(Instruction *BeginWith, Instruction *EndBefore){
+///returns the branch that splits region from coloned region and the pair of branches that jump to EndBefore at the end
+std::pair<BranchInst *, std::pair<BranchInst *, BranchInst *>> cloneRegion(Instruction *BeginWith, Instruction *EndBefore){
   errs()<<"cloning from "<<*BeginWith<<" up to "<<*EndBefore<<"\n";
 
   auto p = splitAt(BeginWith, "split.before");
@@ -230,6 +270,7 @@ BranchInst *cloneRegion(Instruction *BeginWith, Instruction *EndBefore){
   BasicBlock *Begin = p.second;
 
   p = splitAt(EndBefore, "fuse.prep");
+  BranchInst *BRFuse = cast<BranchInst>(p.first->getTerminator());
   BasicBlock *End = p.second;
   copyPHIsFromPred(End); //copy Phi's from Fuse to End
 
@@ -320,18 +361,18 @@ BranchInst *cloneRegion(Instruction *BeginWith, Instruction *EndBefore){
   }
   errs()<<"done cloning \n";
 
-  return HeadBr;
+  return std::make_pair(HeadBr, std::make_pair(BRFuse, cast<BranchInst>(clones.find(BRFuse)->second)));
 }
 
 BasicBlock *getSingleExitBlock(const Loop *L) {
+  BasicBlock *Ex = L->getExitBlock();
+  if (Ex) return Ex;
   SmallVector<BasicBlock *, 1U> exits;
   L->getExitBlocks(exits);
-  BasicBlock *Ex = nullptr;
   for (BasicBlock *BB : exits){
     if (!Ex) Ex = BB;
-    assert(Ex == BB);
+    if (Ex != BB) return nullptr;
   }
-  assert(Ex);
   return Ex;
 }
 
@@ -341,6 +382,22 @@ Value *GenerateTCDMCheck(ExpandedAffAcc &E, Instruction *Point) {
   Value *c1 = builder.CreateICmpULE(ConstantInt::get(i64, SSR_SCRATCHPAD_BEGIN), E.LowerBound, "beg.check");
   Value *c2 = builder.CreateICmpULE(E.UpperBound, ConstantInt::get(i64, SSR_SCRATCHPAD_END), "end.check");
   return builder.CreateAnd(c1, c2, "tcdm.check");
+}
+
+Value *generatePopAsm(Instruction *InsertBefore, unsigned dmid) {
+  IRBuilder<> builder(InsertBefore);
+  FunctionType *fty = FunctionType::get(Type::getDoubleTy(builder.getContext()), false);
+  std::string inst = formatv("fmv.d $0, ft{0}\0A", dmid);
+  InlineAsm *Pop = InlineAsm::get(fty, inst, "=f", true);
+  return builder.CreateCall(Pop, ArrayRef<Value *>(), "ssr.pop");
+}
+
+void generatePushAsm(Instruction *InsertBefore, unsigned dmid, Value *Val){
+  IRBuilder<> builder(InsertBefore);
+  FunctionType *fty = FunctionType::get(Type::getVoidTy(builder.getContext()), ArrayRef<Type *>(Type::getDoubleTy(builder.getContext())), false);
+  std::string inst = formatv("fmv.d ft{0}, $0\0A", dmid);
+  InlineAsm *Push = InlineAsm::get(fty, inst, "f", true);
+  builder.CreateCall(Push, ArrayRef<Value *>(Val));
 }
 
 void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
@@ -372,26 +429,17 @@ void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
   }
 
   unsigned n_reps = 0U;
-  std::string s = formatv("ft{0}", dmid);
-  ArrayRef<std::string> regs(s);
   if (isStore){
-    Function *SSRPush = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_push);
     for (Instruction *I : E.Access->getAccesses()){
-      std::array<Value *, 2> pusharg = {DMid, cast<StoreInst>(I)->getValueOperand()};
-      builder.SetInsertPoint(I);
-      if (SSR_CLOBBER_REGS_FOR_PUSH) clobberRegisters(regs, builder);
-      auto *C = builder.CreateCall(SSRPush->getFunctionType(), SSRPush, ArrayRef<Value *>(pusharg));
-      C->dump(); I->dump();
+      generatePushAsm(I, dmid, cast<StoreInst>(I)->getValueOperand());
+      I->dump();
       I->eraseFromParent();
       n_reps++;
     }
   }else{
-    Function *SSRPop = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_pop);
-    std::array<Value *, 1> poparg = {DMid};
     for (Instruction *I : E.Access->getAccesses()){
       builder.SetInsertPoint(I);
-      auto *V = builder.CreateCall(SSRPop->getFunctionType(), SSRPop, ArrayRef<Value *>(poparg), "ssr.pop");
-      if (SSR_CLOBBER_REGS_FOR_POP) clobberRegisters(regs, builder);
+      auto *V = generatePopAsm(I, dmid);
       V->dump(); I->dump();
       BasicBlock::iterator ii(I);
       ReplaceInstWithValue(I->getParent()->getInstList(), ii, V);
@@ -423,32 +471,123 @@ void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
   return;
 }
 
-///generates SSR enable & disable calls
-void generateSSREnDis(Instruction *PhP, Instruction *ExP){
-  IRBuilder<> builder(PhP); // ----------- in preheader 
-  Module *mod = PhP->getParent()->getModule();
-  Function *SSREnable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_enable);
-  builder.CreateCall(SSREnable->getFunctionType(), SSREnable, ArrayRef<Value *>());
+///generates SSR enable & disable calls 
+void generateSSREnDisAsm(Instruction *PhT, Instruction *ExP){
+  constexpr unsigned num_ssr = 3u; //FIXME: make use of NUM_SSR
 
-  std::vector<std::string> regs;
-  for (unsigned r = 0u; r < NUM_SSR; r++){
-    regs.push_back(std::string(formatv("ft{0}", r)));
-  }
-  //create inline asm that clobbers ft0-2 to make sure none of them are reordered to before ssr enable / after ssr disable
-  //equivalent to asm volatile ("":::"ft0", "ft1", "ft2");
-  clobberRegisters(ArrayRef<std::string>(regs), builder);
-
-  //Function *FREPPragma = Intrinsic::getDeclaration(mod, Intrinsic::riscv_frep_infer);
-  //builder.CreateCall(FREPPragma->getFunctionType(), FREPPragma, ArrayRef<Value *>());
+  IRBuilder<> builder(PhT); // ----------- in preheader 
+  auto &ctxt = builder.getContext();
+  Type *Double = Type::getDoubleTy(ctxt);
+  std::vector<Type *> structTys;
+  for (unsigned i = 0; i < num_ssr; i++) structTys.push_back(Double);
+  Type *ArrTy = StructType::get(ctxt, structTys); //auto *ArrTy = ArrayType::get(Double, num_ssr); //VectorType::get(Double, num_ssr, false);
+  std::vector<Type *> argtypes;
+  for (unsigned i = 0u; i < num_ssr; i++) argtypes.push_back(Double);
+  std::string constraints = "={f0},={f1},={f2},{f0},{f1},{f2},~{memory}";
+  FunctionType* fty = FunctionType::get(ArrTy, argtypes, false);
+  InlineAsm *En = InlineAsm::get(fty, "csrsi 0x7C0, 1\0A", constraints, true);
+  En->dump();
+  std::vector<Value *> args;
+  for (unsigned i = 0u; i < num_ssr; i++) args.push_back(UndefValue::get(Double));
+  CallInst *Dep = builder.CreateCall(En, args, "ssr.enable.dep");
+  Dep->dump();
 
   builder.SetInsertPoint(ExP); // ----------- in exit block
-  clobberRegisters(ArrayRef<std::string>(regs), builder);
-  Function *SSRDisable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_disable);
-  builder.CreateCall(SSRDisable->getFunctionType(), SSRDisable, ArrayRef<Value *>());
-
+  std::vector<Value *> deps;
+  for (unsigned i = 0u; i < num_ssr; i++) 
+    deps.push_back(builder.CreateExtractValue(Dep, i, formatv("dep.{0}", i)));
+  InlineAsm *Dis = InlineAsm::get(fty, "csrci 0x7C0, 1\0A", constraints, true);
+  builder.CreateCall(Dis, deps, "ssr.disable.dep")->dump();
+  
   errs()<<"generated ssr_enable and ssr_disable\n";
 
   return;
+}
+
+/*
+void generateFrepPragma(ArrayRef<Instruction *> points) {
+  if (points.empty()) return;
+  IRBuilder<> builder(points.front()->getContext());
+  for (Instruction *P : points) {
+    builder.SetInsertPoint(P);
+    Function *FrepPragma = Intrinsic::getDeclaration(P->getModule(), Intrinsic::riscv_frep_infer);
+    builder.CreateCall(FrepPragma->getFunctionType(), FrepPragma, ArrayRef<Value *>())->dump();
+  }
+}*/
+
+int getEstExpandCost(AffAcc *A, unsigned dim) {
+  int cost = 0;
+  cost += A->getBaseAddr(dim)->getExpressionSize();
+  for (unsigned i = 1; i < dim; i++) {
+    cost += A->getStep(i)->getExpressionSize();
+    cost += A->getRep(i)->getExpressionSize();
+    cost += EST_MUL_COST; //for range
+    if (i > 1) cost += 1; //for addition
+  }
+  return cost;
+}
+
+int getEstGain(ArrayRef<AffAcc *> Accs, const Loop *L, AffineAccess &AAA) {
+  int gain = 0;
+  DenseSet<AffAcc *> accs;
+  for (auto *A : Accs) accs.insert(A);
+
+  DenseSet<const Loop *> contLoops;
+  DenseSet<AffAcc *> vis;
+  for (AffAcc *A : Accs) {
+    vis.insert(A);
+    unsigned dim = A->loopToDimension(L);
+
+    //cost of expanding A
+    gain -= getEstExpandCost(A, dim);
+
+    //cost of intersection checks
+    if (!SSRNoIntersectCheck) {
+      for (const auto &p : A->getConflicts(L)) {
+        switch (p.second)
+        {
+        case AffAccConflict::NoConflict:
+          break; //nothing to do
+        case AffAccConflict::MustNotIntersect: {
+          AffAcc *B = p.first;
+          if (vis.find(B) != vis.end()) break; //already handled this conflict when A was B
+          unsigned dimB = B->loopToDimension(L);
+          if (accs.find(B) == accs.end()) gain -= getEstExpandCost(B, dimB);
+          gain -= 4u; //2x ICmpULT, 1 OR, 1 AND
+          break;
+        }
+        case AffAccConflict::Bad:
+          assert(false && "WARNING: there is a bad conflict for given Accs and L ==> could not expand them here!");
+        default:
+          llvm_unreachable("uknown conflict type");
+        }
+      }
+    }
+
+    //cost of tcdm checks
+    if (!SSRNoTCDMCheck) {
+      gain -= 4u; //2x ICmpULT, 2 AND
+    }
+
+    int reps = 1;
+    for (unsigned d = dim; d >= 1u; d--) { //dimensions that are extended
+      int loopTC = EST_LOOP_TC;
+      if (A->getRep(d)->getSCEVType() == SCEVTypes::scConstant) 
+        loopTC = cast<SCEVConstant>(A->getRep(d))->getAPInt().getLimitedValue(std::numeric_limits<int>::max());
+      reps = std::max(reps * loopTC, reps); //prevent overflows
+
+      //prep for boundcheck cost
+      contLoops.insert(A->getLoop(d));
+    }
+    gain += EST_MEMOP_COST * reps; //the number of loads/stores that are removed by inserting a stream
+
+  }
+
+  if (!SSRNoBoundCheck) {
+    gain -= 2 * contLoops.size(); // 1 ICmp, 1 AND per loop
+  }
+
+  return gain;
 }
 
 ///expands AffAcc's in L's preheader and inserts TCDM checks, returns ExpandedAffAcc's and writes the final Value* of the checks into Cond
@@ -467,11 +606,11 @@ std::vector<ExpandedAffAcc> expandInLoop(const std::vector<AffAcc *> &accs, cons
   Instruction *PhT = L->getLoopPreheader()->getTerminator();
 
   //generate Steps, Reps, base addresses, intersect checks, and bound checks
-  auto exp = AAA.expandAllAt(accs, L, PhT, Cond, i8Ptr, i32, i64, !SSR_NO_INTERSECTCHECK, !SSR_NO_BOUNDCHECK);
+  auto exp = AAA.expandAllAt(accs, L, PhT, Cond, i8Ptr, i32, i64, !SSRNoIntersectCheck, !SSRNoBoundCheck);
   assert(Cond);
 
   //TCDM Checks
-  if (!SSR_NO_TCDMCHECK) {
+  if (!SSRNoTCDMCheck) {
     IRBuilder<> builder(PhT);
     for (auto &E : exp) {
       Cond = builder.CreateAnd(Cond, GenerateTCDMCheck(E, PhT));
@@ -485,30 +624,28 @@ std::vector<ExpandedAffAcc> expandInLoop(const std::vector<AffAcc *> &accs, cons
 
 ///clones from L's preheader to L's exit uses Cond for CBr between clone and non-clone
 ///then generates the instrinsics for all in exp
-void cloneAndSetup(const Loop *L, Value *Cond, std::vector<ExpandedAffAcc> &exp) {
+void cloneAndSetup(Instruction *PhT, Instruction *ExP, Value *Cond, std::vector<ExpandedAffAcc> &exp) {
   assert(exp.size() <= NUM_SSR);
   if (exp.size() == 0u) return;
 
-  errs()<<"cloning in "<<L->getHeader()->getNameOrAsOperand()<<"\n";
-
-  Instruction *PhT = L->getLoopPreheader()->getTerminator();
-
   if (!isa<ConstantInt>(Cond)){ //if Cond is not a constant we cannot make the decision at compile time ==> clone whole region for if-else
-    BranchInst *BR = cloneRegion(L->getLoopPreheader()->getTerminator(), &*getSingleExitBlock(L)->getFirstInsertionPt());
+    auto p = cloneRegion(PhT, ExP);
+    BranchInst *BR = p.first;
+    ExP = p.second.first; //terminator of exit block that jumps to original ExP
+    //PhT = cast<BasicBlock>(BR->getOperand(1u))->getTerminator();
     BR->setCondition(Cond);
   } else {
     //this should never happen, but it means the runtime checks were somehow known at compile time and turned out false:
     if(cast<ConstantInt>(Cond)->getLimitedValue() == 0u) return; 
   }
-
-  Instruction *ExP = &*getSingleExitBlock(L)->getFirstInsertionPt(); //this changes if clone is executed!
   
   unsigned dmid = 0u;
   for (auto &E : exp) {
     GenerateSSRSetup(E, dmid++, PhT);
   }
 
-  generateSSREnDis(PhT, ExP);
+  //generateSSREnDis(PhT, ExP);
+  generateSSREnDisAsm(PhT, ExP);
 }
 
 bool isValid(AffAcc *A, const Loop *L) {
@@ -523,44 +660,23 @@ bool isValid(AffAcc *A, const Loop *L) {
   return valid;
 }
 
-
-//TODO: could do this faster by precomputing for whole function
 bool isValidLoop(const Loop *L) {
-
-  DenseSet<Intrinsic::ID> ids;
-  for (Intrinsic::ID x : riscSSRIntrinsics){
-    ids.insert(x); //put intrinsics into set for faster lookup
-  }
-
-  for (BasicBlock *BB : L->getBlocks()){
-    for (Instruction &i : *BB) {
-      Instruction *I = &i;
-      if (CallBase *C = dyn_cast<CallBase>(I)) {
-        //if L contains call to function that uses SSR streams ==> cannot have streams itself (potential conflict of streams using the same DMIDs)
-        if (C->hasFnAttr(SSRFnAttr)) {
-          errs()<<"Loop "<<L->getHeader()->getNameOrAsOperand()<<" is invalid, because of:\n"<<*C<<"\n";
-          return false; 
-        }
-        if (IntrinsicInst *II = dyn_cast<IntrinsicInst>(C)) {
-          if (ids.contains(II->getIntrinsicID())) {
-            errs()<<"Loop "<<L->getHeader()->getNameOrAsOperand()<<" is invalid, because it already contains intrinsic:\n"<<*II<<"\n";
-            return false;
-          }
-        }
-      }
-    }
-  }
+  assert(L);
+  if (!L->getLoopPreheader() || !getSingleExitBlock(L)) return false;
   return true;
 }
 
-void visitLoop(const Loop *L, DenseMap<const Loop *, std::vector<AffAcc *>> &possible, ConflictTree<Loop> &tree, AffineAccess &AAA) {
+bool visitLoop(const Loop *L, DenseMap<const Loop *, std::vector<AffAcc *>> &possible, ConflictTree<Loop> &tree, AffineAccess &AAA, bool isKnownInvalid) {
   assert(L);
 
   //NOTE: cannot return early in this function, as `possible` and `tree` need to be expanded even if L is not suitable for streams
   
-  ArrayRef<AffAcc *> accs = AAA.getExpandableAccesses(L);
+  std::vector<AffAcc *> accs = AAA.getExpandableAccesses(L, SSRConflictFreeOnly);
 
-  if (!isValidLoop(L)) accs = ArrayRef<AffAcc*>(); //make accs empty
+  if (isKnownInvalid || !isValidLoop(L)) {
+    accs.clear(); //make accs empty
+    isKnownInvalid = true;
+  }
 
   std::vector<AffAcc *> valid;
   for (AffAcc *A : accs) {
@@ -579,14 +695,110 @@ void visitLoop(const Loop *L, DenseMap<const Loop *, std::vector<AffAcc *>> &pos
     l.push_back(valid[i]);
   }
   //add to tree:
-  unsigned val = l.size(); //TODO: find more elaborate score model
+  int gain = getEstGain(l, L, AAA);
+  errs()<<"est. gain is "<<gain<<" \n";
+  unsigned val = (unsigned)std::max(0, gain); 
   tree.insertNode(L, val, L->isOutermost() ? nullptr : L->getParentLoop());
+
+  return !isKnownInvalid;
+}
+
+///finds loops already affected by SSR
+DenseSet<const Loop *> findLoopsWithSSR(Function &F, LoopInfo &LI) {
+  DenseSet<const Loop *> invalid;
+
+  DenseSet<Intrinsic::ID> ids;
+  for (Intrinsic::ID x : riscSSRIntrinsics){
+    ids.insert(x); //put intrinsics into set for faster lookup
+  }
+
+  std::deque<std::pair<BasicBlock *, bool>> worklist;
+  DenseSet<BasicBlock *> visUnmarked;
+  DenseSet<BasicBlock *> visMarked;
+  worklist.push_back(std::make_pair(&F.getEntryBlock(), false));
+  while(!worklist.empty()) {
+    auto p = worklist.front(); worklist.pop_front();
+    BasicBlock *BB = p.first;
+    bool marked = p.second;
+
+    if (!BB) continue;
+    if (marked) {
+      if (visMarked.find(BB) != visMarked.end()) continue;
+      visMarked.insert(BB);
+
+      //mark all loops containing this Block invalid
+      const Loop *L = LI.getLoopFor(BB); 
+      while (L) { 
+        invalid.insert(L);
+        L = L->getParentLoop();
+      }
+
+      //go through instructions in block, if there is an ssr_disable() call, remove the marking for the successors of this block
+      for (Instruction &i : *BB) {
+        if (isa<IntrinsicInst>(i)) {
+          if (cast<IntrinsicInst>(i).getIntrinsicID() == Intrinsic::riscv_ssr_disable) marked = false;
+        }
+        if (!marked) break; //early exit
+      }
+
+    } else {
+      if (visUnmarked.find(BB) != visUnmarked.end()) continue;
+      visUnmarked.insert(BB);
+
+      for (Instruction &i : *BB) {
+        Instruction *I = &i;
+        if (CallBase *C = dyn_cast<CallBase>(I)) {
+          if (C->hasFnAttr(SSRFnAttr)) {
+            errs()<<"call "<<*C<<" has attribute "<<SSRFnAttr<<"\n";
+            //all loops that contain this call cannot have ssr streams, but successors can (we assume correct SSR usage) ==> no need to mark the BB
+            const Loop *L = LI.getLoopFor(BB);
+            while (L) {
+              invalid.insert(L);
+              L = L->getParentLoop();
+            }
+          }
+          if (IntrinsicInst *II = dyn_cast<IntrinsicInst>(C)) { 
+            if (ids.contains(II->getIntrinsicID())) {
+              errs()<<"Intrinsic Instr "<<*II<<" calls an SSR intrinsic\n";
+              marked = true; //mark this (and thus also all following BBs)
+            }
+          }
+          if (C->isInlineAsm()) { //inline asm may contain ssr setup insts!
+            errs()<<"inline asm call "<<*C<<" may contain ssr insts!\n";
+            C->getType()->dump();
+            marked = true;
+          }
+        }
+      }
+      if (marked) worklist.push_back(std::make_pair(BB, true)); // if now marked, add to queue again
+    }
+
+    for (BasicBlock *BB2 : successors(BB)) {
+      worklist.push_back(std::make_pair(BB2, marked));
+    }
+  }
+
+  if (!invalid.empty()) errs()<<"Loops that are invalid bc of SSR\n";
+  for (auto l : invalid) {
+    errs()<<"header = "<<l->getHeader()->getNameOrAsOperand()<<" at depth = "<<l->getLoopDepth()<<"\n";
+  }
+
+  return invalid;
 }
 
 } //end of namespace
 
 PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &FAM){
-  if (!SSR_INFERENCE) return PreservedAnalyses::all();
+  errs()<<"SSRInference Flags: ";
+  if (InferSSR) errs()<<"infer-ssr";
+  if (SSRNoIntersectCheck) errs()<<", ssr-no-intersect-check";
+  if (SSRNoBoundCheck) errs()<<", ssr-no-bound-check";
+  if (SSRNoTCDMCheck) errs()<<", ssr-no-tcdm-check";
+  if (SSRConflictFreeOnly) errs()<<", ssr-conflict-free-only";
+  //if (SSRInsertFrepPragma) errs()<<", ssr-insert-frep-pragma";
+  errs()<<"\n";
+
+  if (!InferSSR) return PreservedAnalyses::all();
   if (F.hasFnAttribute(SSRFnAttr)) return PreservedAnalyses::all(); //this function already contains streams ==> skip
 
   AffineAccess &AAA = FAM.getResult<AffineAccessAnalysis>(F);
@@ -600,6 +812,7 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
   DenseMap<const Loop *, std::vector<AffAcc *>> possible; //keep track of the AffAcc's that can be expanded in each loop
   DenseMap<const Loop*, Value*> conds; //keep track of the condition of the run-time check for each loop
   DenseMap<const Loop*, std::vector<ExpandedAffAcc>> exps; //keep track of the expanded AffAcc's for each loop
+  DenseSet<const Loop*> ssrInvalidLoops = findLoopsWithSSR(F, AAA.getLI());
 
   for (const Loop *T : toploops){
     ConflictTree<Loop> &tree = trees.insert(std::make_pair(T, ConflictTree<Loop>())).first->getSecond();
@@ -609,7 +822,9 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
     worklist.push_back(T);
     while (!worklist.empty()) {
       const Loop *L = worklist.front(); worklist.pop_front();
-      visitLoop(L, possible, tree, AAA);
+      errs()<<"visiting loop: "<<L->getHeader()->getNameOrAsOperand()<<"\n";
+      visitLoop(L, possible, tree, AAA, ssrInvalidLoops.find(L) != ssrInvalidLoops.end());
+
       for (const Loop *x : L->getSubLoops()) worklist.push_back(x);
     }
 
@@ -635,21 +850,76 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
 
   ///NOTE: as soon as we start cloning (so after this comment), all the analyses are falsified and we do not want to update them 
   ///because that would falsify the AAA (which we do not want to update because it would find less solutions after the cloning).
-  ///So all the code that follows only makes use of simple stuff like Loop::getLoopPreheader() which luckily still works
+  ///So all the code that follows does not make use of any of the analyses (except for L->getLoopPreheader & stuff like that which luckily still work)
 
   for (const Loop *T : toploops) {
     std::vector<const Loop *> &best = bestLoops.find(T)->getSecond(); 
     for (const Loop *L : best) {
       auto p = conds.find(L);
       if (p != conds.end()) {
-        errs()<<"clone and setup in "<<L->getHeader()->getNameOrAsOperand()<<"\n";
-        cloneAndSetup(L, p->second, exps.find(L)->getSecond());
+        BasicBlock *Ex = getSingleExitBlock(L);
+        assert(Ex);
+        cloneAndSetup(L->getLoopPreheader()->getTerminator(), &*Ex->getFirstInsertionPt(), p->second, exps.find(L)->getSecond());
       }
     }
   }
 
   if (!changed) return PreservedAnalyses::all();
   F.addFnAttr(StringRef(SSRFnAttr));
-  F.addFnAttr(Attribute::AttrKind::NoInline);
+  if (!SSRInline) F.addFnAttr(Attribute::AttrKind::NoInline);
   return PreservedAnalyses::none();
 }
+
+/*
+std::string s = formatv("f{0}", dmid);
+  ArrayRef<std::string> regs(s);
+  if (isStore){
+    Function *SSRPush = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_push);
+    for (Instruction *I : E.Access->getAccesses()){
+      std::array<Value *, 2> pusharg = {DMid, cast<StoreInst>(I)->getValueOperand()};
+      builder.SetInsertPoint(I);
+      if (SSR_CLOBBER_REGS_FOR_PUSH) clobberRegisters(regs, builder);
+      auto *C = builder.CreateCall(SSRPush->getFunctionType(), SSRPush, ArrayRef<Value *>(pusharg));
+      C->dump(); I->dump();
+      I->eraseFromParent();
+      n_reps++;
+    }
+  }else{
+    Function *SSRPop = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_pop);
+    std::array<Value *, 1> poparg = {DMid};
+    for (Instruction *I : E.Access->getAccesses()){
+      builder.SetInsertPoint(I);
+      auto *V = builder.CreateCall(SSRPop->getFunctionType(), SSRPop, ArrayRef<Value *>(poparg), "ssr.pop");
+      if (SSR_CLOBBER_REGS_FOR_POP) clobberRegisters(regs, builder);
+      V->dump(); I->dump();
+      BasicBlock::iterator ii(I);
+      ReplaceInstWithValue(I->getParent()->getInstList(), ii, V);
+      n_reps++;
+    }
+  }
+
+  ///generates SSR enable & disable calls
+void generateSSREnDis(Instruction *PhP, Instruction *ExP){
+  IRBuilder<> builder(PhP); // ----------- in preheader 
+  Module *mod = PhP->getParent()->getModule();
+  Function *SSREnable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_enable);
+  builder.CreateCall(SSREnable->getFunctionType(), SSREnable, ArrayRef<Value *>());
+
+  std::vector<std::string> regs;
+  for (unsigned r = 0u; r < NUM_SSR; r++){
+    regs.push_back(std::string(formatv("f{0}", r)));
+  }
+  //create inline asm that clobbers ft0-2 to make sure none of them are reordered to before ssr enable / after ssr disable
+  //equivalent to asm volatile ("":::"ft0", "ft1", "ft2");
+  clobberRegisters(ArrayRef<std::string>(regs), builder);
+
+  builder.SetInsertPoint(ExP); // ----------- in exit block
+  clobberRegisters(ArrayRef<std::string>(regs), builder);
+  Function *SSRDisable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_disable);
+  builder.CreateCall(SSRDisable->getFunctionType(), SSRDisable, ArrayRef<Value *>());
+
+  errs()<<"generated ssr_enable and ssr_disable\n";
+
+  return;
+}
+  */

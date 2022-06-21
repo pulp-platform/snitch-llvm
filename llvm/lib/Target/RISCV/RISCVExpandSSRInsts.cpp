@@ -161,6 +161,10 @@ bool RISCVExpandSSR::runOnMachineFunction(MachineFunction &MF) {
     }
   }
 
+  errs()<<"\n ========================= DUMP MF ========================== \n";
+  MF.dump();
+  errs()<<"\n ======================= END DUMP MF ========================== \n";
+
   return Modified;
 }
 
@@ -537,6 +541,7 @@ void RISCVExpandSSR::mergePushPop(MachineBasicBlock &MBB) {
               }*/
             }
             if (O){
+              errs()<<"push regmerge: \n";
               O->getParent()->dump();
               O->setReg(ssr_reg);
               O->getParent()->dump();

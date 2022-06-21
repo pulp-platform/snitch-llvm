@@ -21,6 +21,7 @@ class MemorySSA;
 class MemoryUseOrDef;
 class MemoryDef;
 struct ExpandedAffAcc;
+class DependenceInfo;
 
 struct LoopRep{
 private:
@@ -134,6 +135,7 @@ private:
   LoopInfo &LI;
   MemorySSA &MSSA;
   AAResults &AA;
+  DependenceInfo &DI;
   MemDep MD;
   DenseMap<MemoryUseOrDef *, AffAcc *> access;
   DenseMap<const Loop *, LoopRep *> reps;
@@ -146,7 +148,7 @@ private:
   std::pair<AffAccConflict, const Loop*> calcConflict(AffAcc *A, AffAcc *B) const;
   
 public:
-  AffineAccess(Function &F, ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI, MemorySSA &MSSA, AAResults &AA);
+  AffineAccess(Function &F, ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI, MemorySSA &MSSA, AAResults &AA, DependenceInfo &DI);
   AffineAccess() = delete;
   bool accessPatternsMatch(const AffAcc *A, const AffAcc *B, const Loop *L) const;
   bool accessPatternsAndAddressesMatch(const AffAcc *A, const AffAcc *B, const Loop *L) const;
@@ -155,9 +157,10 @@ public:
   LoopInfo &getLI() const;
   MemorySSA &getMSSA() const;
   AAResults &getAA() const;
+  DependenceInfo &getDI() const;
   SmallVector<Loop *, 4U> getLoopsInPreorder() const;
 
-  ArrayRef<AffAcc *> getExpandableAccesses(const Loop *L);
+  std::vector<AffAcc *> getExpandableAccesses(const Loop *L, bool conflictFreeOnly = false);
   std::vector<ExpandedAffAcc> expandAllAt(ArrayRef<AffAcc *> Accs, const Loop *L, Instruction *Point, 
     Value *&BoundCheck, Type *PtrTy, IntegerType *ParamTy, IntegerType *AgParamTy, bool conflictChecks = true, bool repChecks = false);
 };

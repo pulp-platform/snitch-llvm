@@ -337,16 +337,32 @@ void updateOutermostExpandableExcl(const Loop *&outerMostExpandableExl, AffAccCo
   case AffAccConflict::NoConflict:
     break;
   case AffAccConflict::MustNotIntersect: 
-    errs()<<"must-not-intersect\n";
     updateIfAncestor(innermostCommon, deepestMalformed); //updates innermostCommon to deepestMalformed if that one is less "deep"
     LLVM_FALLTHROUGH;
   case AffAccConflict::Bad: 
-    errs()<<"bad\n";
     updateIfDescendant(outerMostExpandableExl, innermostCommon);
     break;
   default:
     llvm_unreachable("unknown conflict type");
   }
+}
+
+void dumpAffAccConflict(AffAccConflict kind) {
+  switch (kind)
+  {
+  case AffAccConflict::Bad:
+    errs()<<"Bad";
+    break;
+  case AffAccConflict::MustNotIntersect:
+    errs()<<"MustNotIntersect";
+    break;
+  case AffAccConflict::NoConflict:
+    errs()<<"NoConflict";
+    break;
+  default:
+    break;
+  }
+  errs()<<"\n";
 }
 
 } //end of namespace
@@ -615,6 +631,8 @@ AffAccConflict AffAcc::getConflict(AffAcc *A, const Loop *L) const {
   return AffAccConflict::NoConflict;
 }
 
+/// returns a vector of (AffAcc *, conflict) pairs containing all the conflicts that `this` has at loop `L`
+/// It is guaranteed that conflict is never NoConflict
 std::vector<std::pair<AffAcc*, AffAccConflict>> AffAcc::getConflicts(const Loop *L) const {
   std::vector<std::pair<AffAcc*, AffAccConflict>> res;
   for (const auto &p : conflicts) {
@@ -633,22 +651,7 @@ void AffAcc::addConflict(AffAcc *A, const Loop *StartL, AffAccConflict kind){
   assert(conflicts.find(A) == conflicts.end() && "no conflict for A yet");
   assert(kind == AffAccConflict::Bad || (isWellFormed(StartL) && A->isWellFormed(StartL)));
   conflicts.insert(std::make_pair(A, std::make_pair(StartL, kind)));
-  errs()<<"conflict for:\n"; dumpInLoop(StartL); errs()<<"with:\n"; A->dumpInLoop(StartL); errs()<<"is ===> ";
-  /*switch (kind)
-  {
-  case AffAccConflict::Bad:
-    errs()<<"Bad";
-    break;
-  case AffAccConflict::MustNotIntersect:
-    errs()<<"MustNotIntersect";
-    break;
-  case AffAccConflict::NoConflict:
-    errs()<<"NoConflict";
-    break;
-  default:
-    break;
-  }
-  errs()<<"\n"; */
+  //errs()<<"conflict for:\n"; dumpInLoop(StartL); errs()<<"with:\n"; A->dumpInLoop(StartL); errs()<<"is ===> ";
 }
 
 bool AffAcc::promote(LoopRep *LR){
@@ -805,8 +808,8 @@ DenseSet<MemoryUseOrDef *> MemDep::findClobberUsers(MemoryDef *MA) {
 
 //================== Affine Access ===========================================================
 
-AffineAccess::AffineAccess(Function &F, ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI, MemorySSA &MSSA, AAResults &AA) 
-  : SE(SE), DT(DT), LI(LI), MSSA(MSSA), AA(AA), MD(MSSA, AA){
+AffineAccess::AffineAccess(Function &F, ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI, MemorySSA &MSSA, AAResults &AA, DependenceInfo &DI) 
+  : SE(SE), DT(DT), LI(LI), MSSA(MSSA), AA(AA), DI(DI), MD(MSSA, AA){
   for (const Loop *L : LI.getTopLevelLoops()){
     std::vector<AffAcc *> all = analyze(L, ArrayRef<const Loop *>());
     addAllConflicts(all);
@@ -877,9 +880,9 @@ void AffineAccess::addAllConflicts(const std::vector<AffAcc *> &all) {
       auto p = access.find(D);
       if (p == access.end()) continue;
       AffAcc *B = p->second;
-      AffAcc *x = A; //copy, TODO: remove this check
+      //A->dump(); B->dump();
       auto r = calcConflict(A, B);
-      assert(A == x && "swap does not affect");
+      //dumpAffAccConflict(r.first);
       if (r.first != AffAccConflict::NoConflict) A->addConflict(B, r.second, r.first);
       updateOutermostExpandableExcl(outerMostExpandableExl, r.first, r.second, B->getDeepestMalformed());
       assert(!outerMostExpandableExl || outerMostExpandableExl->contains(A->getMemoryAccess()->getBlock()));
@@ -909,19 +912,29 @@ AffAccConflict AffineAccess::calcRWConflict(AffAcc *Read, AffAcc *Write, const L
   assert(Write->isWrite());
   if (!L->contains(Read->getMemoryAccess()->getBlock()) || !L->contains(Write->getMemoryAccess()->getBlock())) return AffAccConflict::NoConflict;
   if (!Read->isWellFormed(L) || !Write->isWellFormed(L)) return AffAccConflict::Bad;
-  Value *Addr = getAddress(Read->getMemoryAccess());
-  Value *DAddr = getAddress(Write->getMemoryAccess());
+  MemoryUseOrDef *r = Read->getMemoryAccess();
+  MemoryUseOrDef *w = Write->getMemoryAccess();
+  Value *Addr = getAddress(r);
+  Value *DAddr = getAddress(w);
+  bool dominates = MSSA.dominates(r, w);
+  //auto dep = DI.depends(r->getMemoryInst(), w->getMemoryInst(), dominates && L->isInnermost());
   if (Addr && DAddr && AA.alias(Addr, DAddr) == NoAlias) return AffAccConflict::NoConflict;
   AffAccConflict kind = AffAccConflict::Bad;
-  if (!MSSA.dominates(Read->getMemoryAccess(), Write->getMemoryAccess())) { //read does not dominate write ==> RaW
+  if (!dominates) { //read does not dominate write ==> RaW
     kind = AffAccConflict::MustNotIntersect;
   } else { //read dominates write ==> WaR
     kind = AffAccConflict::MustNotIntersect;
     //exception: we know that the store always happens to a position already written from if the store is to same address as write (FIXME: CONSERVATIVE)
+    //but the steps needs to be != 0 such that there is no dependence from one iteration to the next
     if ((Addr && DAddr && AA.alias(Addr, DAddr) == MustAlias)
       || accessPatternsAndAddressesMatch(Read, Write, L)) 
     {
-      kind = AffAccConflict::NoConflict;
+      bool nonzeroSteps = true;
+      unsigned dr = Read->loopToDimension(L);
+      unsigned dw = Write->loopToDimension(L);
+      while (Read->isWellFormed(dr) && Write->isWellFormed(dw)) 
+        nonzeroSteps &= SE.isKnownNonZero(Read->getStep(dr++)) && SE.isKnownNonZero(Write->getStep(dw++));
+      if (nonzeroSteps) kind = AffAccConflict::NoConflict;
     }
   }
   return kind;
@@ -930,6 +943,9 @@ AffAccConflict AffineAccess::calcRWConflict(AffAcc *Read, AffAcc *Write, const L
 ///returns the kind of conflict (and innermost common loop) that A and B have assuming there is some memory dependency
 ///does not check for the memory dependency itself for to peformance
 std::pair<AffAccConflict, const Loop*> AffineAccess::calcConflict(AffAcc *A, AffAcc *B) const {
+  //auto dep = DI.depends(A->getMemoryAccess()->getMemoryInst(), B->getMemoryAccess()->getMemoryInst(), MSSA.dominates(A->getMemoryAccess(), B->getMemoryAccess()));
+  //dep->dump(errs());
+  //errs()<<"confused = "<<dep->isConfused()<<", is consistent = "<<dep->isConsistent()<<", is anti = "<<dep->isAnti()<<", is flow = "<<dep->isFlow()<<", is input = "<<dep->isInput()<<", is output = "<<dep->isOutput()<<"\n";
   assert((A->isWrite() || B->isWrite()) && "conflict between two reads ???");
   const Loop *const innermostCommon = findFirstContaining(A->getContainingLoops(), B->getMemoryAccess()->getBlock());
   if (!innermostCommon) return std::make_pair(AffAccConflict::NoConflict, innermostCommon);
@@ -975,12 +991,17 @@ DominatorTree &AffineAccess::getDT()const { return this->DT; }
 LoopInfo &AffineAccess::getLI() const { return this->LI; }
 MemorySSA &AffineAccess::getMSSA() const { return this->MSSA; }
 AAResults &AffineAccess::getAA() const { return this->AA; }
+DependenceInfo &AffineAccess::getDI() const { return this->DI; }
 SmallVector<Loop *, 4U> AffineAccess::getLoopsInPreorder() const { return this->LI.getLoopsInPreorder(); }
 
-ArrayRef<AffAcc *> AffineAccess::getExpandableAccesses(const Loop *L) {
+std::vector<AffAcc *> AffineAccess::getExpandableAccesses(const Loop *L, bool conflictFreeOnly) {
   auto p = expandableAccesses.find(L);
-  if (p == expandableAccesses.end()) return ArrayRef<AffAcc *>();
-  return ArrayRef<AffAcc *>(p->getSecond());
+  std::vector<AffAcc *> res;
+  if (p == expandableAccesses.end()) return res;
+  for (AffAcc *A : p->getSecond()){
+    if (!conflictFreeOnly || A->getConflicts(L).empty()) res.push_back(A);
+  }
+  return res;
 }
 
 std::vector<ExpandedAffAcc> 
@@ -1072,9 +1093,9 @@ AffineAccess AffineAccessAnalysis::run(Function &F, FunctionAnalysisManager &FAM
   auto &MSSAA = FAM.getResult<MemorySSAAnalysis>(F);
   MemorySSA &MSSA = MSSAA.getMSSA();
   AAResults &AA = FAM.getResult<AAManager>(F);
-  //DependenceInfo &DI = FAM.getResult<DependenceAnalysis>(F);
+  DependenceInfo &DI = FAM.getResult<DependenceAnalysis>(F);
   
-  return AffineAccess(F, SE, DT, LI, MSSA, AA);
+  return AffineAccess(F, SE, DT, LI, MSSA, AA, DI);
 }
 
 //================== Affine Acces Analysis Pass for opt =======================================

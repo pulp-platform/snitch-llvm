@@ -161,9 +161,9 @@ bool RISCVExpandSSR::runOnMachineFunction(MachineFunction &MF) {
     }
   }
 
-  errs()<<"\n ========================= DUMP MF ========================== \n";
-  MF.dump();
-  errs()<<"\n ======================= END DUMP MF ========================== \n";
+  //errs()<<"\n ========================= DUMP MF ========================== \n";
+  //MF.dump();
+  //errs()<<"\n ======================= END DUMP MF ========================== \n";
 
   return Modified;
 }

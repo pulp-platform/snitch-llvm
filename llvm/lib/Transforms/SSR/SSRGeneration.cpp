@@ -51,8 +51,8 @@
 #include <limits>
 
 //if you feel like there is somehow still some weird reordering going on, enable these:
-#define SSR_CLOBBER_REGS_FOR_PUSH false
-#define SSR_CLOBBER_REGS_FOR_POP false
+#define SSR_CLOBBER_REGS_FOR_PUSH true
+#define SSR_CLOBBER_REGS_FOR_POP true
 
 #define NUM_SSR 3U //NOTE: if increased too much, might need to change 1st arguments to clobberRegisters(..)
 #define SSR_MAX_DIM 4U
@@ -106,7 +106,13 @@ cl::opt<bool> SSRConflictFreeOnly(
 cl::opt<bool> SSRInline(
   "ssr-inline", 
   cl::init(false),
-  cl::desc("allow functions that contain SSR streams to be inlined")
+  cl::desc("Allow functions that contain SSR streams to be inlined.")
+);
+
+cl::opt<bool> SSRNoBarrier(
+  "ssr-no-barrier",
+  cl::init(false),
+  cl::desc("Disable the insertion of an spinning loop that waits for the stream to be done before it is dissabled (potentially unsafe).")
 );
 
 } //end of namespace llvm
@@ -186,17 +192,19 @@ private:
 
 void clobberRegisters(ArrayRef<std::string> regs, IRBuilder<> &builder){
   std::string constraints = "";
-  for (const std::string r : regs){
-    constraints = "~{" + r + "}," + constraints;
+  if (regs.size() > 0u) {
+    constraints = "~{" + regs[0] + "}";
+    for (unsigned i = 1u; i < regs.size(); i++) {
+      constraints = "~{" + regs[i] + "}," + constraints;
+    }
   }
-  errs()<<constraints<<"\n";
   InlineAsm *IA = InlineAsm::get(
     FunctionType::get(Type::getVoidTy(builder.getContext()), false), 
     "", 
     constraints,
     true
   );
-  builder.CreateCall(IA);
+  builder.CreateCall(IA)->dump();
 }
 
 void copyPHIsFromPred(BasicBlock *BB){
@@ -384,22 +392,6 @@ Value *GenerateTCDMCheck(ExpandedAffAcc &E, Instruction *Point) {
   return builder.CreateAnd(c1, c2, "tcdm.check");
 }
 
-Value *generatePopAsm(Instruction *InsertBefore, unsigned dmid) {
-  IRBuilder<> builder(InsertBefore);
-  FunctionType *fty = FunctionType::get(Type::getDoubleTy(builder.getContext()), false);
-  std::string inst = formatv("fmv.d $0, ft{0}\0A", dmid);
-  InlineAsm *Pop = InlineAsm::get(fty, inst, "=f", true);
-  return builder.CreateCall(Pop, ArrayRef<Value *>(), "ssr.pop");
-}
-
-void generatePushAsm(Instruction *InsertBefore, unsigned dmid, Value *Val){
-  IRBuilder<> builder(InsertBefore);
-  FunctionType *fty = FunctionType::get(Type::getVoidTy(builder.getContext()), ArrayRef<Type *>(Type::getDoubleTy(builder.getContext())), false);
-  std::string inst = formatv("fmv.d ft{0}, $0\0A", dmid);
-  InlineAsm *Push = InlineAsm::get(fty, inst, "f", true);
-  builder.CreateCall(Push, ArrayRef<Value *>(Val));
-}
-
 void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
   assert(Point);
   Module *mod = Point->getModule();
@@ -428,18 +420,27 @@ void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
     builder.CreateCall(SSRBoundStrideSetup->getFunctionType(), SSRBoundStrideSetup, ArrayRef<Value *>(bsargs))->dump();
   }
 
-  unsigned n_reps = 0U;
+  unsigned n_reps = 0u;
+  std::string s = formatv("f{0}", dmid);
+  ArrayRef<std::string> regs(s);
   if (isStore){
+    Function *SSRPush = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_push);
     for (Instruction *I : E.Access->getAccesses()){
-      generatePushAsm(I, dmid, cast<StoreInst>(I)->getValueOperand());
-      I->dump();
+      std::array<Value *, 2> pusharg = {DMid, cast<StoreInst>(I)->getValueOperand()};
+      builder.SetInsertPoint(I);
+      if (SSR_CLOBBER_REGS_FOR_PUSH) clobberRegisters(regs, builder);
+      auto *C = builder.CreateCall(SSRPush->getFunctionType(), SSRPush, ArrayRef<Value *>(pusharg));
+      C->dump(); I->dump();
       I->eraseFromParent();
       n_reps++;
     }
   }else{
+    Function *SSRPop = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_pop);
+    std::array<Value *, 1> poparg = {DMid};
     for (Instruction *I : E.Access->getAccesses()){
       builder.SetInsertPoint(I);
-      auto *V = generatePopAsm(I, dmid);
+      auto *V = builder.CreateCall(SSRPop->getFunctionType(), SSRPop, ArrayRef<Value *>(poparg), "ssr.pop");
+      if (SSR_CLOBBER_REGS_FOR_POP) clobberRegisters(regs, builder);
       V->dump(); I->dump();
       BasicBlock::iterator ii(I);
       ReplaceInstWithValue(I->getParent()->getInstList(), ii, V);
@@ -463,57 +464,42 @@ void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
   //NOTE: this starts the prefetching ==> always needs to be inserted AFTER bound/stride and repetition setups !!!
   builder.CreateCall(SSRSetup->getFunctionType(), SSRSetup, ArrayRef<Value *>(args))->dump(); 
 
-  //create an SSR barrier in exit block. TODO: needed esp. for write streams?
-  //builder.SetInsertPoint(Access->getLoop()->getExitBlock()->getFirstNonPHI());
-  //Function *SSRBarrier = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_barrier);
-  //std::array<Value *, 1> barrargs = {DMid};
-  //builder.CreateCall(SSRBarrier->getFunctionType(), SSRBarrier, ArrayRef<Value *>(barrargs))->dump();
   return;
 }
 
-///generates SSR enable & disable calls 
-void generateSSREnDisAsm(Instruction *PhT, Instruction *ExP){
-  constexpr unsigned num_ssr = 3u; //FIXME: make use of NUM_SSR
+/// generate a SSR Barrier intrinsic call before InsertBefore
+void generateSSRBarrier(Instruction *InsertBefore, unsigned dmid) {
+  IRBuilder<> builder(InsertBefore);
+  Function *Barrier = Intrinsic::getDeclaration(InsertBefore->getModule(), Intrinsic::riscv_ssr_barrier);
+  for (unsigned dmid : activeDMIds) {
+    builder.CreateCall(Barrier->getFunctionType(), Barrier, ConstantInt::get(Type::getInt32Ty(builder.getContext()), dmid))->dump();
+  }
+}
 
-  IRBuilder<> builder(PhT); // ----------- in preheader 
-  auto &ctxt = builder.getContext();
-  Type *Double = Type::getDoubleTy(ctxt);
-  std::vector<Type *> structTys;
-  for (unsigned i = 0; i < num_ssr; i++) structTys.push_back(Double);
-  Type *ArrTy = StructType::get(ctxt, structTys); //auto *ArrTy = ArrayType::get(Double, num_ssr); //VectorType::get(Double, num_ssr, false);
-  std::vector<Type *> argtypes;
-  for (unsigned i = 0u; i < num_ssr; i++) argtypes.push_back(Double);
-  std::string constraints = "={f0},={f1},={f2},{f0},{f1},{f2},~{memory}";
-  FunctionType* fty = FunctionType::get(ArrTy, argtypes, false);
-  InlineAsm *En = InlineAsm::get(fty, "csrsi 0x7C0, 1\0A", constraints, true);
-  En->dump();
-  std::vector<Value *> args;
-  for (unsigned i = 0u; i < num_ssr; i++) args.push_back(UndefValue::get(Double));
-  CallInst *Dep = builder.CreateCall(En, args, "ssr.enable.dep");
-  Dep->dump();
+/// generates SSR enable & disable calls
+void generateSSREnDis(Instruction *PhP, Instruction *ExP){
+  IRBuilder<> builder(PhP); // ----------- in preheader 
+  Module *mod = PhP->getParent()->getModule();
+  Function *SSREnable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_enable);
+  builder.CreateCall(SSREnable->getFunctionType(), SSREnable, ArrayRef<Value *>());
+  std::vector<std::string> regs;
+  for (unsigned r = 0u; r < NUM_SSR; r++){
+    regs.push_back(std::string(formatv("f{0}", r)));
+  }
+  //create inline asm that clobbers ft0-2 to make sure none of them are reordered to before ssr enable / after ssr disable
+  //equivalent to asm volatile ("":::"ft0", "ft1", "ft2");
+  clobberRegisters(ArrayRef<std::string>(regs), builder);
 
   builder.SetInsertPoint(ExP); // ----------- in exit block
-  std::vector<Value *> deps;
-  for (unsigned i = 0u; i < num_ssr; i++) 
-    deps.push_back(builder.CreateExtractValue(Dep, i, formatv("dep.{0}", i)));
-  InlineAsm *Dis = InlineAsm::get(fty, "csrci 0x7C0, 1\0A", constraints, true);
-  builder.CreateCall(Dis, deps, "ssr.disable.dep")->dump();
-  
+  clobberRegisters(ArrayRef<std::string>(regs), builder);
+
+  Function *SSRDisable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_disable);
+  builder.CreateCall(SSRDisable->getFunctionType(), SSRDisable, ArrayRef<Value *>());
+
   errs()<<"generated ssr_enable and ssr_disable\n";
 
   return;
 }
-
-/*
-void generateFrepPragma(ArrayRef<Instruction *> points) {
-  if (points.empty()) return;
-  IRBuilder<> builder(points.front()->getContext());
-  for (Instruction *P : points) {
-    builder.SetInsertPoint(P);
-    Function *FrepPragma = Intrinsic::getDeclaration(P->getModule(), Intrinsic::riscv_frep_infer);
-    builder.CreateCall(FrepPragma->getFunctionType(), FrepPragma, ArrayRef<Value *>())->dump();
-  }
-}*/
 
 int getEstExpandCost(AffAcc *A, unsigned dim) {
   int cost = 0;
@@ -642,10 +628,10 @@ void cloneAndSetup(Instruction *PhT, Instruction *ExP, Value *Cond, std::vector<
   unsigned dmid = 0u;
   for (auto &E : exp) {
     GenerateSSRSetup(E, dmid++, PhT);
+    if (!SSRNoBarrier) generateSSRBarrier(ExP, dmid);
   }
 
-  //generateSSREnDis(PhT, ExP);
-  generateSSREnDisAsm(PhT, ExP);
+  generateSSREnDis(PhT, ExP);
 }
 
 bool isValid(AffAcc *A, const Loop *L) {
@@ -795,7 +781,6 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
   if (SSRNoBoundCheck) errs()<<", ssr-no-bound-check";
   if (SSRNoTCDMCheck) errs()<<", ssr-no-tcdm-check";
   if (SSRConflictFreeOnly) errs()<<", ssr-conflict-free-only";
-  //if (SSRInsertFrepPragma) errs()<<", ssr-insert-frep-pragma";
   errs()<<"\n";
 
   if (!InferSSR) return PreservedAnalyses::all();
@@ -871,26 +856,18 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
 }
 
 /*
-std::string s = formatv("f{0}", dmid);
-  ArrayRef<std::string> regs(s);
+  unsigned n_reps = 0U;
   if (isStore){
-    Function *SSRPush = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_push);
     for (Instruction *I : E.Access->getAccesses()){
-      std::array<Value *, 2> pusharg = {DMid, cast<StoreInst>(I)->getValueOperand()};
-      builder.SetInsertPoint(I);
-      if (SSR_CLOBBER_REGS_FOR_PUSH) clobberRegisters(regs, builder);
-      auto *C = builder.CreateCall(SSRPush->getFunctionType(), SSRPush, ArrayRef<Value *>(pusharg));
-      C->dump(); I->dump();
+      generatePushAsm(I, dmid, cast<StoreInst>(I)->getValueOperand());
+      I->dump();
       I->eraseFromParent();
       n_reps++;
     }
   }else{
-    Function *SSRPop = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_pop);
-    std::array<Value *, 1> poparg = {DMid};
     for (Instruction *I : E.Access->getAccesses()){
       builder.SetInsertPoint(I);
-      auto *V = builder.CreateCall(SSRPop->getFunctionType(), SSRPop, ArrayRef<Value *>(poparg), "ssr.pop");
-      if (SSR_CLOBBER_REGS_FOR_POP) clobberRegisters(regs, builder);
+      auto *V = generatePopAsm(I, dmid);
       V->dump(); I->dump();
       BasicBlock::iterator ii(I);
       ReplaceInstWithValue(I->getParent()->getInstList(), ii, V);
@@ -898,28 +875,52 @@ std::string s = formatv("f{0}", dmid);
     }
   }
 
-  ///generates SSR enable & disable calls
-void generateSSREnDis(Instruction *PhP, Instruction *ExP){
-  IRBuilder<> builder(PhP); // ----------- in preheader 
-  Module *mod = PhP->getParent()->getModule();
-  Function *SSREnable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_enable);
-  builder.CreateCall(SSREnable->getFunctionType(), SSREnable, ArrayRef<Value *>());
+  ///generates SSR enable & disable calls 
+void generateSSREnDisAsm(Instruction *PhT, Instruction *ExP){
+  constexpr unsigned num_ssr = 3u; //FIXME: make use of NUM_SSR
 
-  std::vector<std::string> regs;
-  for (unsigned r = 0u; r < NUM_SSR; r++){
-    regs.push_back(std::string(formatv("f{0}", r)));
-  }
-  //create inline asm that clobbers ft0-2 to make sure none of them are reordered to before ssr enable / after ssr disable
-  //equivalent to asm volatile ("":::"ft0", "ft1", "ft2");
-  clobberRegisters(ArrayRef<std::string>(regs), builder);
+  IRBuilder<> builder(PhT); // ----------- in preheader 
+  auto &ctxt = builder.getContext();
+  Type *Double = Type::getDoubleTy(ctxt);
+  std::vector<Type *> structTys;
+  for (unsigned i = 0; i < num_ssr; i++) structTys.push_back(Double);
+  Type *ArrTy = StructType::get(ctxt, structTys); //auto *ArrTy = ArrayType::get(Double, num_ssr); //VectorType::get(Double, num_ssr, false);
+  std::vector<Type *> argtypes;
+  for (unsigned i = 0u; i < num_ssr; i++) argtypes.push_back(Double);
+  std::string constraints = "={f0},={f1},={f2},{f0},{f1},{f2},~{memory}";
+  FunctionType* fty = FunctionType::get(ArrTy, argtypes, false);
+  InlineAsm *En = InlineAsm::get(fty, "csrsi 0x7C0, 1\0A", constraints, true);
+  En->dump();
+  std::vector<Value *> args;
+  for (unsigned i = 0u; i < num_ssr; i++) args.push_back(UndefValue::get(Double));
+  CallInst *Dep = builder.CreateCall(En, args, "ssr.enable.dep");
+  Dep->dump();
 
   builder.SetInsertPoint(ExP); // ----------- in exit block
-  clobberRegisters(ArrayRef<std::string>(regs), builder);
-  Function *SSRDisable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_disable);
-  builder.CreateCall(SSRDisable->getFunctionType(), SSRDisable, ArrayRef<Value *>());
-
+  std::vector<Value *> deps;
+  for (unsigned i = 0u; i < num_ssr; i++) 
+    deps.push_back(builder.CreateExtractValue(Dep, i, formatv("dep.{0}", i)));
+  InlineAsm *Dis = InlineAsm::get(fty, "csrci 0x7C0, 1\0A", constraints, true);
+  builder.CreateCall(Dis, deps, "ssr.disable.dep")->dump();
+  
   errs()<<"generated ssr_enable and ssr_disable\n";
 
   return;
+}
+
+Value *generatePopAsm(Instruction *InsertBefore, unsigned dmid) {
+  IRBuilder<> builder(InsertBefore);
+  FunctionType *fty = FunctionType::get(Type::getDoubleTy(builder.getContext()), false);
+  std::string inst = formatv("fmv.d $0, ft{0}\0A", dmid);
+  InlineAsm *Pop = InlineAsm::get(fty, inst, "=f", true);
+  return builder.CreateCall(Pop, ArrayRef<Value *>(), "ssr.pop");
+}
+
+void generatePushAsm(Instruction *InsertBefore, unsigned dmid, Value *Val){
+  IRBuilder<> builder(InsertBefore);
+  FunctionType *fty = FunctionType::get(Type::getVoidTy(builder.getContext()), ArrayRef<Type *>(Type::getDoubleTy(builder.getContext())), false);
+  std::string inst = formatv("fmv.d ft{0}, $0\0A", dmid);
+  InlineAsm *Push = InlineAsm::get(fty, inst, "f", true);
+  builder.CreateCall(Push, ArrayRef<Value *>(Val));
 }
   */

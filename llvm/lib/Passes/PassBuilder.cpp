@@ -763,6 +763,7 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
 
   FPM.addPass(SimplifyCFGPass());
   FPM.addPass(InstCombinePass());
+  FPM.addPass(SSRInferencePass());
 
   if (EnableLoopFlatten)
     FPM.addPass(LoopFlattenPass());
@@ -773,7 +774,7 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
       std::move(LPM2), /*UseMemorySSA=*/false, /*UseBlockFrequencyInfo=*/false,
       DebugLogging));
 
-  FPM.addPass(SSRInferencePass());
+  //FPM.addPass(SSRInferencePass());
 
   // Delete small array after loop unroll.
   FPM.addPass(SROA());

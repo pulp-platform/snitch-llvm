@@ -161,6 +161,10 @@ bool RISCVExpandSSR::runOnMachineFunction(MachineFunction &MF) {
     }
   }
 
+  //errs()<<"\n ========================= DUMP MF ========================== \n";
+  //MF.dump();
+  //errs()<<"\n ======================= END DUMP MF ========================== \n";
+
   return Modified;
 }
 
@@ -480,14 +484,107 @@ bool RISCVExpandSSR::expandSSR_Barrier(MachineBasicBlock &MBB,
 }
 
 void RISCVExpandSSR::mergePushPop(MachineBasicBlock &MBB) {
-  SmallSet<Register, 8> virtRegs[NUM_SSR];
+  //SmallSet<Register, 8> virtRegs[NUM_SSR];
   const TargetRegisterInfo *TRI = MBB.getParent()->getRegInfo().getTargetRegisterInfo();
-  bool inSSRRegion = false;
 
   Register ssr_regs[NUM_SSR];
   for(unsigned ssr_no = 0; ssr_no < NUM_SSR; ++ssr_no) ssr_regs[ssr_no] = getSSRFtReg(ssr_no);
+  
+  for (auto ssr_reg : ssr_regs){
+    SmallSet<MachineInstr *, 8u> modified;
+    for (auto MI = MBB.rbegin(); MI != MBB.rend(); ){ //go from back to front
+      auto PMI = std::next(MI); //this is prev bc reverse iterator
+      if(MI->getOpcode() == RISCV::FSGNJ_D){
+        if (MI->getOperand(1).getReg() == ssr_reg && MI->getOperand(2).getReg() == ssr_reg && MI->getOperand(0).isReg()){ //this was an SSR pop
+          Register r = MI->getOperand(0).getReg(); //register to replace
+          bool replacedAll = true; //if there are no uses, can replace too
+          SmallVector<MachineInstr *, 1U> replacements;
+          for (auto MI2 = MBB.rbegin(); replacedAll && MI2 != MI; MI2++){
+            for (auto Op = MI2->operands_begin(); replacedAll && Op != MI2->operands_end(); ++Op){
+              if (Op->isReg() && Op->getReg() == r){
+                replacedAll = replacedAll && modified.find(&*MI2) == modified.end();
+                replacements.push_back(&*MI2);
+              }
+            }
+          }
+          if (replacedAll) {
+            MBB.addLiveIn(ssr_reg);
+            MI->eraseFromParentAndMarkDBGValuesForRemoval();
+            for (MachineInstr *I : replacements){
+              I->dump();
+              I->substituteRegister(r, ssr_reg, 0, *TRI);
+              I->dump();
+              modified.insert(I);
+            }
+          }
+        }else if(MI->getOperand(0).getReg() == ssr_reg){
+          auto Op1 = MI->getOperand(1), Op2 = MI->getOperand(2);
+          //TODO: turns out the following condition is almost never true ==> use live-ness analysis instead of .isKill() ?
+          if (Op1.isReg() && Op2.isReg() && Op1.getReg() == Op2.getReg() && Op1.isKill() && Op2.isKill()){ //because Op is kill will not be used later
+            Register r = Op1.getReg();
+            MachineOperand *O = nullptr;
+            //find the most recent operand that sets this reg
+            for (auto MI2 = std::next(MI); !O && MI2 != MBB.rend(); ++MI2){
+              //FIXME: first operand is always dest operand right? otherwise require def (like below) or query llvm which operand is dest (how?)
+              if (MI2->getNumOperands() == 0u) continue;
+              MachineOperand *Op = &*MI2->operands_begin();
+              MI2->dump();
+              if (Op->isReg() && Op->getReg() == r){
+                O = Op;
+              }
+              /*for (auto Op = MI2->operands_begin(); Op != MI2->operands_end(); ++Op){
+                if (Op->isReg() && Op->getReg() == r){
+                  done = true;
+                  if (Op->isDef() || SKIP_DEF_CHECK) O = &*Op; 
+                  break;
+                }
+              }*/
+            }
+            if (O){
+              errs()<<"push regmerge: \n";
+              O->getParent()->dump();
+              O->setReg(ssr_reg);
+              O->getParent()->dump();
+              MI->eraseFromParentAndMarkDBGValuesForRemoval();
+            }
+          }
+        }
+      }
+      MI = PMI;
+    }
+  }
+  MBB.sortUniqueLiveIns();
+}
 
-  // First pass: Detect moves to or from SSR registers
+/// Gather parameters for the register merging
+RISCVExpandSSR::RegisterMergingPreferences RISCVExpandSSR::gatherRegisterMergingPreferences() {
+  RISCVExpandSSR::RegisterMergingPreferences RMP;
+
+  // set up defaults
+  RMP.Enable = true;
+
+  // read user 
+  if (SSRRegisterMerge.getNumOccurrences() > 0)
+    RMP.Enable = !SSRRegisterMerge;
+
+  LLVM_DEBUG(dbgs() << "RMP Enable "<<RMP.Enable<<"\n");
+
+  return RMP;
+}
+
+} // end of anonymous namespace
+
+INITIALIZE_PASS(RISCVExpandSSR, "riscv-expand-ssr",
+                RISCV_EXPAND_SSR_NAME, false, false)
+namespace llvm {
+
+FunctionPass *createRISCVExpandSSRPass() { return new RISCVExpandSSR(); }
+
+} // end of namespace llvm
+
+
+/* OLD VERSION OF REGMERGE
+// First pass: Detect moves to or from SSR registers
   for (auto MI = MBB.begin() ; MI != MBB.end() ; ) {
     MachineBasicBlock::iterator NMI = std::next(MI);
 
@@ -552,31 +649,4 @@ void RISCVExpandSSR::mergePushPop(MachineBasicBlock &MBB) {
     }
     MI = NMI;    
   }
-  MBB.sortUniqueLiveIns();
-}
-
-/// Gather parameters for the register merging
-RISCVExpandSSR::RegisterMergingPreferences RISCVExpandSSR::gatherRegisterMergingPreferences() {
-  RISCVExpandSSR::RegisterMergingPreferences RMP;
-
-  // set up defaults
-  RMP.Enable = true;
-
-  // read user 
-  if (SSRRegisterMerge.getNumOccurrences() > 0)
-    RMP.Enable = !SSRRegisterMerge;
-
-  LLVM_DEBUG(dbgs() << "RMP Enable "<<RMP.Enable<<"\n");
-
-  return RMP;
-}
-
-} // end of anonymous namespace
-
-INITIALIZE_PASS(RISCVExpandSSR, "riscv-expand-ssr",
-                RISCV_EXPAND_SSR_NAME, false, false)
-namespace llvm {
-
-FunctionPass *createRISCVExpandSSRPass() { return new RISCVExpandSSR(); }
-
-} // end of namespace llvm
+  */

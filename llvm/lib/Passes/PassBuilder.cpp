@@ -819,6 +819,8 @@ PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
       LICMPass(PTO.LicmMssaOptCap, PTO.LicmMssaNoAccForPromotionCap),
       EnableMSSALoopDependency, /*UseBlockFrequencyInfo=*/true, DebugLogging));
 
+  FPM.addPass(ReassociatePass()); //want to do this again after loop unrolling. FIXME: probably worth it right?
+
   if (PTO.Coroutines)
     FPM.addPass(CoroElidePass());
 

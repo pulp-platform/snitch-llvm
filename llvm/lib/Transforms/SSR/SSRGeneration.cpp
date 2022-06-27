@@ -50,11 +50,7 @@
 #include <queue>
 #include <limits>
 
-//if you feel like there is somehow still some weird reordering going on, enable these:
-#define SSR_CLOBBER_REGS_FOR_PUSH true
-#define SSR_CLOBBER_REGS_FOR_POP true
-
-#define NUM_SSR 3U //NOTE: if increased too much, might need to change 1st arguments to clobberRegisters(..)
+#define NUM_SSR 3U 
 #define SSR_MAX_DIM 4U
 
 //both are inclusive! 
@@ -103,16 +99,16 @@ cl::opt<bool> SSRConflictFreeOnly(
   cl::desc("Only infer streams if they have no conflicts with other memory accesses.")
 );
 
-cl::opt<bool> SSRInline(
-  "ssr-inline", 
+cl::opt<bool> SSRNoInline(
+  "ssr-no-inline", 
   cl::init(false),
-  cl::desc("Allow functions that contain SSR streams to be inlined.")
+  cl::desc("prevent functions that contain SSR streams from being inlined.")
 );
 
-cl::opt<bool> SSRNoBarrier(
-  "ssr-no-barrier",
+cl::opt<bool> SSRBarrier(
+  "ssr-barrier",
   cl::init(false),
-  cl::desc("Disable the insertion of an spinning loop that waits for the stream to be done before it is dissabled (potentially unsafe).")
+  cl::desc("Enable the insertion of a spinning loop that waits for the stream to be done before it is dissabled.")
 );
 
 } //end of namespace llvm
@@ -190,6 +186,7 @@ private:
   const NodeT *Root = nullptr;
 };
 
+/*
 void clobberRegisters(ArrayRef<std::string> regs, IRBuilder<> &builder){
   std::string constraints = "";
   if (regs.size() > 0u) {
@@ -206,6 +203,7 @@ void clobberRegisters(ArrayRef<std::string> regs, IRBuilder<> &builder){
   );
   builder.CreateCall(IA)->dump();
 }
+*/
 
 void copyPHIsFromPred(BasicBlock *BB){
   BasicBlock *Pred = nullptr;
@@ -421,14 +419,11 @@ void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
   }
 
   unsigned n_reps = 0u;
-  std::string s = formatv("f{0}", dmid);
-  ArrayRef<std::string> regs(s);
   if (isStore){
     Function *SSRPush = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_push);
     for (Instruction *I : E.Access->getAccesses()){
       std::array<Value *, 2> pusharg = {DMid, cast<StoreInst>(I)->getValueOperand()};
       builder.SetInsertPoint(I);
-      if (SSR_CLOBBER_REGS_FOR_PUSH) clobberRegisters(regs, builder);
       auto *C = builder.CreateCall(SSRPush->getFunctionType(), SSRPush, ArrayRef<Value *>(pusharg));
       C->dump(); I->dump();
       I->eraseFromParent();
@@ -440,7 +435,6 @@ void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
     for (Instruction *I : E.Access->getAccesses()){
       builder.SetInsertPoint(I);
       auto *V = builder.CreateCall(SSRPop->getFunctionType(), SSRPop, ArrayRef<Value *>(poparg), "ssr.pop");
-      if (SSR_CLOBBER_REGS_FOR_POP) clobberRegisters(regs, builder);
       V->dump(); I->dump();
       BasicBlock::iterator ii(I);
       ReplaceInstWithValue(I->getParent()->getInstList(), ii, V);
@@ -474,23 +468,37 @@ void generateSSRBarrier(Instruction *InsertBefore, unsigned dmid) {
   builder.CreateCall(Barrier->getFunctionType(), Barrier, ConstantInt::get(Type::getInt32Ty(builder.getContext()), dmid))->dump();
 }
 
+void generateFPDependency(IRBuilder<> &builder){
+  constexpr unsigned num_fpr = 32u;
+  Type *Double = Type::getDoubleTy(builder.getContext());
+  std::vector<Type *> inputs;
+  std::vector<Value *> args;
+  std::string constraints = "";
+  for (unsigned i = 0u; i < num_fpr; i++) {
+    inputs.push_back(Double);
+    args.push_back(UndefValue::get(Double));
+    std::string regname = formatv("f{0}", i);
+    constraints = "={" + regname + "}" + (i ? "," : "") + constraints + ", {" + regname + "}";
+  }
+  Type *rty = StructType::get(builder.getContext(), inputs);
+  auto *IA = InlineAsm::get(
+    FunctionType::get(rty, inputs, false),
+    "",
+    constraints,
+    true
+  );
+  builder.CreateCall(IA, args, "fpr.dep");
+}
+
 /// generates SSR enable & disable calls
 void generateSSREnDis(Instruction *PhP, Instruction *ExP){
   IRBuilder<> builder(PhP); // ----------- in preheader 
   Module *mod = PhP->getParent()->getModule();
   Function *SSREnable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_enable);
   builder.CreateCall(SSREnable->getFunctionType(), SSREnable, ArrayRef<Value *>());
-  std::vector<std::string> regs;
-  for (unsigned r = 0u; r < NUM_SSR; r++){
-    regs.push_back(std::string(formatv("f{0}", r)));
-  }
-  //create inline asm that clobbers ft0-2 to make sure none of them are reordered to before ssr enable / after ssr disable
-  //equivalent to asm volatile ("":::"ft0", "ft1", "ft2");
-  clobberRegisters(ArrayRef<std::string>(regs), builder);
 
   builder.SetInsertPoint(ExP); // ----------- in exit block
-  clobberRegisters(ArrayRef<std::string>(regs), builder);
-
+  //generateFPDependency(builder);
   Function *SSRDisable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_disable);
   builder.CreateCall(SSRDisable->getFunctionType(), SSRDisable, ArrayRef<Value *>());
 
@@ -626,7 +634,7 @@ void cloneAndSetup(Instruction *PhT, Instruction *ExP, Value *Cond, std::vector<
   unsigned dmid = 0u;
   for (auto &E : exp) {
     GenerateSSRSetup(E, dmid++, PhT);
-    if (!SSRNoBarrier) generateSSRBarrier(ExP, dmid);
+    if (SSRBarrier) generateSSRBarrier(ExP, dmid);
   }
 
   generateSSREnDis(PhT, ExP);
@@ -777,8 +785,8 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
   if (SSRNoIntersectCheck) errs()<<", ssr-no-intersect-check";
   if (SSRNoBoundCheck) errs()<<", ssr-no-bound-check";
   if (SSRNoTCDMCheck) errs()<<", ssr-no-tcdm-check";
-  if (SSRNoBarrier) errs()<<", ssr-no-barrier";
-  if (SSRInline) errs()<<", ssr-inline";
+  if (SSRBarrier) errs()<<", ssr-barrier";
+  if (SSRNoInline) errs()<<", ssr-no-inline";
   if (SSRConflictFreeOnly) errs()<<", ssr-conflict-free-only";
   errs()<<"\n";
 
@@ -851,7 +859,7 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
   if (!changed) return PreservedAnalyses::all();
   
   F.addFnAttr(StringRef(SSRFnAttr)); //we have inserted a stream, tag accordingly
-  if (!SSRInline) F.addFnAttr(Attribute::AttrKind::NoInline);
+  if (SSRNoInline) F.addFnAttr(Attribute::AttrKind::NoInline);
   return PreservedAnalyses::none();
 }
 

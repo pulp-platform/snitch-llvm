@@ -62,11 +62,6 @@ using namespace llvm;
 
 #define DEBUG_TYPE "riscv-ssr"
 
-/// Command line options
-static cl::opt<bool>
-    SSRRegisterMerge("ssr-noregmerge", cl::Hidden,
-                    cl::desc("Disable the merging of SSR registers in other instructions"));
-
 #define RISCV_EXPAND_SSR_NAME "RISCV SSR pseudo instruction expansion pass"
 
 #define NUM_SSR 3
@@ -77,12 +72,6 @@ class RISCVExpandSSR : public MachineFunctionPass {
 public:
   const RISCVInstrInfo *TII;
   static char ID;
-
-  /// Parameters for the register merging pass
-  struct RegisterMergingPreferences {
-    /// enable the register merging
-    bool Enable;
-  };
 
   RISCVExpandSSR() : MachineFunctionPass(ID) {
     initializeRISCVExpandSSRPass(*PassRegistry::getPassRegistry());
@@ -96,10 +85,10 @@ private:
 
   const MachineFunction *MF;
   RISCVMachineFunctionInfo *RVFI;
-  bool Enabled;
+  std::vector<MachineInstr *> MoveLoads;
+  std::vector<MachineInstr *> MoveStores;
 
   bool expandMBB(MachineBasicBlock &MBB);
-  void mergePushPop(MachineBasicBlock &MBB);
   bool expandMI(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
                 MachineBasicBlock::iterator &NextMBBI);
   bool expandSSR_Setup(MachineBasicBlock &MBB,
@@ -119,8 +108,7 @@ private:
   bool expandSSR_Barrier(MachineBasicBlock &MBB,
                          MachineBasicBlock::iterator MBBI,
                          MachineBasicBlock::iterator &NextMBBI);
-
-  RISCVExpandSSR::RegisterMergingPreferences gatherRegisterMergingPreferences();
+  void bundlePushPops();
 };
 
 char RISCVExpandSSR::ID = 0;
@@ -140,17 +128,14 @@ bool RISCVExpandSSR::runOnMachineFunction(MachineFunction &MF) {
   TII = static_cast<const RISCVInstrInfo *>(MF.getSubtarget().getInstrInfo());
   this->MF = &MF;
   this->RVFI = MF.getInfo<RISCVMachineFunctionInfo>();
-  Enabled = false;
+  this->MoveLoads.empty();
+  this->MoveStores.empty();
 
   bool Modified = false;
   for (auto &MBB : MF)
     Modified |= expandMBB(MBB);
 
-  // Run over MF again to merge SSR pops/pushs into instruction uses
-  RISCVExpandSSR::RegisterMergingPreferences RMP = gatherRegisterMergingPreferences();
-  if(RMP.Enable && RVFI->getUsedSSR())
-    for (auto &MBB : MF)
-      mergePushPop(MBB);
+  bundlePushPops(); //bundle push/pops with their users
 
   /// "Forcefully" add all SSR registers as live-in to all MBB in this MF
   if(Modified) {
@@ -215,17 +200,6 @@ bool RISCVExpandSSR::expandMI(MachineBasicBlock &MBB,
     return expandSSR_Barrier(MBB, MBBI, NextMBBI);
   }
 
-  // Prevent excessive live-ins, they pose a problem with multiple SSR regions
-  // in a single function. Adding SSR regs to live ins in push/pop should suffice
-  // for now, but there might be edge cases
-  
-  // if(Enabled) {
-  //   // mark the SSR registers reserved in this BB
-  //   unsigned ssrEnabledMask = 0;
-  //   for (unsigned n = 0; n < NUM_SSR; ++n)
-  //     MBB.addLiveIn(getSSRFtReg(n));
-  // }
-
   return false;
 }
 
@@ -276,30 +250,24 @@ bool RISCVExpandSSR::expandSSR_PushPop(MachineBasicBlock &MBB,
   LLVM_DEBUG(dbgs() << "-- Expanding SSR " << (isPop?"Pop":"Push") << "\n");
   LLVM_DEBUG(dbgs() << "   Using register " << R << " for SSR streamer "<<streamer<<"\n");
 
-  // Build float move from ssr reg to register provided as argument or vice versa
-  // FSGNJ_D is used for FMV.D
   if(isPop) {
-    // Insert newly-built instruction and set up first operand as a destination
-    // virtual register. A copy instruction is emitted that moves the value
-    // from the SSR register (R) to a destination virtual register
-    BuildMI(MBB, MBBI, DL, TII->get(RISCV::FSGNJ_D), MBBI->getOperand(ssrValIdx).getReg())
-      .addReg(R, 0)
-      .addReg(R, 0);
-    // BuildMI(MBB, MBBI, DL, TII->get(TargetOpcode::COPY), MBBI->getOperand(ssrValIdx).getReg())
-    //   .addReg(R, 0);
+    // Insert a "loading move" this is like a normal move but has side effects
+    Register valR = MBBI->getOperand(ssrValIdx).getReg();
+    MachineInstr *MI = BuildMI(MBB, MBBI, DL, TII->get(RISCV::PseudoLoadMove), valR).addReg(R, 0).getInstr();
+    MBBI->eraseFromParent(); // The pseudo instruction is gone now.
+    MI->getOperand(0).setIsDef();
+    this->MoveLoads.push_back(MI);
   }
   else {
-    // Build a copy instruction that moves the value from the register passed as 
-    // argument to the ssr data register (R)
-    BuildMI(MBB, MBBI, DL, TII->get(RISCV::FSGNJ_D), R)
-      .addReg(MBBI->getOperand(ssrValIdx).getReg())
-      .addReg(MBBI->getOperand(ssrValIdx).getReg());
-    // BuildMI(MBB, MBBI, DL, TII->get(TargetOpcode::COPY), R)
-    //   .addReg(MBBI->getOperand(ssrValIdx).getReg());
+    Register valR = MBBI->getOperand(ssrValIdx).getReg();
+    // Insert a "storing move" this is like a normal move but has side effects
+    MachineInstr *MI = BuildMI(MBB, MBBI, DL, TII->get(RISCV::PseudoStoreMove), R).addReg(valR).getInstr();
+    MBBI->eraseFromParent(); // The pseudo instruction is gone now.
+    MI->getOperand(0).setIsDef();
+    this->MoveStores.push_back(MI);
   }
 
   MBB.addLiveIn(R);
-  MBBI->eraseFromParent(); // The pseudo instruction is gone now.
   return true;
 }
 
@@ -415,7 +383,6 @@ bool RISCVExpandSSR::expandSSR_EnDis(MachineBasicBlock &MBB,
   MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
 
   LLVM_DEBUG(dbgs() << "-- Expanding SSR " << (isEnable ? "Enable" : "Disable") << "\n");
-  Enabled = isEnable;
 
   // emit a csrsi/csrci call to the SSR location
   if(isEnable) {
@@ -483,93 +450,37 @@ bool RISCVExpandSSR::expandSSR_Barrier(MachineBasicBlock &MBB,
   return true;
 }
 
-void RISCVExpandSSR::mergePushPop(MachineBasicBlock &MBB) {
-  //SmallSet<Register, 8> virtRegs[NUM_SSR];
-  const TargetRegisterInfo *TRI = MBB.getParent()->getRegInfo().getTargetRegisterInfo();
-
-  Register ssr_regs[NUM_SSR];
-  for(unsigned ssr_no = 0; ssr_no < NUM_SSR; ++ssr_no) ssr_regs[ssr_no] = getSSRFtReg(ssr_no);
-  
-  for (auto ssr_reg : ssr_regs){
-    SmallSet<MachineInstr *, 8u> modified;
-    for (auto MI = MBB.rbegin(); MI != MBB.rend(); ){ //go from back to front
-      auto PMI = std::next(MI); //this is prev bc reverse iterator
-      if(MI->getOpcode() == RISCV::FSGNJ_D){
-        if (MI->getOperand(1).getReg() == ssr_reg && MI->getOperand(2).getReg() == ssr_reg && MI->getOperand(0).isReg()){ //this was an SSR pop
-          Register r = MI->getOperand(0).getReg(); //register to replace
-          bool replacedAll = true; //if there are no uses, can replace too
-          SmallVector<MachineInstr *, 1U> replacements;
-          for (auto MI2 = MBB.rbegin(); replacedAll && MI2 != MI; MI2++){
-            for (auto Op = MI2->operands_begin(); replacedAll && Op != MI2->operands_end(); ++Op){
-              if (Op->isReg() && Op->getReg() == r){
-                replacedAll = replacedAll && modified.find(&*MI2) == modified.end();
-                replacements.push_back(&*MI2);
-              }
-            }
-          }
-          if (replacedAll) {
-            MBB.addLiveIn(ssr_reg);
-            MI->eraseFromParentAndMarkDBGValuesForRemoval();
-            for (MachineInstr *I : replacements){
-              I->dump();
-              I->substituteRegister(r, ssr_reg, 0, *TRI);
-              I->dump();
-              modified.insert(I);
-            }
-          }
-        }else if(MI->getOperand(0).getReg() == ssr_reg){
-          auto Op1 = MI->getOperand(1), Op2 = MI->getOperand(2);
-          //TODO: turns out the following condition is almost never true ==> use live-ness analysis instead of .isKill() ?
-          if (Op1.isReg() && Op2.isReg() && Op1.getReg() == Op2.getReg() && Op1.isKill() && Op2.isKill()){ //because Op is kill will not be used later
-            Register r = Op1.getReg();
-            MachineOperand *O = nullptr;
-            //find the most recent operand that sets this reg
-            for (auto MI2 = std::next(MI); !O && MI2 != MBB.rend(); ++MI2){
-              //FIXME: first operand is always dest operand right? otherwise require def (like below) or query llvm which operand is dest (how?)
-              if (MI2->getNumOperands() == 0u) continue;
-              MachineOperand *Op = &*MI2->operands_begin();
-              MI2->dump();
-              if (Op->isReg() && Op->getReg() == r){
-                O = Op;
-              }
-              /*for (auto Op = MI2->operands_begin(); Op != MI2->operands_end(); ++Op){
-                if (Op->isReg() && Op->getReg() == r){
-                  done = true;
-                  if (Op->isDef() || SKIP_DEF_CHECK) O = &*Op; 
-                  break;
-                }
-              }*/
-            }
-            if (O){
-              errs()<<"push regmerge: \n";
-              O->getParent()->dump();
-              O->setReg(ssr_reg);
-              O->getParent()->dump();
-              MI->eraseFromParentAndMarkDBGValuesForRemoval();
-            }
-          }
-        }
+void RISCVExpandSSR::bundlePushPops() {
+  //TODO: bundle what is regmerged after reg-alloc to make sure that the FADD/FMUL/FMUL/etc.. do not slip past ssr_disable
+  /*
+  DenseMap<MachineInstr *, std::pair<MachineInstr *, MachineInstr *>> bundles;
+  //pops:
+  for (MachineInstr *MI : this->MoveLoads) {
+    if (!MI) continue;
+    MachineInstr *SingleUser = getUniqueUser(MI, MI->getOperand(0).getReg());
+    if (SingleUser && SingleUser->getParent() == MI->getParent()) {
+      MI->moveBefore(SingleUser); //we pray that there was no reordering until now that moved SingleUser after the SSRDisable
+      auto b = bundles.find(SingleUser);
+      if (b == bundles.end()) {
+        b = bundles.insert(std::make_pair(SingleUser, std::make_pair(SingleUser, SingleUser))).first;
       }
-      MI = PMI;
+      if (b->getSecond().first == SingleUser) b->getSecond().first = MI; //if begin of bundle was SingleUser, set to MI
     }
   }
-  MBB.sortUniqueLiveIns();
-}
-
-/// Gather parameters for the register merging
-RISCVExpandSSR::RegisterMergingPreferences RISCVExpandSSR::gatherRegisterMergingPreferences() {
-  RISCVExpandSSR::RegisterMergingPreferences RMP;
-
-  // set up defaults
-  RMP.Enable = true;
-
-  // read user 
-  if (SSRRegisterMerge.getNumOccurrences() > 0)
-    RMP.Enable = !SSRRegisterMerge;
-
-  LLVM_DEBUG(dbgs() << "RMP Enable "<<RMP.Enable<<"\n");
-
-  return RMP;
+  //pushs: FIXME: currently only works if the defining instruction is pred of MoveStore (how to get def from MachineOperand ???)
+  for (MachineInstr *MI : this->MoveStores) {
+    Register valR = MI->getOperand(1).getReg();
+    MachineInstr *Pred = MI->getPrevNode();
+    bool doesDefvalR = false;
+    for (auto &MOP : Pred->defs()) doesDefvalR |= MOP.isReg() && MOP.getReg() == valR;
+    if (doesDefvalR && MI == getUniqueUser(Pred, valR)) {
+      auto b = bundles.find(Pred);
+      if (b == bundles.end()) {
+        b = bundles.insert(std::make_pair(Pred, std::make_pair(Pred, Pred))).first;
+      }
+      if (b->getSecond().second == Pred) b->getSecond().second = MI;
+    }
+  }*/
 }
 
 } // end of anonymous namespace
@@ -582,71 +493,41 @@ FunctionPass *createRISCVExpandSSRPass() { return new RISCVExpandSSR(); }
 
 } // end of namespace llvm
 
-
-/* OLD VERSION OF REGMERGE
-// First pass: Detect moves to or from SSR registers
-  for (auto MI = MBB.begin() ; MI != MBB.end() ; ) {
-    MachineBasicBlock::iterator NMI = std::next(MI);
-
-    LLVM_DEBUG(dbgs()<<"Analyzing: "<<*MI<<"\n");
-
-    // detect an emitted pop and add assignment (virtual_reg, ssr_read) to list
-    if(MI->getOpcode() == RISCV::FSGNJ_D) {
-      LLVM_DEBUG(dbgs()<<"Found FSGNJ_D, Op 0: " << MI->getOperand(1).getReg() << " Op1: " << MI->getOperand(2).getReg() << "\n");
-      
-      // look for each streamer register
-      for(unsigned ssr_no = 0; ssr_no < NUM_SSR; ++ssr_no) {
-        // check for pop
-        if(MI->getOperand(1).getReg() == ssr_regs[ssr_no] && MI->getOperand(2).getReg() == ssr_regs[ssr_no]) {
-          LLVM_DEBUG(dbgs()<<"  pop: both operands from SSR"<< ssr_no <<"\n");
-          // append virtual register to list of assigned virtuals
-          LLVM_DEBUG(dbgs()<<"  append: "<< MI->getOperand(0).getReg() <<"\n");
-          virtRegs[ssr_no].insert(MI->getOperand(0).getReg());
-          // remove operation
-          MI->eraseFromParent();
-          break;
+/*
+bundle.second = bundle.second->getNextNode(); //make end of bundle exclusive bound
+    DenseSet<Register> regs;
+    errs()<<"beg bundle\n"; 
+    for (MachineInstr *MI = bundle.first; MI != bundle.second; MI = MI->getNextNode()) MI->dump();
+    errs()<<"end bundle\n";
+    MachineInstr &first = *bundle.first;
+    auto BMI = BuildMI(*first.getParent(), first.getIterator(), first.getDebugLoc(), TII->get(RISCV::BUNDLE));
+    for (MachineInstr *MI = bundle.first; MI != bundle.second; MI = MI->getNextNode()) {
+      MI->dump();
+      for (auto &MOP : MI->operands()) {
+        if (!MOP.isReg()) continue;
+        Register reg = MOP.getReg();
+        if (regs.find(reg) != regs.end()) continue;
+        regs.insert(reg);
+        bool isInternal = false; 
+        for (auto *MI2 = MI->getNextNode(); !isInternal && MI2 != bundle.second; MI2 = MI2->getNextNode()) {
+          for (const auto &MOP2 : MI2->operands()) {
+            isInternal |= MOP2.isReg() && MOP2.getReg() == reg;
+          }
         }
-        // TODO: check for push
-        else if(MI->getOperand(0).getReg() == ssr_regs[ssr_no]) {
-          // This is non-trivial because a register might be used elsewhere, therefore the entire MBB
-          // must be analyzed and a merge can only be made, if the register is written once
-          // LLVM_DEBUG(dbgs()<<"  push: operand 0 from SSR"<< ssr_no <<"\n");
-          // // append virtual register to list of assigned virtuals
-          // LLVM_DEBUG(dbgs()<<"  append: "<< MI->getOperand(1).getReg() <<"\n");
-          // virtRegs[ssr_no].insert(MI->getOperand(1).getReg());
-          // // remove operation
-          // MI->eraseFromParent();
-          break;
+        MOP.dump();
+        errs()<<"is internal = "<<isInternal<<"\n";
+        unsigned regstate = getRegState(MOP);
+        if (isInternal) {
+          if (reg.isPhysical()) BMI = BMI.addDef(reg, RegState::Dead | regstate); //clobber
+        } else {
+          if (MOP.isDef()) {
+            BMI = BMI.addDef(reg, regstate);
+          } else {
+            BMI = BMI.addReg(reg, regstate); //how to add flags?
+          }
         }
-      }
-    } 
-    MI = NMI;
-  }
-
-  // DBG
-  for(unsigned ssr_no = 0; ssr_no < NUM_SSR; ++ssr_no) {
-    for (auto iter = virtRegs[ssr_no].begin() ; iter != virtRegs[ssr_no].end() ; ++iter)
-      LLVM_DEBUG(dbgs() << "virtregs["<<ssr_no<<"] = " << *iter << "\n");
-  }
-
-  // Second pass: Replace uses of virtual registers corresponding to DMs with FT registers
-  for (auto MI = MBB.begin() ; MI != MBB.end() ; ) {
-    MachineBasicBlock::iterator NMI = std::next(MI);
-
-    // look for usage of any of the virtual registers assigned to SSRs
-    for (auto operand = MI->operands_begin() ; operand != MI->operands_end() ; ++operand) {
-      if(!operand->isReg()) continue;
-      // check if operand is in any SSR list
-      for(unsigned ssr_no = 0; ssr_no < NUM_SSR; ++ssr_no) {
-        if(virtRegs[ssr_no].contains(operand->getReg())) {
-          LLVM_DEBUG(dbgs() << "Found use of operand " << operand->getReg() << " ssr: " << ssr_no << " in inst " <<  MI->getOpcode() << "\n");
-          // substitute with SSR register
-          MI->substituteRegister(operand->getReg(), ssr_regs[ssr_no], 0, *TRI);
-          // guard this block and add ssr regs to live in
-          MBB.addLiveIn(ssr_regs[ssr_no]);
-        }
+        errs()<<"done\n";
       }
     }
-    MI = NMI;    
-  }
-  */
+    BMI.getInstr()->dump();
+    */

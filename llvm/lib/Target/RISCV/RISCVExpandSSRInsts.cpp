@@ -108,7 +108,7 @@ private:
   bool expandSSR_Barrier(MachineBasicBlock &MBB,
                          MachineBasicBlock::iterator MBBI,
                          MachineBasicBlock::iterator &NextMBBI);
-  void bundlePushPops();
+  void handlePushPops();
 };
 
 char RISCVExpandSSR::ID = 0;
@@ -135,7 +135,7 @@ bool RISCVExpandSSR::runOnMachineFunction(MachineFunction &MF) {
   for (auto &MBB : MF)
     Modified |= expandMBB(MBB);
 
-  bundlePushPops(); //bundle push/pops with their users
+  handlePushPops();
 
   /// "Forcefully" add all SSR registers as live-in to all MBB in this MF
   if(Modified) {
@@ -450,7 +450,22 @@ bool RISCVExpandSSR::expandSSR_Barrier(MachineBasicBlock &MBB,
   return true;
 }
 
-void RISCVExpandSSR::bundlePushPops() {
+//additional optimisations for MoveLoad or MoveStore
+void RISCVExpandSSR::handlePushPops() {
+  return;
+}
+
+} // end of anonymous namespace
+
+INITIALIZE_PASS(RISCVExpandSSR, "riscv-expand-ssr",
+                RISCV_EXPAND_SSR_NAME, false, false)
+namespace llvm {
+
+FunctionPass *createRISCVExpandSSRPass() { return new RISCVExpandSSR(); }
+
+} // end of namespace llvm
+
+/*
   //TODO: bundle what is regmerged after reg-alloc to make sure that the FADD/FMUL/FMUL/etc.. do not slip past ssr_disable
   /*
   DenseMap<MachineInstr *, std::pair<MachineInstr *, MachineInstr *>> bundles;
@@ -481,53 +496,4 @@ void RISCVExpandSSR::bundlePushPops() {
       if (b->getSecond().second == Pred) b->getSecond().second = MI;
     }
   }*/
-}
-
-} // end of anonymous namespace
-
-INITIALIZE_PASS(RISCVExpandSSR, "riscv-expand-ssr",
-                RISCV_EXPAND_SSR_NAME, false, false)
-namespace llvm {
-
-FunctionPass *createRISCVExpandSSRPass() { return new RISCVExpandSSR(); }
-
-} // end of namespace llvm
-
-/*
-bundle.second = bundle.second->getNextNode(); //make end of bundle exclusive bound
-    DenseSet<Register> regs;
-    errs()<<"beg bundle\n"; 
-    for (MachineInstr *MI = bundle.first; MI != bundle.second; MI = MI->getNextNode()) MI->dump();
-    errs()<<"end bundle\n";
-    MachineInstr &first = *bundle.first;
-    auto BMI = BuildMI(*first.getParent(), first.getIterator(), first.getDebugLoc(), TII->get(RISCV::BUNDLE));
-    for (MachineInstr *MI = bundle.first; MI != bundle.second; MI = MI->getNextNode()) {
-      MI->dump();
-      for (auto &MOP : MI->operands()) {
-        if (!MOP.isReg()) continue;
-        Register reg = MOP.getReg();
-        if (regs.find(reg) != regs.end()) continue;
-        regs.insert(reg);
-        bool isInternal = false; 
-        for (auto *MI2 = MI->getNextNode(); !isInternal && MI2 != bundle.second; MI2 = MI2->getNextNode()) {
-          for (const auto &MOP2 : MI2->operands()) {
-            isInternal |= MOP2.isReg() && MOP2.getReg() == reg;
-          }
-        }
-        MOP.dump();
-        errs()<<"is internal = "<<isInternal<<"\n";
-        unsigned regstate = getRegState(MOP);
-        if (isInternal) {
-          if (reg.isPhysical()) BMI = BMI.addDef(reg, RegState::Dead | regstate); //clobber
-        } else {
-          if (MOP.isDef()) {
-            BMI = BMI.addDef(reg, regstate);
-          } else {
-            BMI = BMI.addReg(reg, regstate); //how to add flags?
-          }
-        }
-        errs()<<"done\n";
-      }
-    }
-    BMI.getInstr()->dump();
     */

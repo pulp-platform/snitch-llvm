@@ -31,6 +31,9 @@
 #include "llvm/Transforms/Scalar/IndVarSimplify.h"
 #include "llvm/Transforms/Scalar/SimplifyCFG.h"
 #include "llvm/Transforms/Scalar/LoopFlatten.h"
+#include "llvm/Transforms/Scalar/LoopUnrollAndJamPass.h"
+#include "llvm/Transforms/Scalar/Reassociate.h"
+#include "llvm/Transforms/Scalar/LICM.h"
 #include "llvm/Transforms/SSR/SSRGeneration.h"
 
 #include "llvm/Support/CommandLine.h"
@@ -59,10 +62,14 @@ PreservedAnalyses SSRInferencePass::run(Function &F, FunctionAnalysisManager &FA
   //FPM.addPass(createFunctionToLoopPassAdaptor(LoopRotatePass()));
   FPM.addPass(LCSSAPass());         //put loops into LCSSA-form
   //FPM.addPass(createFunctionToLoopPassAdaptor(IndVarSimplifyPass(false)));
+
   FPM.addPass(SSRGenerationPass()); //runs AffineAccess analysis and generates SSR intrinsics
-  FPM.addPass(SimplifyCFGPass());   //simplifies CFG again
+
+  FPM.addPass(LoopSimplifyPass());  //canonicalize loops again
   FPM.addPass(InstCombinePass());   //removes phi nodes from LCSSA
   FPM.addPass(ADCEPass());          //remove potential dead instructions that result from SSR replacement
+  FPM.addPass(createFunctionToLoopPassAdaptor(LICMPass())); //LICM of rt-checks maybe
+  FPM.addPass(SimplifyCFGPass());   //simplifies CFG again
   FPM.addPass(LoopSimplifyPass());  //canonicalize loops again
   auto pa = FPM.run(F, FAM);
   errs()<<"SSR Inference Pass on function: "<<F.getNameOrAsOperand()<<" done! =============================================\n";

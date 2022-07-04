@@ -170,8 +170,8 @@ TargetPassConfig *RISCVTargetMachine::createPassConfig(PassManagerBase &PM) {
 }
 
 void RISCVPassConfig::addIRPasses() {
+  //addPass(createSSRReassociatePass());
   addPass(createAtomicExpandPass());
-  //TODO: add pass for auto SSR Inference here?
   TargetPassConfig::addIRPasses();
 }
 
@@ -211,6 +211,8 @@ void RISCVPassConfig::addPreEmitPass2() {
   addPass(createRISCVExpandPseudoPass());
   addPass(createPULPFixupHwLoops());
   addPass(createRISCVExpandSSRPostRegAllocPass());
+  addPass(createSNITCHAutoFrepPass());
+  
   // Schedule the expansion of AMOs at the last possible moment, avoiding the
   // possibility for other passes to break the requirements for forward
   // progress in the LR/SC block.

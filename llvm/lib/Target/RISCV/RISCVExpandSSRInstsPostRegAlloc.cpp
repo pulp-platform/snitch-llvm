@@ -58,6 +58,9 @@
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/Support/CommandLine.h"
 
+#include "llvm/CodeGen/RegisterClassInfo.h"
+#include "llvm/CodeGen/AntiDepBreaker.h"
+
 using namespace llvm;
 
 #define DEBUG_TYPE "riscv-ssr"
@@ -126,6 +129,11 @@ bool RISCVExpandSSRPostRegAlloc::runOnMachineFunction(MachineFunction &MF) {
   if (!SSRNoRegisterMerge && Modified){
     for (auto &MBB : MF) mergePushPop(MBB);
   }
+  // auto &MRI = MF.getRegInfo();
+  // auto &TRI = *MRI.getTargetRegisterInfo();
+  // RegisterClassInfo RCI;
+  // RCI.runOnMachineFunction(MF);
+  // auto *ADB = createAggressiveAntiDepBreaker(MF, RCI, )
 
   return Modified;
 }
@@ -171,18 +179,17 @@ bool RISCVExpandSSRPostRegAlloc::expandSSR_StoreLoadMove(MachineBasicBlock &MBB,
   return true;
 }
 
-/*
-static MachineOperand *getUniqueUser(MachineBasicBlock::instr_iterator beg, MachineBasicBlock::instr_iterator end, Register valR) {
-  for (auto MII = beg; MII != end; ++MII) {
-    if (MII->isDebugInstr()) continue;
-    for (auto &MOP : MII->operands()){
-      if (!MOP.isReg() || MOP.getReg() != valR) continue;
-      if (MOP.isKill()) return &MOP;
-      else return nullptr;
+static std::pair<bool, bool> isDefIsUse(MachineInstr &MI, MCRegister R) {
+  bool def = false;
+  bool use = false;
+  for (auto &MOP : MI.operands()) {
+    if (MOP.isReg() && MOP.getReg() == R) {
+      if (MOP.isDef()) def = true;
+      else use = true;
     }
   }
-  return nullptr; //cannot be sure, maybe there is a user in a later block?
-} */
+  return std::make_pair(def, use);
+}
 
 static MachineOperand *getUniqueUser (
     MachineBasicBlock::instr_iterator beg, 
@@ -195,6 +202,8 @@ static MachineOperand *getUniqueUser (
   for (auto MII = beg; MII != realend; ++MII) {
     isPastEnd |= MII == end;
     if (MII->isDebugInstr()) continue; //skip debug instructions
+    errs()<<"looing at: "<<*MII;
+    if (UseMOP) errs()<<"usemop = "<<*UseMOP<<"\n";
     bool definesValR = false;
     for (auto &MOP : MII->operands()) {
       if (!MOP.isReg() || MOP.getReg() != valR) continue;
@@ -209,7 +218,18 @@ static MachineOperand *getUniqueUser (
       return UseMOP; //if MII (re-)defines valR then we must have already found the Use before, (or we haven't in which case we return null)
     }
   }
-  //if we arrive at the end and have not found a redefinition or a kill, then we cannot be sure, whether valR is used after the realend ==> have to return nullptr
+  auto *MBB = beg->getParent();
+  if (MBB) {
+    bool avail_in_all = true;
+    MachineRegisterInfo &MRI = MBB->getParent()->getRegInfo();
+    for (auto *Succ : MBB->successors()) {
+      if (!Succ) continue;
+      LivePhysRegs liveness(*MRI.getTargetRegisterInfo());
+      liveness.addLiveIns(*Succ);
+      avail_in_all &= liveness.available(MRI, valR);
+    }
+    if (avail_in_all) return UseMOP;
+  }
   return nullptr;
 }
 
@@ -239,7 +259,9 @@ bool RISCVExpandSSRPostRegAlloc::mergePushPop(MachineBasicBlock &MBB) {
             } 
           }
           Register r = MI->getOperand(0).getReg(); //register to replace
+          errs()<<"looking for "<<MI->getOperand(0)<<"\n";
           MachineOperand *MO = getUniqueUser(std::next(MI.getReverse()), rangeLimit, MI->getParent()->end().getInstrIterator(), r);
+          if (!MO) errs()<<"*** NOT FOUND ***\n";
           if (MO) { //if unique user exists
             MachineInstr *MIUser = MO->getParent();
             if (MIUser && modified.find(MIUser) == modified.end()){ //if unique user exists and was not yet modified
@@ -287,7 +309,6 @@ bool RISCVExpandSSRPostRegAlloc::mergePushPop(MachineBasicBlock &MBB) {
       MI = PMI;
     }
   }
-  MBB.sortUniqueLiveIns();
   return Modified;
 }
 
@@ -302,70 +323,193 @@ FunctionPass *createRISCVExpandSSRPostRegAllocPass() { return new RISCVExpandSSR
 } // end of namespace llvm
 
 
-/* OLD VERSION OF REGMERGE
-// First pass: Detect moves to or from SSR registers
-  for (auto MI = MBB.begin() ; MI != MBB.end() ; ) {
-    MachineBasicBlock::iterator NMI = std::next(MI);
+///REGMERGE USING LIVENESS, BUT SOMEHOW WORSE
+// static std::pair<bool, bool> isDefIsUse(MachineInstr &MI, MCRegister R) {
+//   bool def = false;
+//   bool use = false;
+//   for (auto &MOP : MI.operands()) {
+//     if (MOP.isReg() && MOP.getReg() == R) {
+//       if (MOP.isDef()) def = true;
+//       else use = true;
+//     }
+//   }
+//   return std::make_pair(def, use);
+// }
 
-    LLVM_DEBUG(dbgs()<<"Analyzing: "<<*MI<<"\n");
+// struct Liveness {
+// public:
+//   Liveness(const TargetRegisterInfo &TRI, const MachineRegisterInfo &MRI, MachineBasicBlock &MBB, bool end) : liveness(TRI), MBB(MBB), MRI(MRI) {
+//     if (end) {
+//       liveness.addLiveOuts(MBB);
+//       LiveIn = MBB.end().getInstrIterator();
+//     } else {
+//       liveness.addLiveIns(MBB);
+//       LiveIn = MBB.begin().getInstrIterator();
+//     }
+//   }
 
-    // detect an emitted pop and add assignment (virtual_reg, ssr_read) to list
-    if(MI->getOpcode() == RISCV::FSGNJ_D) {
-      LLVM_DEBUG(dbgs()<<"Found FSGNJ_D, Op 0: " << MI->getOperand(1).getReg() << " Op1: " << MI->getOperand(2).getReg() << "\n");
-      
-      // look for each streamer register
-      for(unsigned ssr_no = 0; ssr_no < NUM_SSR; ++ssr_no) {
-        // check for pop
-        if(MI->getOperand(1).getReg() == ssr_regs[ssr_no] && MI->getOperand(2).getReg() == ssr_regs[ssr_no]) {
-          LLVM_DEBUG(dbgs()<<"  pop: both operands from SSR"<< ssr_no <<"\n");
-          // append virtual register to list of assigned virtuals
-          LLVM_DEBUG(dbgs()<<"  append: "<< MI->getOperand(0).getReg() <<"\n");
-          virtRegs[ssr_no].insert(MI->getOperand(0).getReg());
-          // remove operation
-          MI->eraseFromParent();
-          break;
-        }
-        // TODO: check for push
-        else if(MI->getOperand(0).getReg() == ssr_regs[ssr_no]) {
-          // This is non-trivial because a register might be used elsewhere, therefore the entire MBB
-          // must be analyzed and a merge can only be made, if the register is written once
-          // LLVM_DEBUG(dbgs()<<"  push: operand 0 from SSR"<< ssr_no <<"\n");
-          // // append virtual register to list of assigned virtuals
-          // LLVM_DEBUG(dbgs()<<"  append: "<< MI->getOperand(1).getReg() <<"\n");
-          // virtRegs[ssr_no].insert(MI->getOperand(1).getReg());
-          // // remove operation
-          // MI->eraseFromParent();
-          break;
-        }
-      }
-    } 
-    MI = NMI;
-  }
+//   void MoveForward(MachineBasicBlock::instr_iterator Point) {
+//     if (Point == LiveIn) return;
+//     SmallVector<std::pair<MCPhysReg, const MachineOperand *>, 1u> clb;
+//     while (LiveIn != Point && LiveIn != MBB.end().getInstrIterator()) {
+//       liveness.stepForward(*LiveIn, clb);
+//       LiveIn++;
+//     }
+//     assert(LiveIn == Point && "moved forward to point");
+//   }
 
-  // DBG
-  for(unsigned ssr_no = 0; ssr_no < NUM_SSR; ++ssr_no) {
-    for (auto iter = virtRegs[ssr_no].begin() ; iter != virtRegs[ssr_no].end() ; ++iter)
-      LLVM_DEBUG(dbgs() << "virtregs["<<ssr_no<<"] = " << *iter << "\n");
-  }
+//   void MoveBackward(MachineBasicBlock::reverse_instr_iterator Point) {
+//     assert(Point != MBB.rend().getInstrIterator() && "not rend()");
+//     if (Point.getReverse() == LiveIn) return;
+//     Point++; //in order to get LiveIN for Point we have to move up to and incl. Point
+//     MachineBasicBlock::reverse_instr_iterator LiveInRev = LiveIn.getReverse();
+//     LiveInRev++;
+//     while (LiveInRev != Point && LiveInRev != MBB.rend().getInstrIterator()) {
+//       liveness.stepBackward(*LiveInRev);
+//       LiveInRev++;
+//     }
+//     LiveIn = std::next(LiveInRev.getReverse());
+//     assert(LiveInRev == Point && "moved backward to point");
+//   }
 
-  // Second pass: Replace uses of virtual registers corresponding to DMs with FT registers
-  for (auto MI = MBB.begin() ; MI != MBB.end() ; ) {
-    MachineBasicBlock::iterator NMI = std::next(MI);
+//   //move forward up to first use of Reg, make sure Reg is not live anymore afterwards
+//   MachineBasicBlock::instr_iterator findUniqueUser(MCRegister Reg, MachineBasicBlock::instr_iterator end) {
+//     while (LiveIn != end) {
+//       auto ut = isDefIsUse(*LiveIn, Reg);
+//       if (ut.first && !ut.second) return end; //redefined
+//       if (ut.first && ut.second) return LiveIn; //first user redefines himself
+//       MoveForward(std::next(LiveIn));
+//       if (ut.second) {
+//         if (liveness.available(MRI, Reg)) std::prev(LiveIn);
+//         else {
+//           for (auto x = LiveIn; x != MBB.end().getInstrIterator(); ++x) {
+//             auto ut = isDefIsUse(*x, Reg);
+//             if (ut.first && !ut.second) return std::prev(LiveIn); //found redef.
+//             else if (ut.second) return end; //another use
+//           }
+//           return end;
+//         }
+//       }
+//     }
+//     return end;
+//   }
 
-    // look for usage of any of the virtual registers assigned to SSRs
-    for (auto operand = MI->operands_begin() ; operand != MI->operands_end() ; ++operand) {
-      if(!operand->isReg()) continue;
-      // check if operand is in any SSR list
-      for(unsigned ssr_no = 0; ssr_no < NUM_SSR; ++ssr_no) {
-        if(virtRegs[ssr_no].contains(operand->getReg())) {
-          LLVM_DEBUG(dbgs() << "Found use of operand " << operand->getReg() << " ssr: " << ssr_no << " in inst " <<  MI->getOpcode() << "\n");
-          // substitute with SSR register
-          MI->substituteRegister(operand->getReg(), ssr_regs[ssr_no], 0, *TRI);
-          // guard this block and add ssr regs to live in
-          MBB.addLiveIn(ssr_regs[ssr_no]);
-        }
-      }
-    }
-    MI = NMI;    
-  }
-  */
+//   MachineBasicBlock::instr_iterator getPoint() const { return LiveIn; }
+//   const LivePhysRegs &getLiveness() const { return liveness; }
+//   void addReg(MCRegister R) { liveness.addReg(R); }
+
+// private:
+//   MachineBasicBlock::instr_iterator LiveIn; //INV: this always points to the instr for which liveness has live-in info
+//   LivePhysRegs liveness;
+//   MachineBasicBlock &MBB;
+//   const MachineRegisterInfo &MRI;
+// };
+
+// static bool isSSREn(const MachineInstr &MI) {
+//   return MI.getOpcode() == RISCV::CSRRSI 
+//     && MI.getOperand(1).isImm() 
+//     && MI.getOperand(1).getImm() == 0x7C0
+//     && MI.getOperand(2).isImm()
+//     && MI.getOperand(2).getImm() == 1;
+// }
+
+// static bool isSSRDis(const MachineInstr &MI) {
+//   return MI.getOpcode() == RISCV::CSRRCI 
+//     && MI.getOperand(1).isImm() 
+//     && MI.getOperand(1).getImm() == 0x7C0
+//     && MI.getOperand(2).isImm()
+//     && MI.getOperand(2).getImm() == 1;
+// }
+
+// static bool isSSRReg(MCRegister R) {
+//   for (unsigned s = 0u; s < NUM_SSR; s++) {
+//     if (getSSRFtReg(s).asMCReg() == R) return true;
+//   }
+//   return false;
+// }
+
+// static unsigned getSSRRegIdx(MCRegister R) {
+//   return R - MCRegister(RISCV::F0_D);
+// }
+
+// bool RISCVExpandSSRPostRegAlloc::mergePushPop(MachineBasicBlock &MBB) {
+//   bool Modified;
+
+//   MachineRegisterInfo &MRI = MBB.getParent()->getRegInfo();
+//   const TargetRegisterInfo &TRI = *MRI.getTargetRegisterInfo();
+
+//   recomputeLiveIns(MBB);
+//   recomputeLivenessFlags(MBB);
+
+//   SmallSet<const MachineInstr*, 2u> modifiedInsts[NUM_SSR]; //keep track of which insts were merged into to avoid merging two different moves of same stream into one inst
+//   MachineBasicBlock::reverse_instr_iterator MII = MBB.rbegin().getInstrIterator();
+//   MachineBasicBlock::instr_iterator SearchEnd = MBB.end().getInstrIterator();
+//   while (MII != MBB.rend().getInstrIterator()) {
+//     auto NMII = std::next(MII);
+
+//     if (isSSRDis(*MII)) {
+//       SearchEnd = MII.getReverse();
+//       MII = NMII;
+//       continue;
+//     }
+
+//     if (MII->getOpcode() == RISCV::FSGNJ_D) {
+//       auto &MOP0 = MII->getOperand(0);
+//       auto &MOP1 = MII->getOperand(1);
+//       auto &MOP2 = MII->getOperand(2);
+//       if (MOP0.isReg() && MOP1.isReg() && MOP2.isReg() && MOP1.getReg() == MOP2.getReg()) {
+//         if (isSSRReg(MOP1.getReg()) && MII != MBB.rbegin().getInstrIterator()) { //this is ssr pop (and there is at least one potential user)
+//           MCRegister dest = MOP0.getReg().asMCReg();
+//           MCRegister ssr_reg = MOP1.getReg().asMCReg();
+//           unsigned dmid = getSSRRegIdx(ssr_reg);
+//           //try to find unique user of dest
+//           Liveness Live(TRI, MRI, MBB, true);
+//           Live.MoveBackward(std::prev(MII)); //increment liveness to past MII
+//           auto user = Live.findUniqueUser(dest, SearchEnd);
+//           if (user != SearchEnd && modifiedInsts[dmid].find(&*user) == modifiedInsts[dmid].end()) { //found user
+//             user->dump();
+//             for (auto &MOP : user->operands()) {
+//               if (MOP.isReg() && !MOP.isDef() && MOP.getReg() == dest) MOP.setReg(ssr_reg); //replace all non-def uses of r with ssr_reg
+//             }
+//             user->dump();
+//             MII->eraseFromBundle();
+//             modifiedInsts[dmid].insert(&*user);
+//             Modified = true;
+//           }
+//         } else if (isSSRReg(MOP0.getReg())) {
+//           MCRegister src = MOP1.getReg();
+//           MCRegister ssr_reg = MOP0.getReg();
+//           unsigned dmid = getSSRRegIdx(ssr_reg);
+//           MachineBasicBlock::reverse_instr_iterator beginSearch = std::next(MII);
+//           while (beginSearch != MBB.rend().getInstrIterator()) {
+//             if (isSSREn(*beginSearch)) break;
+//             auto ut = isDefIsUse(*beginSearch, src);
+//             if (ut.first) break;
+//             beginSearch++;
+//           }
+//           if (beginSearch != MBB.rend().getInstrIterator() && !isSSREn(*beginSearch)) {
+//             assert(isDefIsUse(*beginSearch, src).first && "does define src");
+//             Liveness Live(TRI, MRI, MBB, true);
+//             Live.MoveBackward(std::prev(beginSearch));
+//             auto user = Live.findUniqueUser(src, std::next(MII.getReverse()));
+//             if (user == MII.getReverse() && modifiedInsts[dmid].find(&*beginSearch) == modifiedInsts[dmid].end()) {
+//               beginSearch->dump();
+//               for (auto &MOP : beginSearch->operands()) {
+//                 if (MOP.isReg() && MOP.isDef() && MOP.getReg() == src) { 
+//                   MOP.setReg(ssr_reg); //replace all defs of R with ssr_reg
+//                   MOP.setIsDef(false);
+//                 }
+//               }
+//               beginSearch->dump();
+//               MII->eraseFromBundle();
+//               modifiedInsts[dmid].insert(&*beginSearch);
+//               Modified = true;
+//             }
+//           }
+//         }
+//       }
+//     }
+//     MII = NMII;
+//   }
+//   return Modified;
+// }

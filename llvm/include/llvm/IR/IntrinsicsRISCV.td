@@ -1439,13 +1439,13 @@ let TargetPrefix = "riscv" in {
       : GCCBuiltin<"__builtin_ssr_push">,
         Intrinsic<[],
                   [llvm_i32_ty, llvm_double_ty],
-                  [IntrWillReturn, IntrWriteMem, IntrHasSideEffects, ImmArg<ArgIndex<0>>]>,
+                  [IntrWriteMem, ImmArg<ArgIndex<0>>]>,
         RISCVSSRIntrinsic;
   def int_riscv_ssr_pop
       : GCCBuiltin<"__builtin_ssr_pop">,
         Intrinsic<[llvm_double_ty],
                   [llvm_i32_ty],
-                  [IntrWillReturn, ImmArg<ArgIndex<0>>]>, //use ReadWrite instead of throw to avoid licm
+                  [ImmArg<ArgIndex<0>>, IntrWriteMem]>, //use ReadWrite instead of throw to avoid licm
         RISCVSSRIntrinsic;
 
   def int_riscv_ssr_enable

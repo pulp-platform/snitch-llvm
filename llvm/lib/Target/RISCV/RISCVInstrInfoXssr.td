@@ -105,7 +105,7 @@ class SPseudoPush:
   let usesCustomInserter = 0;
 }
 
-class SPseudoStoreMove:
+class SPseudoStoreMove: //instead of using these could give isBarrier = 1 to ssr csrrsi/csrrci
       Pseudo<(outs FPR64:$ssr), (ins FPR64:$val),[]> {
   let mayLoad = 0;
   let mayStore = 1;

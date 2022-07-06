@@ -48,6 +48,12 @@ void initializeRISCVExpandPseudoPass(PassRegistry &);
 FunctionPass *createRISCVExpandSSRPostRegAllocPass();
 void initializeRISCVExpandSSRPostRegAllocPass(PassRegistry &);
 
+FunctionPass *createSNITCHAutoFrepPass();
+void initializeSNITCHAutoFrepPass(PassRegistry &);
+
+FunctionPass *createSSRReassociatePass();
+void initializeSSRReassociatePass(PassRegistry &);
+
 FunctionPass *createRISCVExpandAtomicPseudoPass();
 void initializeRISCVExpandAtomicPseudoPass(PassRegistry &);
 

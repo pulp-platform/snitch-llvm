@@ -414,7 +414,7 @@ void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
     Value *Bound = E.Reps[i];
     Function *SSRBoundStrideSetup = Intrinsic::getDeclaration(mod, functions[i]);
     std::array<Value *, 3> bsargs = {DMid, Bound, Stride};
-    builder.CreateCall(SSRBoundStrideSetup->getFunctionType(), SSRBoundStrideSetup, ArrayRef<Value *>(bsargs))->dump();
+    builder.CreateCall(SSRBoundStrideSetup->getFunctionType(), SSRBoundStrideSetup, ArrayRef<Value *>(bsargs));
   }
 
   unsigned n_reps = 0u;
@@ -424,7 +424,6 @@ void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
       std::array<Value *, 2> pusharg = {DMid, cast<StoreInst>(I)->getValueOperand()};
       builder.SetInsertPoint(I);
       auto *C = builder.CreateCall(SSRPush->getFunctionType(), SSRPush, ArrayRef<Value *>(pusharg));
-      C->dump(); I->dump();
       I->eraseFromParent();
       n_reps++;
     }
@@ -434,7 +433,6 @@ void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
     for (Instruction *I : E.Access->getAccesses()){
       builder.SetInsertPoint(I);
       auto *V = builder.CreateCall(SSRPop->getFunctionType(), SSRPop, ArrayRef<Value *>(poparg), "ssr.pop");
-      V->dump(); I->dump();
       BasicBlock::iterator ii(I);
       ReplaceInstWithValue(I->getParent()->getInstList(), ii, V);
       n_reps++;
@@ -445,7 +443,7 @@ void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
   Constant *Rep = ConstantInt::get(i32, n_reps - 1U);
   Function *SSRRepetitionSetup = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_setup_repetition);
   std::array<Value *, 2> repargs = {DMid, Rep};
-  builder.CreateCall(SSRRepetitionSetup->getFunctionType(), SSRRepetitionSetup, ArrayRef<Value *>(repargs))->dump();
+  builder.CreateCall(SSRRepetitionSetup->getFunctionType(), SSRRepetitionSetup, ArrayRef<Value *>(repargs));
 
   Function *SSRSetup;
   if (!isStore){
@@ -455,7 +453,7 @@ void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
   }
   std::array<Value *, 3> args = {DMid, Dim, E.Addr};
   //NOTE: this starts the prefetching ==> always needs to be inserted AFTER bound/stride and repetition setups !!!
-  builder.CreateCall(SSRSetup->getFunctionType(), SSRSetup, ArrayRef<Value *>(args))->dump(); 
+  builder.CreateCall(SSRSetup->getFunctionType(), SSRSetup, ArrayRef<Value *>(args)); 
 
   return;
 }
@@ -464,29 +462,7 @@ void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
 void generateSSRBarrier(Instruction *InsertBefore, unsigned dmid) {
   IRBuilder<> builder(InsertBefore);
   Function *Barrier = Intrinsic::getDeclaration(InsertBefore->getModule(), Intrinsic::riscv_ssr_barrier);
-  builder.CreateCall(Barrier->getFunctionType(), Barrier, ConstantInt::get(Type::getInt32Ty(builder.getContext()), dmid))->dump();
-}
-
-void generateFPDependency(IRBuilder<> &builder){
-  constexpr unsigned num_fpr = 32u;
-  Type *Double = Type::getDoubleTy(builder.getContext());
-  std::vector<Type *> inputs;
-  std::vector<Value *> args;
-  std::string constraints = "";
-  for (unsigned i = 0u; i < num_fpr; i++) {
-    inputs.push_back(Double);
-    args.push_back(UndefValue::get(Double));
-    std::string regname = formatv("f{0}", i);
-    constraints = "={" + regname + "}" + (i ? "," : "") + constraints + ", {" + regname + "}";
-  }
-  Type *rty = StructType::get(builder.getContext(), inputs);
-  auto *IA = InlineAsm::get(
-    FunctionType::get(rty, inputs, false),
-    "",
-    constraints,
-    true
-  );
-  builder.CreateCall(IA, args, "fpr.dep");
+  builder.CreateCall(Barrier->getFunctionType(), Barrier, ConstantInt::get(Type::getInt32Ty(builder.getContext()), dmid));
 }
 
 /// generates SSR enable & disable calls
@@ -813,6 +789,7 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
     while (!worklist.empty()) {
       const Loop *L = worklist.front(); worklist.pop_front();
       errs()<<"visiting loop: "<<L->getHeader()->getNameOrAsOperand()<<"\n";
+
       visitLoop(L, possible, tree, AAA, ssrInvalidLoops.find(L) != ssrInvalidLoops.end());
 
       for (const Loop *x : L->getSubLoops()) worklist.push_back(x);

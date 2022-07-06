@@ -170,7 +170,7 @@ TargetPassConfig *RISCVTargetMachine::createPassConfig(PassManagerBase &PM) {
 }
 
 void RISCVPassConfig::addIRPasses() {
-  //addPass(createSSRReassociatePass());
+  //addPass(createSSRReassociatePass()); //sadly creates some problems right now
   addPass(createAtomicExpandPass());
   TargetPassConfig::addIRPasses();
 }
@@ -211,7 +211,7 @@ void RISCVPassConfig::addPreEmitPass2() {
   addPass(createRISCVExpandPseudoPass());
   addPass(createPULPFixupHwLoops());
   addPass(createRISCVExpandSSRPostRegAllocPass());
-  addPass(createSNITCHAutoFrepPass());
+  //addPass(createSNITCHAutoFrepPass()); can have benefits in some cases
   
   // Schedule the expansion of AMOs at the last possible moment, avoiding the
   // possibility for other passes to break the requirements for forward

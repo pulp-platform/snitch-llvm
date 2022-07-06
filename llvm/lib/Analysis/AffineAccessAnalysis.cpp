@@ -19,6 +19,7 @@
 
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/ScalarEvolutionExpander.h"
+#include "llvm/Transforms/Utils/LoopVersioning.h"
 
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
@@ -27,6 +28,7 @@
 #include "llvm/Analysis/AliasAnalysisEvaluator.h"
 #include "llvm/Analysis/AliasSetTracker.h"
 #include "llvm/Analysis/DependenceAnalysis.h"
+#include "llvm/Analysis/LoopAccessAnalysis.h"
 
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FormatVariadic.h"
@@ -268,7 +270,6 @@ bool isOnAllPredicatedControlFlowPaths(BasicBlock *BB, const Loop *L, const Domi
 
     if (q.front() == L->getHeader()) return false; //bfs arrived at Header (again) with a path that never went through BB
   }
-
   return true;
 }
 
@@ -304,22 +305,6 @@ const Loop *findFirstContaining(ArrayRef<const Loop *> loops, BasicBlock *BB){
   return nullptr;
 }
 
-/*Value *goodAnd(IRBuilder<> &builder, ArrayRef<Value *> bools){
-  assert(!bools.empty());
-  std::vector<Value *> b1, b2;
-  for (Value *b : bools) b1.push_back(b);
-  while (b1.size() > 1u) {
-    unsigned i = 0u;
-    for (; i+1 < b1.size(); i += 2) {
-      b2.push_back(builder.CreateAnd(b1[i], b1[i+1], "and.tree"));
-    }
-    if (i < b1.size()) b2.push_back(b1[i]); //add last element if odd nr in b1
-    std::swap(b1, b2);
-    b2.clear();
-  }
-  return b1[0]; //return the last value
-}*/
-
 bool hasMemInst(MemoryUseOrDef *MA) { return MA && MA->getMemoryInst(); }
 
 //updates L<-M if M is a descendant of L (or if L is nullptr)
@@ -347,22 +332,86 @@ void updateOutermostExpandableExcl(const Loop *&outerMostExpandableExl, AffAccCo
   }
 }
 
-void dumpAffAccConflict(AffAccConflict kind) {
-  switch (kind)
-  {
-  case AffAccConflict::Bad:
-    errs()<<"Bad";
-    break;
-  case AffAccConflict::MustNotIntersect:
-    errs()<<"MustNotIntersect";
-    break;
-  case AffAccConflict::NoConflict:
-    errs()<<"NoConflict";
-    break;
-  default:
-    break;
+// void dumpAffAccConflict(AffAccConflict kind) {
+//   switch (kind)
+//   {
+//   case AffAccConflict::Bad:
+//     errs()<<"Bad";
+//     break;
+//   case AffAccConflict::MustNotIntersect:
+//     errs()<<"MustNotIntersect";
+//     break;
+//   case AffAccConflict::NoConflict:
+//     errs()<<"NoConflict";
+//     break;
+//   default:
+//     break;
+//   }
+//   errs()<<"\n";
+// }
+
+Optional<int> findSign(const SCEV *S, ScalarEvolution &SE, std::vector<std::pair<const SCEV *, int>> &known) {
+  if (!S) return None;
+
+  //in case we know
+  for (const auto &p : known) {
+    if (SCEVEquals(S, p.first, SE)) return p.second;
   }
-  errs()<<"\n";
+
+  //in case SE knows
+  if (SE.isKnownNegative(S)) return -1;
+  if (SE.isKnownPositive(S)) return 1;
+  if (S->isZero()) return 0;
+
+  //do recursively
+  switch (S->getSCEVType())
+  {
+  case SCEVTypes::scConstant:
+    if (S->isZero()) return 0;
+    else if (SE.isKnownPositive(S)) return 1;
+    else if (SE.isKnownNegative(S)) return -1;
+    llvm_unreachable("SE does not know sign of constant value ???");
+
+  case SCEVTypes::scMulExpr: {
+    auto l = findSign(cast<SCEVMulExpr>(S)->getOperand(0), SE, known);
+    auto r = findSign(cast<SCEVMulExpr>(S)->getOperand(1), SE, known);
+    if (!l.hasValue() || !r.hasValue()) return None;
+    return r.getValue() * l.getValue();
+  }
+
+  case SCEVTypes::scAddExpr: {
+    auto l = findSign(cast<SCEVAddExpr>(S)->getOperand(0), SE, known);
+    auto r = findSign(cast<SCEVAddExpr>(S)->getOperand(1), SE, known);
+    if (!l.hasValue() || !r.hasValue()) return None;
+    if (l.getValue() + r.getValue() >= 1) return 1;
+    if (l.getValue() + r.getValue() <= -1) return -1;
+    return None;
+  }
+
+  case SCEVTypes::scPtrToInt:
+  case SCEVTypes::scTruncate:
+    return findSign(cast<SCEVCastExpr>(S)->getOperand(0), SE, known);
+
+  //TODO: could add max/min, etc...
+  
+  default:
+    return None;
+  } 
+  llvm_unreachable("");
+}
+
+const SCEV *getZExtIfNeeded(const SCEV *S, Type *Ty, ScalarEvolution &SE) {
+  if (SE.getDataLayout().getTypeSizeInBits(S->getType()) < SE.getDataLayout().getTypeSizeInBits(Ty)) {
+    return SE.getZeroExtendExpr(S, Ty);
+  }
+  return S;
+}
+
+const SCEV *getSExtIfNeeded(const SCEV *S, Type *Ty, ScalarEvolution &SE) {
+  if (SE.getDataLayout().getTypeSizeInBits(S->getType()) < SE.getDataLayout().getTypeSizeInBits(Ty)) {
+    return SE.getSignExtendExpr(S, Ty);
+  }
+  return S;
 }
 
 } //end of namespace
@@ -561,6 +610,15 @@ unsigned AffAcc::loopToDimension(const Loop *L) const {
   llvm_unreachable("The provided loop does not contain `this`!");
 }
 
+Value *AffAcc::getAddrValue() const {
+  assert(getBaseAddr(0u) && "has an address");
+  if (isWrite()) {
+    return cast<StoreInst>(accesses[0])->getPointerOperand();
+  } else {
+    return cast<LoadInst>(accesses[0])->getPointerOperand();
+  }
+}
+
 ///SCEV of base Address for the base address at a given dimension
 const SCEV *AffAcc::getBaseAddr(unsigned dim) const { assert(dim < baseAddresses.size()); return baseAddresses[dim]; }
 
@@ -714,18 +772,22 @@ Value *AffAcc::expandRep(unsigned dimension, Type *ty, Instruction *InsertBefore
 }
 
 ExpandedAffAcc AffAcc::expandAt(const Loop *L, Instruction *Point, 
-  Type *PtrTy, IntegerType *ParamTy, IntegerType *AgParamTy) 
+  Type *PtrTy, IntegerType *ParamTy) 
 {
-  errs()<<"expanding for Loop with header: "<<L->getHeader()->getNameOrAsOperand()<<" the following:\n";
-  dumpInLoop(L);
-  
   if (!Point) Point = L->getLoopPreheader()->getTerminator();
   IRBuilder<> builder(Point);
   assert(isWellFormed(L));
   std::vector<Value *> reps, steps, ranges, prefixsum_ranges;
-  unsigned dim = loopToDimension(L);
+  const unsigned dim = loopToDimension(L);
   Value *Addr = expandBaseAddr(dim, PtrTy, Point);
+  IntegerType *SizeTy = IntegerType::get(SE.getContext(), (unsigned)SE.getTypeSizeInBits(Addr->getType()));
   Value *psum = nullptr;
+  Value *LowerBound = builder.CreatePtrToInt(Addr, SizeTy, "lb");
+  Value *UpperBound = LowerBound;
+  std::vector<std::pair<const SCEV *, int>> known;
+  for (int d = 1u; d < getMaxDimension(); d++) {
+    known.push_back(std::make_pair(this->reps[d]->getSCEVPlusOne(), 1));
+  }
   for (unsigned i = 1u; i <= dim; i++) {
     reps.push_back(expandRep(i, ParamTy, Point));
     steps.push_back(expandStep(i, ParamTy, Point));
@@ -735,13 +797,35 @@ ExpandedAffAcc AffAcc::expandAt(const Loop *L, Instruction *Point,
     if (psum) psum = builder.CreateAdd(psum, ranges.back(), formatv("prefsum.range.{0}d", i));
     else psum = ranges.back();
     prefixsum_ranges.push_back(psum);
+    auto sign = findSign(getStep(i), SE, known);
+    if (sign.hasValue()) {
+      if (sign.getValue() < 0) LowerBound = builder.CreateAdd(LowerBound, builder.CreateSExtOrTrunc(ranges.back(), SizeTy, "lb.dec"));
+      else if (sign.getValue() > 0) UpperBound = builder.CreateAdd(UpperBound, builder.CreateZExtOrTrunc(ranges.back(), SizeTy, "ub.inc"));
+      //else sign == 0: no action needed
+    } else { //we do not know sign! need to test at runtime
+      Value *Test = builder.CreateICmpSGE(ranges.back(), ConstantInt::get(ParamTy, 0), "test.nonnegative"); //FIXME: does not work for unsigned values > 2^30
+      LowerBound = builder.CreateSelect(
+        builder.CreateNot(Test, formatv("not.test.{0}d", i)), 
+        builder.CreateSExtOrTrunc(ranges.back(), SizeTy, formatv("range.{0}d.sext", i)), 
+        ConstantInt::get(SizeTy, 0)
+      );
+      UpperBound = builder.CreateSelect(
+        Test,
+        builder.CreateZExtOrTrunc(ranges.back(), SizeTy, formatv("range.{0}d.zext", i)),
+        ConstantInt::get(SizeTy, 0)
+      );
+    }
   }
-  Value *LowerBound = builder.CreatePtrToInt(Addr, AgParamTy, "lb");
-  Value *r = builder.CreateZExtOrTrunc(prefixsum_ranges.back(), AgParamTy, "prefsum.cast");
-  Value *UpperBound = builder.CreateAdd(LowerBound, r, "ub");
   ExpandedAffAcc Aexp(this, Addr, steps, reps, ranges, prefixsum_ranges, LowerBound, UpperBound);
   return Aexp;
 }
+
+// // ================= CustomMultiDRTPointerChecking ===================
+// //takes inspiration from RuntimePointerChecking's .insert(...)
+// void CustomMultiDRTPointerChecking::insert(const AffAcc &A) {
+
+// }
+// Value *generateChecks(Instruction *I, Value *memRangeStart, Value *memRangeEnd);
 
 // ================= MemDep ==============
 
@@ -808,40 +892,55 @@ DenseSet<MemoryUseOrDef *> MemDep::findClobberUsers(MemoryDef *MA) {
 
 //================== Affine Access ===========================================================
 
-AffineAccess::AffineAccess(Function &F, ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI, MemorySSA &MSSA, AAResults &AA, DependenceInfo &DI) 
-  : SE(SE), DT(DT), LI(LI), MSSA(MSSA), AA(AA), DI(DI), MD(MSSA, AA){
-  for (const Loop *L : LI.getTopLevelLoops()){
-    std::vector<AffAcc *> all = analyze(L, ArrayRef<const Loop *>());
-    addAllConflicts(all);
+AffineAccess::AffineAccess(
+    Function &F, ScalarEvolution &SE, DominatorTree &DT, 
+    LoopInfo &LI, MemorySSA &MSSA, AAResults &AA, 
+    DependenceInfo &DI
+  ) : SE(SE), DT(DT), LI(LI), MSSA(MSSA), AA(AA), DI(DI), MD(MSSA, AA)
+{
+  for (Loop *L : LI.getTopLevelLoops()){
+    auto all = analyze(L, ArrayRef<const Loop *>());
+    addAllConflicts(*all);
+    all.release();
   }
 }
 
-std::vector<AffAcc *> AffineAccess::analyze(const Loop *Parent, ArrayRef<const Loop *> loopPath){
+std::unique_ptr<std::vector<AffAcc *>> AffineAccess::analyze(Loop *Parent, ArrayRef<const Loop *> loopPath){
   errs()<<"analyze: loop          : "<<Parent->getHeader()->getNameOrAsOperand()<<"\n";
+
+  //LoopRep for Parent
   LoopRep *ParentLR = new LoopRep(Parent, loopPath, SE, DT);
   reps.insert(std::make_pair(Parent, ParentLR)); //add Parent to LoopReps
+
+  //prepare path
   std::vector<const Loop *> path; 
   path.push_back(Parent); //add Parent to path
   for (auto *L : loopPath) path.push_back(L);
-  wellformedAccesses.insert(std::make_pair(Parent, SmallVector<AffAcc *, 4U>()));
-  std::vector<AffAcc *> all;
+  
+  //prepare results
+  auto all = std::make_unique<std::vector<AffAcc *>>();
+  auto &promoted = promotedAccesses.insert(std::make_pair(Parent, SmallVector<AffAcc *, 2u>())).first->getSecond();
 
-  for (const Loop *L : Parent->getSubLoops()){
-    std::vector<AffAcc *> accs = analyze(L, ArrayRef<const Loop *>(path));
+  //promote subloop accesses
+  for (Loop *L : Parent->getSubLoops()){
+    std::unique_ptr<std::vector<AffAcc *>> accs = analyze(L, ArrayRef<const Loop *>(path));
+    all->reserve(accs->size());
     LoopRep *LR = reps.find(L)->second; //guaranteed to exist, no check needed
     bool canPromote = LR->isAvailable() && ParentLR->isAvailable() && LR->isOnAllCFPathsOfParentIfExecuted();
-    for (AffAcc *A : accs){
-      all.push_back(A);
+    for (AffAcc *A : *accs){
+      all->push_back(A);
       if (canPromote){ //L is well-formed and on all CF-paths if its rep is >0 at run-time
-        auto &l = wellformedAccesses.find(Parent)->getSecond();
         if (A->promote(ParentLR)){
-          l.push_back(A); //guaranteed to exist
+          promoted.push_back(A); //guaranteed to exist
         }
       }
     }
+    accs.release();
   }
 
+  //promote accesses from this loop
   for (BasicBlock *BB : Parent->getBlocks()){
+    if (LI.getLoopFor(BB) != Parent) continue; //skip BB as it was already processed in a subloop
     for (Instruction &I : *BB){
       MemoryUseOrDef *MA = MSSA.getMemoryAccess(&I);
       if (MA && hasMemInst(MA) && access.find(MA) == access.end()){ //no AffAcc for this memory access yet!
@@ -849,19 +948,21 @@ std::vector<AffAcc *> AffineAccess::analyze(const Loop *Parent, ArrayRef<const L
         const SCEV *AddrSCEV = nullptr;
         if (Addr) AddrSCEV = SE.getSCEV(Addr);
         AffAcc *A = new AffAcc(ArrayRef<Instruction *>(&I), AddrSCEV, MA, ArrayRef<const Loop *>(path), SE);
-        all.push_back(A);
+        all->push_back(A);
         access.insert(std::make_pair(MA, A));
         if (ParentLR->isAvailable()){
           bool onAllCFPaths = true;
           for (Instruction *I : A->getAccesses()) onAllCFPaths &= isOnAllControlFlowPaths(I->getParent(), Parent, DT);
           if (onAllCFPaths && A->promote(ParentLR)){
-            wellformedAccesses.find(Parent)->getSecond().push_back(A); //guaranteed to exist
+            promoted.push_back(A); //guaranteed to exist
           }
         }
       }
     }
   }
+  
   errs()<<"analyze: done with loop: "<<Parent->getHeader()->getNameOrAsOperand()<<"\n";
+  
   return all;
 }
 
@@ -880,13 +981,12 @@ void AffineAccess::addAllConflicts(const std::vector<AffAcc *> &all) {
       auto p = access.find(D);
       if (p == access.end()) continue;
       AffAcc *B = p->second;
-      //A->dump(); B->dump();
       auto r = calcConflict(A, B);
-      //dumpAffAccConflict(r.first);
       if (r.first != AffAccConflict::NoConflict) A->addConflict(B, r.second, r.first);
       updateOutermostExpandableExcl(outerMostExpandableExl, r.first, r.second, B->getDeepestMalformed());
       assert(!outerMostExpandableExl || outerMostExpandableExl->contains(A->getMemoryAccess()->getBlock()));
     }
+
     ArrayRef<const Loop *> loops = A->getContainingLoops();
     for (const Loop *L : loops) {
       if (!L) continue;
@@ -917,24 +1017,24 @@ AffAccConflict AffineAccess::calcRWConflict(AffAcc *Read, AffAcc *Write, const L
   Value *Addr = getAddress(r);
   Value *DAddr = getAddress(w);
   bool dominates = MSSA.dominates(r, w);
-  //auto dep = DI.depends(r->getMemoryInst(), w->getMemoryInst(), dominates && L->isInnermost());
   if (Addr && DAddr && AA.alias(Addr, DAddr) == NoAlias) return AffAccConflict::NoConflict;
   AffAccConflict kind = AffAccConflict::Bad;
-  if (!dominates) { //read does not dominate write ==> RaW
+  if (!dominates) { //read does not dominate write ==> R maybe after W
     kind = AffAccConflict::MustNotIntersect;
-  } else { //read dominates write ==> WaR
+  } else { //read dominates write ==> W is after R
     kind = AffAccConflict::MustNotIntersect;
     //exception: we know that the store always happens to a position already written from if the store is to same address as write (FIXME: CONSERVATIVE)
     //but the steps needs to be != 0 such that there is no dependence from one iteration to the next
-    if ((Addr && DAddr && AA.alias(Addr, DAddr) == MustAlias)
-      || accessPatternsAndAddressesMatch(Read, Write, L)) 
+    bool nonzeroSteps = true;
+    unsigned dr = Read->loopToDimension(L);
+    unsigned dw = Write->loopToDimension(L);
+    while (Read->isWellFormed(dr) && Write->isWellFormed(dw)) {
+      nonzeroSteps &= SE.isKnownNonZero(Read->getStep(dr++)) && SE.isKnownNonZero(Write->getStep(dw++));
+    }
+    if ((Addr && DAddr && AA.alias(Addr, DAddr) == MustAlias && nonzeroSteps)
+      || (accessPatternsAndAddressesMatch(Read, Write, L) && nonzeroSteps)) 
     {
-      bool nonzeroSteps = true;
-      unsigned dr = Read->loopToDimension(L);
-      unsigned dw = Write->loopToDimension(L);
-      while (Read->isWellFormed(dr) && Write->isWellFormed(dw)) 
-        nonzeroSteps &= SE.isKnownNonZero(Read->getStep(dr++)) && SE.isKnownNonZero(Write->getStep(dw++));
-      if (nonzeroSteps) kind = AffAccConflict::NoConflict;
+      kind = AffAccConflict::NoConflict;
     }
   }
   return kind;
@@ -943,9 +1043,6 @@ AffAccConflict AffineAccess::calcRWConflict(AffAcc *Read, AffAcc *Write, const L
 ///returns the kind of conflict (and innermost common loop) that A and B have assuming there is some memory dependency
 ///does not check for the memory dependency itself for to peformance
 std::pair<AffAccConflict, const Loop*> AffineAccess::calcConflict(AffAcc *A, AffAcc *B) const {
-  //auto dep = DI.depends(A->getMemoryAccess()->getMemoryInst(), B->getMemoryAccess()->getMemoryInst(), MSSA.dominates(A->getMemoryAccess(), B->getMemoryAccess()));
-  //dep->dump(errs());
-  //errs()<<"confused = "<<dep->isConfused()<<", is consistent = "<<dep->isConsistent()<<", is anti = "<<dep->isAnti()<<", is flow = "<<dep->isFlow()<<", is input = "<<dep->isInput()<<", is output = "<<dep->isOutput()<<"\n";
   assert((A->isWrite() || B->isWrite()) && "conflict between two reads ???");
   const Loop *const innermostCommon = findFirstContaining(A->getContainingLoops(), B->getMemoryAccess()->getBlock());
   if (!innermostCommon) return std::make_pair(AffAccConflict::NoConflict, innermostCommon);
@@ -1007,14 +1104,14 @@ std::vector<AffAcc *> AffineAccess::getExpandableAccesses(const Loop *L, bool co
 std::vector<ExpandedAffAcc> 
 AffineAccess::expandAllAt(ArrayRef<AffAcc *> Accs, const Loop *L, 
   Instruction *Point, Value *&BoundCheck, 
-  Type *PtrTy, IntegerType *ParamTy, IntegerType *AgParamTy, bool conflictChecks, bool repChecks) 
+  Type *PtrTy, IntegerType *ParamTy, bool conflictChecks, bool repChecks) 
 {
   assert(Point);
   IRBuilder<> builder(Point);
 
   DenseMap<AffAcc*, ExpandedAffAcc> exps;
   for (AffAcc *A : Accs) { //expand the requested AffAcc's
-    exps.insert(std::make_pair(A, std::move(A->expandAt(L, Point, PtrTy, ParamTy, AgParamTy))));
+    exps.insert(std::make_pair(A, std::move(A->expandAt(L, Point, PtrTy, ParamTy))));
   }
 
   std::vector<Value *> checks;
@@ -1033,7 +1130,7 @@ AffineAccess::expandAllAt(ArrayRef<AffAcc *> Accs, const Loop *L,
         case AffAccConflict::MustNotIntersect: {
           auto e = exps.find(B);
           if (e == exps.end()) { //if B was not yet expanded, do that and update the iterator for the pair in exps
-            e = exps.insert(std::make_pair(B, std::move(B->expandAt(L, Point, PtrTy, ParamTy, AgParamTy)))).first;
+            e = exps.insert(std::make_pair(B, std::move(B->expandAt(L, Point, PtrTy, ParamTy)))).first;
           }
           assert(e->first == B);
           ExpandedAffAcc &expB = e->getSecond();

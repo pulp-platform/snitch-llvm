@@ -22,6 +22,7 @@ class MemoryUseOrDef;
 class MemoryDef;
 struct ExpandedAffAcc;
 class DependenceInfo;
+class LoopAccessInfo;
 
 struct LoopRep{
 private:
@@ -69,6 +70,7 @@ public:
   ///immediately copies the contens of accesses and containingLoops
   AffAcc(ArrayRef<Instruction *> accesses, const SCEV *Addr, MemoryUseOrDef *MA, ArrayRef<const Loop *> containingLoops, ScalarEvolution &SE);
   ArrayRef<Instruction *> getAccesses() const;
+  Value *getAddrValue() const;
   bool isWrite() const;
   int getMaxDimension() const; 
   const Loop *getDeepestMalformed() const;
@@ -94,7 +96,7 @@ public:
   Value *expandBaseAddr(unsigned dimension, Type *ty, Instruction *InsertBefore = (Instruction *)nullptr);
   Value *expandStep(unsigned dimension, Type *ty, Instruction *InsertBefore = (Instruction *)nullptr);
   Value *expandRep(unsigned dimension, Type *ty, Instruction *InsertBefore = (Instruction *)nullptr);
-  ExpandedAffAcc expandAt(const Loop *L, Instruction *Point, Type *PtrTy, IntegerType *ParamTy, IntegerType *AgParamTy);
+  ExpandedAffAcc expandAt(const Loop *L, Instruction *Point, Type *PtrTy, IntegerType *ParamTy); 
 };
 
 struct MemDep {
@@ -139,10 +141,10 @@ private:
   MemDep MD;
   DenseMap<MemoryUseOrDef *, AffAcc *> access;
   DenseMap<const Loop *, LoopRep *> reps;
-  DenseMap<const Loop *, SmallVector<AffAcc *, 4U>> wellformedAccesses;
-  DenseMap<const Loop *, SmallVector<AffAcc *, 3U>> expandableAccesses;
+  DenseMap<const Loop *, SmallVector<AffAcc *, 3u>> promotedAccesses;
+  DenseMap<const Loop *, SmallVector<AffAcc *, 2u>> expandableAccesses;
 
-  std::vector<AffAcc *> analyze(const Loop *Parent, ArrayRef<const Loop *> loopPath);
+  std::unique_ptr<std::vector<AffAcc *>> analyze(Loop *Parent, ArrayRef<const Loop *> loopPath);
   void addAllConflicts(const std::vector<AffAcc *> &all);
   AffAccConflict calcRWConflict(AffAcc *Read, AffAcc *Write, const Loop *L) const;
   std::pair<AffAccConflict, const Loop*> calcConflict(AffAcc *A, AffAcc *B) const;
@@ -162,7 +164,7 @@ public:
 
   std::vector<AffAcc *> getExpandableAccesses(const Loop *L, bool conflictFreeOnly = false);
   std::vector<ExpandedAffAcc> expandAllAt(ArrayRef<AffAcc *> Accs, const Loop *L, Instruction *Point, 
-    Value *&BoundCheck, Type *PtrTy, IntegerType *ParamTy, IntegerType *AgParamTy, bool conflictChecks = true, bool repChecks = false);
+    Value *&BoundCheck, Type *PtrTy, IntegerType *ParamTy, bool conflictChecks = true, bool repChecks = false);
 };
 
 class AffineAccessAnalysis : public AnalysisInfoMixin<AffineAccessAnalysis> {

@@ -384,9 +384,8 @@ BasicBlock *getSingleExitBlock(const Loop *L) {
 
 Value *GenerateTCDMCheck(ExpandedAffAcc &E, Instruction *Point) {
   IRBuilder<> builder(Point);
-  IntegerType *i64 = IntegerType::getInt64Ty(Point->getContext());
-  Value *c1 = builder.CreateICmpULE(ConstantInt::get(i64, SSR_SCRATCHPAD_BEGIN), E.LowerBound, "beg.check");
-  Value *c2 = builder.CreateICmpULE(E.UpperBound, ConstantInt::get(i64, SSR_SCRATCHPAD_END), "end.check");
+  Value *c1 = builder.CreateICmpULE(ConstantInt::get(E.LowerBound->getType(), SSR_SCRATCHPAD_BEGIN), E.LowerBound, "beg.check");
+  Value *c2 = builder.CreateICmpULE(E.UpperBound, ConstantInt::get(E.UpperBound->getType(), SSR_SCRATCHPAD_END), "end.check");
   return builder.CreateAnd(c1, c2, "tcdm.check");
 }
 
@@ -592,13 +591,12 @@ std::vector<ExpandedAffAcc> expandInLoop(const std::vector<AffAcc *> &accs, cons
 
   auto &ctxt = L->getHeader()->getContext();
   IntegerType *i32 = IntegerType::getInt32Ty(ctxt);
-  IntegerType *i64 = IntegerType::getInt64Ty(ctxt);
   Type *i8Ptr = Type::getInt8PtrTy(ctxt);
 
   Instruction *PhT = L->getLoopPreheader()->getTerminator();
 
   //generate Steps, Reps, base addresses, intersect checks, and bound checks
-  auto exp = AAA.expandAllAt(accs, L, PhT, Cond, i8Ptr, i32, i64, !SSRNoIntersectCheck, !SSRNoBoundCheck);
+  auto exp = AAA.expandAllAt(accs, L, PhT, Cond, i8Ptr, i32, !SSRNoIntersectCheck, !SSRNoBoundCheck);
   assert(Cond);
 
   //TCDM Checks
@@ -851,6 +849,7 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
       if (p != conds.end()) {
         BasicBlock *Ex = getSingleExitBlock(L);
         assert(Ex);
+        //LoopVersioning LV(LAI, ArrayRef<RuntimePointerCheck>(), Parent, &LI, &DT, &SE);LoopAccessInfo LAI(Parent, &SE, nullptr, &AA, &DT, &LI);
         cloneAndSetup(L->getLoopPreheader()->getTerminator(), &*Ex->getFirstInsertionPt(), p->second, exps.find(L)->getSecond());
       }
     }

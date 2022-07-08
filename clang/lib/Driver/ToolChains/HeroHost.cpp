@@ -10,6 +10,7 @@
 #include "HeroHost.h"
 #include "CommonArgs.h"
 #include "InputInfo.h"
+#include "Arch/RISCV.h"
 #include "clang/Driver/Compilation.h"
 #include "clang/Driver/Options.h"
 #include "llvm/Option/ArgList.h"
@@ -38,6 +39,16 @@ HeroHostToolChain::HeroHostToolChain(const Driver &D, const llvm::Triple &Triple
     getProgramPaths().push_back(
         (GCCInstallation.getParentLibPath() + "/../bin").str());
   }
+
+  // Fix cross compilation when not specifying --sysroot. Search in
+  // <target-triple>/sysroot/usr/lib for libraries
+  if (getDriver().SysRoot.empty() && GCCInstallation.isValid()) {
+    SmallString<128> SrDir(D.Dir); // = [...]/instal/bin
+    llvm::sys::path::append(SrDir, "../" + GCCInstallation.getTriple().str() + "/sysroot/usr/lib");
+    llvm::dbgs() << "[HeroHostToolChain::HeroHostToolChain] StringRef(D.Dir): "<<StringRef(D.Dir)<<"\n";
+    llvm::dbgs() << "[HeroHostToolChain::HeroHostToolChain] fixup add: "<<SrDir<<"\n";
+    getFilePaths().push_back(SrDir.str().str());
+  }
 }
 
 Tool *HeroHostToolChain::buildLinker() const {
@@ -52,6 +63,17 @@ void HeroHostToolChain::addClangTargetOptions(
   //CC1Args.push_back("-fuse-init-array");
   CC1Args.push_back("-D__host=__attribute((address_space(1)))");
   CC1Args.push_back("-D__device=__attribute((address_space(0)))");
+
+  // Fix cross compilation when not specifying --sysroot. Search in
+  // <target-triple>/sysroot/usr/include for headers
+  const Driver &D = getDriver();
+  if (D.SysRoot.empty() && GCCInstallation.isValid()) {
+    SmallString<128> SrDir(D.Dir); // = [...]/instal/bin
+    llvm::sys::path::append(SrDir, "../" + GCCInstallation.getTriple().str() + "/sysroot/usr/include");
+    llvm::dbgs() << "[HeroHostToolChain::AddClangSystemIncludeArgs::3] StringRef(D.Dir): "<<StringRef(D.Dir)<<"\n";
+    llvm::dbgs() << "[HeroHostToolChain::AddClangSystemIncludeArgs::3] fixup add: "<<SrDir<<"\n";
+    addSystemInclude(DriverArgs, CC1Args, SrDir.str());
+  }
 }
 
 void HeroHostToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
@@ -106,6 +128,7 @@ void HeroHost::Linker::ConstructJob(Compilation &C, const JobAction &JA,
                                  const char *LinkingOutput) const {
   const ToolChain &ToolChain = getToolChain();
   const Driver &D = ToolChain.getDriver();
+  const llvm::Triple &Triple = ToolChain.getTriple();
   ArgStringList CmdArgs;
 
   std::string Linker = getToolChain().GetProgramPath((ToolChain.getTriple().getTriple() + "-" + getShortName()).c_str());
@@ -156,14 +179,27 @@ void HeroHost::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   //       important changes in https://github.com/llvm/llvm-project/commit/a0d83768f10849e5cf230391fac949dc5118c0a6
   //AddOpenMPLinkerScript(ToolChain, C, Output, Inputs, Args, CmdArgs, JA);
 
-  std::string DynamicLinker = std::string("-dynamic-linker /lib/ld-linux-");
-  DynamicLinker += ToolChain.getTriple().getArchName();
-  // FIXME: retrieve proper ABI
-  if(ToolChain.getTriple().getArch() == llvm::Triple::riscv64) {
-    DynamicLinker += "-lp64";
+  // dynamic linker, snipped from ToolChains/Linux.cpp
+  std::string LibDir;
+  std::string Loader;
+  switch (Triple.getArch()) {
+  default:
+    llvm_unreachable("unsupported architecture");
+  case llvm::Triple::aarch64:
+    LibDir = "lib";
+    Loader = "ld-linux-aarch64.so.1";
+    break;
+  case llvm::Triple::riscv64:  {
+    StringRef ABIName = tools::riscv::getRISCVABI(Args, Triple);
+    LibDir = "lib";
+    Loader = ("ld-linux-riscv64-" + ABIName + ".so.1").str();
+    break;
   }
-  DynamicLinker += ".so.1";
-  CmdArgs.push_back(Args.MakeArgString(DynamicLinker));
+  }
+  std::string DynamicLinker = "/" + LibDir + "/" + Loader;
+  CmdArgs.push_back("-dynamic-linker");
+  CmdArgs.push_back(Args.MakeArgString(Twine(D.DyldPrefix) +
+                                        DynamicLinker));
 
   CmdArgs.push_back("-o");
   CmdArgs.push_back(Output.getFilename());

@@ -33,8 +33,15 @@ set(CMAKE_CXX_FLAGS "-fpermissive")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} $ENV{LIBGOMP_PLUGIN_PULP_HERO_CPPFLAGS} -lpthread -idirafter $ENV{HERO_PULP_INC_DIR}")
 set(CMAKE_LD_FLAGS "${CMAKE_LD_FLAGS} $ENV{LIBGOMP_PLUGIN_PULP_HERO_LDFLAGS} -lpthread")
 
-if(EXISTS $ENV{HERO_LIBPULP_DIR}/inc/pulp.h)
+if(EXISTS $ENV{HERO_LIBPULP_DIR}/libpulp.h)
   include_directories($ENV{HERO_LIBPULP_DIR}/inc)
+  libomptarget_say("Including $ENV{HERO_LIBPULP_DIR}/libpulp.h.")
+endif()
+
+if(EXISTS $ENV{HERO_PULP_SHARED_DIR}/pulp_shared.h)
+  include_directories($ENV{HERO_PULP_SHARED_DIR})
+  libomptarget_say("Including PULP shared library.")
+  return()
 endif()
 
 include_directories(${LIBOMPTARGET_DEP_LIBFFI_INCLUDE_DIR})

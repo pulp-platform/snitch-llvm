@@ -28,21 +28,23 @@
 #define TARGET_NAME PULP
 #endif
 
-#ifdef OMPTARGET_DEBUG
-static int DebugLevel = 10;
+#define DEBUG_PREFIX "Target " GETNAME(TARGET_NAME) " RTL"
 
-#define GETNAME2(name) #name
-#define GETNAME(name) GETNAME2(name)
-#define DP(...)                                                                \
-  do {                                                                         \
-    if (DebugLevel > 0) {                                                      \
-      DEBUGP("Target " GETNAME(TARGET_NAME) " RTL", __VA_ARGS__);              \
-    }                                                                          \
-  } while (false)
-#else // OMPTARGET_DEBUG
-#define DP(...)                                                                \
-  {}
-#endif // OMPTARGET_DEBUG
+// #ifdef OMPTARGET_DEBUG
+// static int DebugLevel = 10;
+// 
+// #define GETNAME2(name) #name
+// #define GETNAME(name) GETNAME2(name)
+// #define DP(...)                                                                \
+//   do {                                                                         \
+//     if (DebugLevel > 0) {                                                      \
+//       DEBUGP("Target " GETNAME(TARGET_NAME) " RTL", __VA_ARGS__);              \
+//     }                                                                          \
+//   } while (false)
+// #else // OMPTARGET_DEBUG
+// #define DP(...)                                                                \
+//   {}
+// #endif // OMPTARGET_DEBUG
 
 #include "omptarget.h"
 #include "Debug.h"

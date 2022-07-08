@@ -30,7 +30,7 @@
 #ifndef PLUGIN_PULP_HERO_H__
 
 #define PRINT_CYCLES_PLUGIN_PULP_HERO 1
-#define DEBUG_LEVEL_PLUGIN_PULP_HERO 0
+#define DEBUG_LEVEL_PLUGIN_PULP_HERO 10
 
 #define TRACE_FUNCTION()                                                       \
   do {                                                                         \
@@ -55,7 +55,7 @@
 
 extern "C" {
 
-#include "pulp.h"
+#include "libpulp.h"
 
 #define PULP_HERO_DEFAULT_CLUSTER_ID (0x1U)
 #define PULP_HERO_DEFAULT_FREQ (PULP_DEFAULT_FREQ_MHZ)
@@ -91,8 +91,10 @@ static AddrVectMap *address_map;
 static pthread_once_t is_init_hero_device = PTHREAD_ONCE_INIT;
 
 /* PULP device handlers.  */
-static PulpDev pulp_dev;
-static PulpDev *pulp;
+// static PulpDev pulp_dev;
+// static PulpDev *pulp;
+static pulp_dev_t pulp_dev;
+static pulp_dev_t *pulp;
 
 #define GOMP(X) GOMP_PLUGIN_##X
 #define SELF "pulp: "

@@ -423,7 +423,7 @@ void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
     for (Instruction *I : E.Access->getAccesses()){
       std::array<Value *, 2> pusharg = {DMid, cast<StoreInst>(I)->getValueOperand()};
       builder.SetInsertPoint(I);
-      auto *C = builder.CreateCall(SSRPush->getFunctionType(), SSRPush, ArrayRef<Value *>(pusharg));
+      builder.CreateCall(SSRPush->getFunctionType(), SSRPush, ArrayRef<Value *>(pusharg));
       I->eraseFromParent();
       n_reps++;
     }

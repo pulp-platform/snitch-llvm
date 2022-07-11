@@ -30,6 +30,8 @@
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Target/TargetOptions.h"
+#include "llvm/Transforms/Scalar/Reassociate.h"
+#include "llvm/Transforms/Scalar.h"
 using namespace llvm;
 
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
@@ -170,7 +172,8 @@ TargetPassConfig *RISCVTargetMachine::createPassConfig(PassManagerBase &PM) {
 }
 
 void RISCVPassConfig::addIRPasses() {
-  //addPass(createSSRReassociatePass()); //sadly creates some problems right now
+  addPass(createSSRReassociatePass()); //slow, see top of file for more info
+  //addPass(createReassociatePass()); does not reassociate fast fp-ops ???
   addPass(createAtomicExpandPass());
   TargetPassConfig::addIRPasses();
 }
@@ -211,7 +214,10 @@ void RISCVPassConfig::addPreEmitPass2() {
   addPass(createRISCVExpandPseudoPass());
   addPass(createPULPFixupHwLoops());
   addPass(createRISCVExpandSSRPostRegAllocPass());
-  //addPass(createSNITCHAutoFrepPass()); can have benefits in some cases
+  //FIXME: scheduling the post ra scheduler after ssr expand gives better results but is unsafe 
+  //because it might move insts with ssr regs after ssr-disable (or before enable) or reorder them internally (change in order of stream!)
+  // addPass(&PostRASchedulerID); 
+  addPass(createSNITCHAutoFrepPass());
   
   // Schedule the expansion of AMOs at the last possible moment, avoiding the
   // possibility for other passes to break the requirements for forward

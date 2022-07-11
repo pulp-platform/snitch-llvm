@@ -124,7 +124,7 @@ class SPseudoPop:
 class SPseudoLoadMove:
       Pseudo<(outs FPR64:$val), (ins FPR64:$ssr),[]> {
   let mayLoad = 1;
-  let mayStore = 0;
+  let mayStore = 1;
   let hasSideEffects = 1;
   let usesCustomInserter = 0;
 }

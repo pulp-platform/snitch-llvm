@@ -1,9 +1,19 @@
-//===-- SNITCHAutoFrep.cpp - Expand SSR pseudo instructions ---------===//
+//===-- SNITCHAutoFrep.cpp - Automatically insert frep for repeating FP insts ---------===//
 //
-// Copyright 2021 ETH Zurich, University of Bologna.
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// ???
+//
+//===----------------------------------------------------------------------===//
+//
+// FIXME: combine this with the SNITCHFrepLoop.cpp pass + extend that one to allow
+// for the PseudoLoadMove and PsuedoStoreMove pseudo insts. Might need to make two
+// passes one pre RA and one post RA.
+//
+// This pass looks for repeating fp insts and then tries to find a reduction operation.
+// If it finds one it will try to use freps stagger. If these can both be applied, the
+// pass will calculate what stagger amount is best and then insert a frep inst with it 
+// as well as insts that reduce the different "critical paths" into one result. 
+// The current fpu fence is quite strong (a branch) a weaker one might suffice.
+// Currently not meant to be used ==> debug output done with errs().
 //
 //===----------------------------------------------------------------------===//
 
@@ -24,8 +34,10 @@ using namespace llvm;
 #define DEBUG_TYPE "riscv-frep"
 
 namespace llvm {
-  /// Command line options
-  
+  cl::opt<bool> SnitchAutoFrep(
+    "snitch-auto-frep", 
+    cl::init(false), 
+    cl::desc("Find repeating fp insts in unrolled loops. If a reduction can be found (not good yet) insert frep with stagger."));
 }
 
 #define SNITCH_AUTO_FREP_NAME "Snitch Auto Frep"
@@ -80,6 +92,13 @@ char SNITCHAutoFrep::ID = 0;
 static constexpr unsigned fpopcodes[] = {RISCV::FADD_D, RISCV::FMUL_D, RISCV::FMADD_D, RISCV::FSGNJ_D, RISCV::FDIV_D, RISCV::FSUB_D, RISCV::FMSUB_D, RISCV::FMIN_D, RISCV::FMAX_D, RISCV::FSQRT_D};
 
 bool SNITCHAutoFrep::runOnMachineFunction(MachineFunction &MF) {
+
+    if (SnitchAutoFrep) {
+        errs()<<"snitch auto frep on "<<MF.getName()<<"\n";
+    } else {
+        return true;
+    }
+
     TII = static_cast<const RISCVInstrInfo *>(MF.getSubtarget().getInstrInfo());
     this->MF = &MF;
     this->RVFI = MF.getInfo<RISCVMachineFunctionInfo>();
@@ -96,6 +115,7 @@ bool SNITCHAutoFrep::runOnMachineFunction(MachineFunction &MF) {
 }
 
 //very conservative
+// return true if two insts do the same
 static bool areTheSame(MachineInstr &A, MachineInstr &B){
     if (A.isBundled() || B.isBundled() || A.isDebugInstr() || B.isDebugInstr()) return false;
     bool same = A.getOpcode() == B.getOpcode();
@@ -108,10 +128,12 @@ static bool areTheSame(MachineInstr &A, MachineInstr &B){
     return same;
 }
 
+//FIXME: surely there is a better way to do this
 bool SNITCHAutoFrep::isFPInstr(MachineInstr &I) {
     return this->FPOps.find(I.getOpcode()) != this->FPOps.end();
 }
 
+//test whether the window [window_beg, window_end) is repeating and how many times it is
 std::pair<MachineBasicBlock::instr_iterator, unsigned> SNITCHAutoFrep::findRep(
     MachineBasicBlock::instr_iterator window_beg,
     MachineBasicBlock::instr_iterator window_end,
@@ -133,6 +155,7 @@ std::pair<MachineBasicBlock::instr_iterator, unsigned> SNITCHAutoFrep::findRep(
     return std::make_pair(s_res, rep);
 }
 
+//used to calculate best possible stagger amount
 static unsigned getCycles(unsigned opcode) {
     switch (opcode)
     {
@@ -147,6 +170,9 @@ static unsigned getCycles(unsigned opcode) {
     }
 }
 
+//return reduction operation
+//fmul.d not included because we currently always init the staggered regs with 0 (and mul would need 1)
+//min/max might also work, anything associative should work
 static Optional<unsigned> getCombineOpcode(unsigned opcode, unsigned src_idx) {
     switch (opcode)
     {
@@ -161,12 +187,15 @@ static Optional<unsigned> getCombineOpcode(unsigned opcode, unsigned src_idx) {
     }
 }
 
+//combine usages to mask
 static unsigned toMask (const std::vector<std::pair<MCRegister, unsigned>> &deps) {
     unsigned mask = 0u;
     for (const auto &p : deps) mask |= p.second;
     return mask;
 }
 
+
+//find internal and external dependencies
 static Optional<std::vector<std::pair<MCRegister, unsigned>>> findRepDependenceRegs(
     MachineBasicBlock::instr_iterator window_begin, 
     MachineBasicBlock::instr_iterator window_end) 
@@ -210,11 +239,12 @@ static Optional<std::vector<std::pair<MCRegister, unsigned>>> findRepDependenceR
     unsigned internal_mask = toMask(internal);
     unsigned external_mask = toMask(external);
     for (auto &p : external) external_mask |= p.second;
-    //internal needs to be a subset of external
+    //internal needs to be a subset of external so that we can stagger (FIXME: right?)
     if ((internal_mask & external_mask) ^ internal_mask) return None;
     return external;
 }
 
+//merge dependecy vector
 static void mergeRegisters(std::vector<std::pair<MCRegister, unsigned>> &deps) {
     unsigned i = 0;
     while (i < deps.size()) {
@@ -236,6 +266,7 @@ static void mergeRegisters(std::vector<std::pair<MCRegister, unsigned>> &deps) {
     }
 }
 
+//duh
 static bool isSSRReg(MCRegister r) {
     for (unsigned i = 0; i < NUM_SSR; i++) {
         if (getSSRFtReg(i) == r) return true;
@@ -243,6 +274,7 @@ static bool isSSRReg(MCRegister r) {
     return false;
 }
 
+//try to find readuction operation, currently only single ops are allowed
 static Optional<std::vector<unsigned>> findCombineOps(
     MCRegister DReg, 
     unsigned stagger_mask, 
@@ -287,6 +319,7 @@ struct StaggerInfo {
     std::vector<unsigned> combineOps;
 };
 
+//try to find a way to stagger
 static Optional<StaggerInfo> findStagger(
     MachineBasicBlock::instr_iterator window_begin,
     MachineBasicBlock::instr_iterator window_end,
@@ -334,6 +367,8 @@ static MachineBasicBlock *findBB(MachineInstr &MI) {
 }
 
 //FIXME: no idea how to make a block a label for sure ==> just search for a branch and take its target
+// there must be a better way to do this
+// used for an always "dead" branch in the fpu fence
 static MachineBasicBlock *findBrAbleBB(MachineBasicBlock &MBB) {
     if (!MBB.empty()) {
         auto *BB = findBB(*std::prev(MBB.end()));
@@ -356,6 +391,7 @@ static MachineBasicBlock *findBrAbleBB(MachineBasicBlock &MBB) {
     return &MBB;
 }
 
+// work on a single BB, try to find repetitions, then try to find a way to stagger, then generate code if it gives an improvement
 bool SNITCHAutoFrep::process(MachineBasicBlock &MBB) {
     bool Modified = false;
 
@@ -530,61 +566,3 @@ namespace llvm {
 FunctionPass *createSNITCHAutoFrepPass() { return new SNITCHAutoFrep(); }
 
 } // end of namespace llvm
-
-
-// if (window_size == 1) {
-//         std::vector<MCRegister> defs;
-//         std::vector<MCRegister> ins;
-//         for (auto &MOP : MII->operands()) {
-//             if (!MOP.isReg()) continue;
-//             if (MOP.isDef()) defs.push_back(MOP.getReg().asMCReg());
-//             else ins.push_back(MOP.getReg().asMCReg());
-//             std::vector<MCRegister> inter_dep;
-//             for (auto &d : defs) {
-//                 for (auto &i : ins) {
-//                     if (d == i) inter_dep.push_back(d);
-//                 }
-//             }
-//             if (inter_dep.size() == 1) {
-//                 errs()<<"only one interdependence\n";
-//                 MCRegister stagger_reg = inter_dep[0];
-//                 unsigned mask_idx = 3u;
-//                 for (unsigned s = 0; s < MII->getNumOperands(); s++) {
-//                     if (MII->getOperand(s).isReg() && MII->getOperand(s).getReg().asMCReg() == stagger_reg) 
-//                         stagger_mask |= 1u << mask_idx;
-//                     mask_idx--;
-//                 }
-//                 auto p = getCombineOpcode(MII->getOpcode());
-//                 if (p.hasValue()) {
-//                     errs()<<"has combine opcode\n";
-//                     combine_opcode = p.getValue().first;
-//                     unsigned allowed_mask = p.getValue().second;
-//                     if ((stagger_mask | allowed_mask) == allowed_mask) { //allowed
-//                         errs()<<"stagger is allowed\n";
-//                         while (stagger_count < MAX_STAGGER && liveness.available(MRI, stagger_reg + stagger_count + 1))
-//                             stagger_count++;
-//                         if (stagger_count && stagger_mask && combine_opcode) {
-//                             errs()<<"can stagger\n";
-//                             std::vector<MCRegister> stagger_regs;
-//                             stagger_regs.push_back(stagger_reg);
-//                             for (unsigned x = 1; x <= stagger_count; x++){
-//                                 BuildMI(MBB, MII, MII->getDebugLoc(), this->TII->get(RISCV::FCVT_D_W), stagger_reg + x) //fcvt.d.w stagger, zero
-//                                     .addReg(RISCV::X0); 
-//                                 stagger_regs.push_back(stagger_reg + x);
-//                             }
-//                             std::vector<MCRegister> stagger_regs2;
-//                             while (stagger_regs.size() > 1u) {
-//                                 auto builder = BuildMI(MBB, delete_end, delete_end->getDebugLoc(), MII->getDesc());
-//                                 unsigned m_idx = 3u;
-//                                 for (auto MOI = MII->operands_begin(); MOI != MII->operands_end(); ++MOI) {
-                                    
-//                                 }
-//                             }
-
-//                             errs()<<"emited stagger insts\n";
-//                         }
-//                     }
-//                 }
-//             }
-//         }
-//     }

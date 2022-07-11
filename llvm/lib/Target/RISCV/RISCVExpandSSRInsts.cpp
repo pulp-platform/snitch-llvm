@@ -261,9 +261,10 @@ bool RISCVExpandSSR::expandSSR_PushPop(MachineBasicBlock &MBB,
   else {
     Register valR = MBBI->getOperand(ssrValIdx).getReg();
     // Insert a "storing move" this is like a normal move but has side effects
-    MachineInstr *MI = BuildMI(MBB, MBBI, DL, TII->get(RISCV::PseudoStoreMove), R).addReg(valR).getInstr();
+    MachineInstr *MI = BuildMI(MBB, MBBI, DL, TII->get(RISCV::PseudoStoreMove), R)
+      .addReg(valR, getRegState(MBBI->getOperand(ssrValIdx)))
+      .getInstr();
     MBBI->eraseFromParent(); // The pseudo instruction is gone now.
-    MI->getOperand(0).setIsDef();
     this->MoveStores.push_back(MI);
   }
 

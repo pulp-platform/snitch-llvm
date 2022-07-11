@@ -512,26 +512,35 @@ AffAcc::AffAcc(ArrayRef<Instruction *> accesses, const SCEV *Addr, MemoryUseOrDe
 void AffAcc::findSteps(const SCEV *A, const SCEV *Factor, unsigned loop){
   assert(A);
   assert(baseAddresses.size() == 1 && reps.size() == 1 && "we only know dim=0 so far");
-  if (loop >= containingLoops.size()) return;  
-  if (!SE.containsAddRecurrence(A) && loop < containingLoops.size()){ //A is inv to the rest of the loops
+
+  if (loop >= containingLoops.size()) return;  //we are done
+
+  if (!SE.containsAddRecurrence(A) && loop < containingLoops.size()){ 
+    //A is inv to the rest of the loops
     steps.push_back(SE.getConstant(Type::getInt64Ty(this->accesses[0]->getContext()), 0U));
     findSteps(A, Factor, loop + 1u);
   }
+
   switch (A->getSCEVType())
   {
-  //case SCEVTypes::scZeroExtend: FIXME: this is unsafe, right?
+  //unary expressions that do not change value
+  case SCEVTypes::scZeroExtend: //FIXME: this might be unsafe
   case SCEVTypes::scSignExtend:
   case SCEVTypes::scTruncate:
     return findSteps(cast<SCEVCastExpr>(A)->getOperand(0), Factor, loop);
-  case SCEVTypes::scAddExpr: {
-    const SCEV *L = cast<SCEVAddExpr>(A)->getOperand(0);
-    const SCEV *R = cast<SCEVAddExpr>(A)->getOperand(1);
-    bool l = SE.containsAddRecurrence(L);
-    bool r = SE.containsAddRecurrence(R);
-    if (l && !r) return findSteps(L, Factor, loop);
-    else if(!l && r) return findSteps(R, Factor, loop);
-    return;
-  }
+
+  // TODO: if we want to allow random adds in between then we would need to add the non-recursive part to the base address
+  // case SCEVTypes::scAddExpr: {
+  //   const SCEV *L = cast<SCEVAddExpr>(A)->getOperand(0);
+  //   const SCEV *R = cast<SCEVAddExpr>(A)->getOperand(1);
+  //   bool l = SE.containsAddRecurrence(L);
+  //   bool r = SE.containsAddRecurrence(R);
+  //   if (l && !r) return findSteps(L, Factor, loop);
+  //   else if(!l && r) return findSteps(R, Factor, loop);
+  //   return;
+  // }
+
+  //L * R
   case SCEVTypes::scMulExpr: {
     const SCEV *L = cast<SCEVMulExpr>(A)->getOperand(0);
     const SCEV *R = cast<SCEVMulExpr>(A)->getOperand(1);
@@ -547,10 +556,12 @@ void AffAcc::findSteps(const SCEV *A, const SCEV *Factor, unsigned loop){
     }else Factor = R;
     return findSteps(L, Factor, loop);
   }
+
+  //{<start>,+,Step}<L>
   case SCEVTypes::scAddRecExpr: {
     const auto *S = cast<SCEVAddRecExpr>(A);
     const SCEV *Step;
-    if (S->getLoop() == containingLoops[loop]){
+    if (S->getLoop() == containingLoops[loop]){ //L == containingLoops[loop]
       Step = S->getStepRecurrence(SE);
       if (Factor) {
         auto p = toSameType(Factor, Step, SE, true);
@@ -561,13 +572,14 @@ void AffAcc::findSteps(const SCEV *A, const SCEV *Factor, unsigned loop){
       return findSteps(S->getStart(), Factor, loop+1);
     }else{ //A is loop-invariant to containingLoops[loop]
       bool occursLater = false; //loop needs to occur later 
-      for (unsigned i = loop+1; i < containingLoops.size(); i++) occursLater = occursLater || containingLoops[i] == S->getLoop();
+      for (unsigned i = loop+1; i < containingLoops.size(); i++) 
+        occursLater = occursLater || containingLoops[i] == S->getLoop();
       if (!occursLater) return; 
       steps.push_back(SE.getConstant(Type::getInt64Ty(this->accesses[0]->getContext()), 0U));
       return findSteps(S, Factor, loop+1);
     }    
   }
-  default:
+  default: //in all other cases we cannot safely extract more steps and thus just return
     return;
   }
 }

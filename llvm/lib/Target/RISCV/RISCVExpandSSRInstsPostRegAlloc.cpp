@@ -1,49 +1,13 @@
-//===-- RISCVExpandSSRPostRegAllocInsts.cpp - Expand SSR pseudo instructions ---------===//
+//===-- RISCVExpandSSRPostRegAllocInsts.cpp - Expand the rest of the SSR pseudo insts ---------===//
 //
-// Copyright 2021 ETH Zurich, University of Bologna.
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// ???
 //
 //===----------------------------------------------------------------------===//
 //
-// This file contains a pass that expands SSR pseudo instructions into target
-// instructions. This pass should be run before register allocation
+// This file contains a pass that expands the PseudoLoadMove and PseudoStoreMove
+// into normal moves and is meant to be run after any scheduling to guarantee
+// correctness.
 //
-//===----------------------------------------------------------------------===//
-
-//===----------------------------------------------------------------------===//
-// The SSR are configured in a memory-mapped address space accessible through 
-// the SCGGW(I)/SCGGR(I) instructions. The (I)mmediate instructions take the 
-// address as an immediate. The Address map is as follows:
-//
-// | Word| Hex  | reg        |
-// |-----|------|------------|
-// | 0   | 0x00 | status     |
-// | 1   | 0x01 | repeat     |
-// | 2   | 0x02 | Bound 0    |
-// | 3   | 0x03 | Bound 1    |
-// | 4   | 0x04 | Bound 2    |
-// | 5   | 0x05 | Bound 3    |
-// | 6   | 0x06 | Stride 0   |
-// | 7   | 0x07 | Stride 1   |
-// | 8   | 0x08 | Stride 2   |
-// | 9   | 0x09 | Stride 3   |
-// |     |      | _reserved_ |
-// | 24  | 0x18 | Rptr 0     |
-// | 25  | 0x19 | Rptr 1     |
-// | 26  | 0x1a | Rptr 2     |
-// | 27  | 0x1b | Rptr 3     |
-// | 28  | 0x1c | Wptr 0     |
-// | 29  | 0x1d | Wptr 1     |
-// | 30  | 0x1e | Wptr 2     |
-// | 31  | 0x1f | Wptr 3     |
-// 
-// The data mover is selected in the lower 5 bits, the register offset is encoded
-// in the upper 7 bits. The value passed to scfgX is therefore
-//             addr = dm + reg << 5
-//
-// scfgw   rs1 rs2 # rs1=value rs2=addr
 //===----------------------------------------------------------------------===//
 
 #include "RISCV.h"
@@ -91,11 +55,6 @@ public:
   StringRef getPassName() const override { return RISCV_EXPAND_SSR_POST_REG_ALLOC_NAME; }
 
 private:
-
-  const MachineFunction *MF;
-  RISCVMachineFunctionInfo *RVFI;
-  bool Enabled;
-
   bool expandMBB(MachineBasicBlock &MBB);
   bool mergePushPop(MachineBasicBlock &MBB);
   bool expandMI(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
@@ -106,6 +65,7 @@ private:
 
 char RISCVExpandSSRPostRegAlloc::ID = 0;
 
+//from RISCVExpandSSRInsts.cpp
 static Register getSSRFtReg(unsigned streamer) {
   unsigned AssignedReg = RISCV::F0_D + streamer;
   // Advance the iterator to the assigned register until the valid
@@ -119,21 +79,14 @@ static Register getSSRFtReg(unsigned streamer) {
 
 bool RISCVExpandSSRPostRegAlloc::runOnMachineFunction(MachineFunction &MF) {
   TII = static_cast<const RISCVInstrInfo *>(MF.getSubtarget().getInstrInfo());
-  this->MF = &MF;
-  this->RVFI = MF.getInfo<RISCVMachineFunctionInfo>();
 
   bool Modified = false;
   for (auto &MBB : MF) Modified |= expandMBB(MBB);
 
-  if (SSRNoRegisterMerge) errs()<<"regmerge disabled \n";
+  if (SSRNoRegisterMerge) LLVM_DEBUG(dbgs()<<"regmerge disabled\n");
   if (!SSRNoRegisterMerge && Modified){
     for (auto &MBB : MF) mergePushPop(MBB);
   }
-  // auto &MRI = MF.getRegInfo();
-  // auto &TRI = *MRI.getTargetRegisterInfo();
-  // RegisterClassInfo RCI;
-  // RCI.runOnMachineFunction(MF);
-  // auto *ADB = createAggressiveAntiDepBreaker(MF, RCI, )
 
   return Modified;
 }
@@ -179,32 +132,27 @@ bool RISCVExpandSSRPostRegAlloc::expandSSR_StoreLoadMove(MachineBasicBlock &MBB,
   return true;
 }
 
-static std::pair<bool, bool> isDefIsUse(MachineInstr &MI, MCRegister R) {
-  bool def = false;
-  bool use = false;
-  for (auto &MOP : MI.operands()) {
-    if (MOP.isReg() && MOP.getReg() == R) {
-      if (MOP.isDef()) def = true;
-      else use = true;
-    }
-  }
-  return std::make_pair(def, use);
-}
-
 static MachineOperand *getUniqueUser (
     MachineBasicBlock::instr_iterator beg, 
     MachineBasicBlock::instr_iterator end, 
-    MachineBasicBlock::instr_iterator realend, 
     Register valR) 
   {
+  
+  if (beg.isEnd()) return nullptr;
+  auto *MBB = beg->getParent();
+  assert(MBB);
+  
+  auto realend = MBB->end().getInstrIterator();
+  
   MachineOperand *UseMOP = nullptr;
   bool isPastEnd = false;
+  
   for (auto MII = beg; MII != realend; ++MII) {
+    
     isPastEnd |= MII == end;
     if (MII->isDebugInstr()) continue; //skip debug instructions
-    errs()<<"looing at: "<<*MII;
-    if (UseMOP) errs()<<"usemop = "<<*UseMOP<<"\n";
     bool definesValR = false;
+    
     for (auto &MOP : MII->operands()) {
       if (!MOP.isReg() || MOP.getReg() != valR) continue;
       //at this point we know MII accesses valR, with MOP, but maybe also other operands
@@ -214,28 +162,35 @@ static MachineOperand *getUniqueUser (
         if (MOP.isKill()) return UseMOP; //if MOP kills valR then we can stop looking further and return
       }
     }
+    
     if (definesValR) {
       return UseMOP; //if MII (re-)defines valR then we must have already found the Use before, (or we haven't in which case we return null)
     }
+    
   }
-  auto *MBB = beg->getParent();
+  
   if (MBB) {
+    
     bool avail_in_all = true;
     MachineRegisterInfo &MRI = MBB->getParent()->getRegInfo();
+    
     for (auto *Succ : MBB->successors()) {
+      
       if (!Succ) continue;
+      
       LivePhysRegs liveness(*MRI.getTargetRegisterInfo());
       liveness.addLiveIns(*Succ);
       avail_in_all &= liveness.available(MRI, valR);
     }
+    
     if (avail_in_all) return UseMOP;
+    
   }
+  
   return nullptr;
 }
 
 bool RISCVExpandSSRPostRegAlloc::mergePushPop(MachineBasicBlock &MBB) {
-  const TargetRegisterInfo *TRI = MBB.getParent()->getRegInfo().getTargetRegisterInfo();
-
   Register ssr_regs[NUM_SSR];
   for(unsigned ssr_no = 0; ssr_no < NUM_SSR; ++ssr_no) ssr_regs[ssr_no] = getSSRFtReg(ssr_no);
 
@@ -259,17 +214,20 @@ bool RISCVExpandSSRPostRegAlloc::mergePushPop(MachineBasicBlock &MBB) {
             } 
           }
           Register r = MI->getOperand(0).getReg(); //register to replace
-          errs()<<"looking for "<<MI->getOperand(0)<<"\n";
-          MachineOperand *MO = getUniqueUser(std::next(MI.getReverse()), rangeLimit, MI->getParent()->end().getInstrIterator(), r);
-          if (!MO) errs()<<"*** NOT FOUND ***\n";
+          MachineOperand *MO = getUniqueUser(std::next(MI.getReverse()), rangeLimit, r);
+          if (!MO) LLVM_DEBUG(dbgs()<<"*** NOT FOUND ***\n");
           if (MO) { //if unique user exists
             MachineInstr *MIUser = MO->getParent();
             if (MIUser && modified.find(MIUser) == modified.end()){ //if unique user exists and was not yet modified
-              MIUser->dump();
+              LLVM_DEBUG(MIUser->dump());
               for (auto &MOP : MIUser->operands()) {
-                if (MOP.isReg() && !MOP.isDef() && MOP.getReg() == r) MOP.setReg(ssr_reg); //replace all non-def uses of r with ssr_reg
+                if (MOP.isReg() && !MOP.isDef() && MOP.getReg() == r) {
+                  MOP.setReg(ssr_reg); //replace all non-def uses of r with ssr_reg
+                  MOP.setIsKill(false);
+                  MOP.setIsRenamable(false);
+                }
               }
-              MIUser->dump();
+              LLVM_DEBUG(MIUser->dump());
               MI->eraseFromBundle();
               modified.insert(MIUser);
             }
@@ -288,16 +246,19 @@ bool RISCVExpandSSRPostRegAlloc::mergePushPop(MachineBasicBlock &MBB) {
               }
               if (predDefsR) { //if Pred defines R
                 auto end = MI->getParent()->end().getInstrIterator();
-                MachineOperand *MO = getUniqueUser(Pred->getIterator(), end, end, R);
+                MachineOperand *MO = getUniqueUser(Pred->getIterator(), end, R);
                 if (MO && MO->getParent() == &*MI) { //if MI is unique user of R
-                  Pred->dump();
+                  LLVM_DEBUG(Pred->dump());
                   for (auto &MOP : Pred->operands()) {
                     if (MOP.isReg() && MOP.isDef() && MOP.getReg() == R) { 
                       MOP.setReg(ssr_reg); //replace all defs of R with ssr_reg
                       MOP.setIsDef(false);
+                      MOP.setIsKill(false);
+                      MOP.setIsDead(false);
+                      MOP.setIsRenamable(false);
                     }
                   }
-                  Pred->dump();
+                  LLVM_DEBUG(Pred->dump());
                   MI->eraseFromBundle();
                   modified.insert(Pred);
                 }

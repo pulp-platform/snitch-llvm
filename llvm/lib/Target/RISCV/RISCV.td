@@ -561,6 +561,7 @@ def : ProcessorModel<"snitch", SnitchModel, [FeatureStdExtM,
                                              FeatureStdExtA,
                                              FeatureStdExtF,
                                              FeatureStdExtD,
+                                             FeatureStdExtZfh,
                                              FeatureExtXfrep,
                                              FeatureExtXdma,
                                              FeatureExtXssr]>;

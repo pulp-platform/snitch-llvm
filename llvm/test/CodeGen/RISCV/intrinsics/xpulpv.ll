@@ -51,9 +51,9 @@ declare i32 @llvm.riscv.pulp.mac(i32, i32, i32)
 define i32 @test_llvm_riscv_pulp_mac() {
 ; CHECK-LABEL: test_llvm_riscv_pulp_mac:
 ; CHECK:       # %bb.0:
-; CHECK-DAG:     addi [[REG0:a[0-9]+]], zero, 1
-; CHECK-DAG:     addi [[REG1:a[0-9]+]], zero, 2
-; CHECK-DAG:     addi [[REG2:a[0-9]+]], zero, 3
+; CHECK-DAG:     li [[REG0:a[0-9]+]], 1
+; CHECK-DAG:     li [[REG1:a[0-9]+]], 2
+; CHECK-DAG:     li [[REG2:a[0-9]+]], 3
 ; CHECK-NEXT:    p.mac [[REG2]], [[REG0]], [[REG1]]
 ;
   %1 = tail call i32 @llvm.riscv.pulp.mac(i32 1, i32 2, i32 3)
@@ -66,7 +66,7 @@ define i32 @test_llvm_riscv_pulp_machhs() {
 ; CHECK:       # %bb.0:
 ; CHECK-DAG:     lui [[REG0:a[0-9]+]], 1048544
 ; CHECK-DAG:     lui [[REG1:a[0-9]+]], 64
-; CHECK-DAG:     addi [[REG2:a[0-9]+]], zero, 3
+; CHECK-DAG:     li [[REG2:a[0-9]+]], 3
 ; CHECK-NEXT:    p.machhs [[REG2]], [[REG0]], [[REG1]]
 ;
   %1 = call i32 @llvm.riscv.pulp.machhs(i32 -131072, i32 262144, i32 3)
@@ -79,20 +79,28 @@ define i32 @test_llvm_riscv_pulp_machhu() {
 ; CHECK:       # %bb.0:
 ; CHECK-DAG:     lui [[REG0:a[0-9]+]], 32
 ; CHECK-DAG:     lui [[REG1:a[0-9]+]], 64
-; CHECK-DAG:     addi [[REG2:a[0-9]+]], zero, 3
+; CHECK-DAG:     li [[REG2:a[0-9]+]], 3
 ; CHECK-NEXT:    p.machhu [[REG2]], [[REG0]], [[REG1]]
 ;
   %1 = call i32 @llvm.riscv.pulp.machhu(i32 131072, i32 262144, i32 3)
   ret i32 %1
 }
 
+
+
+
+
+
+
+
+
 declare i32 @llvm.riscv.pulp.macs(i32, i32, i32)
 define i32 @test_llvm_riscv_pulp_macs() {
 ; CHECK-LABEL: @test_llvm_riscv_pulp_macs
 ; CHECK:       # %bb.0:
-; CHECK-DAG:     addi [[REG0:a[0-9]+]], zero, 2
-; CHECK-DAG:     addi [[REG1:a[0-9]+]], zero, -2
-; CHECK-DAG:     addi [[REG2:a[0-9]+]], zero, -3
+; CHECK-DAG:     li [[REG0:a[0-9]+]],  2
+; CHECK-DAG:     li [[REG1:a[0-9]+]], -2
+; CHECK-DAG:     li [[REG2:a[0-9]+]], -3
 ; CHECK-NEXT:    p.macs [[REG2]], [[REG0]], [[REG1]]
 ;
   %1 = call i32 @llvm.riscv.pulp.macs(i32 2, i32 -2, i32 -3)
@@ -103,8 +111,8 @@ declare i32 @llvm.riscv.pulp.macu(i32, i32, i32)
 define i32 @test_llvm_riscv_pulp_macu() {
 ; CHECK-LABEL: @test_llvm_riscv_pulp_macu
 ; CHECK:       # %bb.0:
-; CHECK-DAG:     addi [[REG0:a[0-9]+]], zero, 2
-; CHECK-DAG:     addi [[REG2:a[0-9]+]], zero, 3
+; CHECK-DAG:     li [[REG0:a[0-9]+]],  2
+; CHECK-DAG:     li [[REG2:a[0-9]+]],  3
 ; CHECK-NEXT:    p.macu [[REG2]], [[REG0]], [[REG0]]
 ;
   %1 = call i32 @llvm.riscv.pulp.macu(i32 2, i32 2, i32 3)
@@ -115,9 +123,9 @@ declare i32 @llvm.riscv.pulp.msu(i32, i32, i32)
 define i32 @test_llvm_riscv_pulp_msu() {
 ; CHECK-LABEL: @test_llvm_riscv_pulp_msu
 ; CHECK:       # %bb.0:
-; CHECK-DAG:     addi [[REG0:a[0-9]+]], zero, 1
-; CHECK-DAG:     addi [[REG1:a[0-9]+]], zero, 2
-; CHECK-DAG:     addi [[REG2:a[0-9]+]], zero, 10
+; CHECK-DAG:     li [[REG0:a[0-9]+]],  1
+; CHECK-DAG:     li [[REG1:a[0-9]+]],  2
+; CHECK-DAG:     li [[REG2:a[0-9]+]], 10
 ; CHECK-NEXT:    p.msu [[REG2]], [[REG0]], [[REG1]]
 ;
   %1 = call i32 @llvm.riscv.pulp.msu(i32 1, i32 2, i32 10)
@@ -138,7 +146,7 @@ declare i32 @llvm.riscv.pulp.bset.r(i32, i32)
 define i32 @test_llvm_riscv_pulp_bset_r() {
 ; CHECK-LABEL: @test_llvm_riscv_pulp_bset_r
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    addi [[REG:a[0-9]+]], zero, 132
+; CHECK-NEXT:    li [[REG:a[0-9]+]], 132
 ; CHECK-NEXT:    p.bsetr [[REG]], zero, [[REG]]
 ;
   %1 = call i32 @llvm.riscv.pulp.bset.r(i32 0, i32 132)
@@ -190,7 +198,7 @@ declare i32 @llvm.riscv.pulp.parity(i32)
 define i32 @test_llvm_riscv_pulp_parity() {
 ; CHECK-LABEL: @test_llvm_riscv_pulp_parity
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    addi [[REG:a[0-9]+]], zero, 5
+; CHECK-NEXT:    li [[REG:a[0-9]+]],  5
 ; CHECK-NEXT:    p.cnt [[REG]], [[REG]]
 ; CHECK-NEXT:    p.bclr [[REG]], [[REG]], 30, 1
 ;
@@ -203,8 +211,8 @@ define i32 @test_llvm_riscv_pulp_rotr() {
 ; CHECK-LABEL: @test_llvm_riscv_pulp_rotr
 ; CHECK:       # %bb.0:
 ; CHECK-DAG:     lui [[REG0:a[0-9]+]], 1
-; CHECK-DAG:     addi [[REG0]], [[REG0]], -16
-; CHECK-DAG:     addi [[REG1:a[0-9]+]], zero, 1
+; CHECK-NEXT:    addi [[REG0]], [[REG0]], -16
+; CHECK-DAG:     li [[REG1:a[0-9]+]], 1
 ; CHECK-NEXT:    p.ror [[REG0]], [[REG0]], [[REG1]]
 ;
   %1 = call i32 @llvm.riscv.pulp.rotr(i32 4080, i32 1)
@@ -215,7 +223,7 @@ declare i32 @llvm.riscv.pulp.abs(i32)
 define i32 @test_llvm_riscv_pulp_abs() {
 ; CHECK-LABEL: @test_llvm_riscv_pulp_abs
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    addi [[REG:a[0-9]+]], zero, -2
+; CHECK-NEXT:    li [[REG:a[0-9]+]], -2
 ; CHECK-NEXT:    p.abs [[REG]], [[REG]]
 ;
   %1 = call i32 @llvm.riscv.pulp.abs(i32 -2)
@@ -749,7 +757,7 @@ declare i32 @llvm.riscv.pulp.OffsetedRead(i32*, i32)
 define i32 @test_llvm_riscv_pulp_OffsetedRead(i32* %data) {
 ; CHECK-LABEL: @test_llvm_riscv_pulp_OffsetedRead
 ; CHECK:       # %bb.0:
-; CHECK:         addi [[OFFSET:a[0-9]+]], zero, 4
+; CHECK:         li [[OFFSET:a[0-9]+]], 4
 ; CHECK:         p.lw [[PTR:a[0-9]+]], [[OFFSET]]([[PTR]])
 ;
   %1 = call i32 @llvm.riscv.pulp.OffsetedRead(i32* %data, i32 4)
@@ -760,8 +768,8 @@ declare void @llvm.riscv.pulp.OffsetedWrite(i32, i32*, i32)
 define void @test_llvm_riscv_pulp_OffsetedWrite(i32* %data) {
 ; CHECK-LABEL: @test_llvm_riscv_pulp_OffsetedWrite
 ; CHECK:       # %bb.0:
-; CHECK-DAG:     addi [[OFFSET:a[0-9]+]], zero, 4
-; CHECK-DAG:     addi [[VALUE:a[0-9]+]], zero, 1
+; CHECK-DAG:     li [[OFFSET:a[0-9]+]],  4
+; CHECK-DAG:     li [[VALUE:a[0-9]+]],  1
 ; CHECK:         p.sw [[VALUE]], [[OFFSET]]({{a[0-9]+}})
 ;
   call void @llvm.riscv.pulp.OffsetedWrite(i32 1, i32* %data, i32 4)
@@ -772,7 +780,7 @@ declare i32 @llvm.riscv.pulp.OffsetedReadHalf(i16*, i32)
 define i32 @test_llvm_riscv_pulp_OffsetedReadHalf(i16* %data) {
 ; CHECK-LABEL: @test_llvm_riscv_pulp_OffsetedReadHalf
 ; CHECK:       # %bb.0:
-; CHECK:         addi [[OFFSET:a[0-9]+]], zero, 4
+; CHECK:         li [[OFFSET:a[0-9]+]], 4
 ; CHECK:         p.lh [[PTR:a[0-9]+]], [[OFFSET]]([[PTR]])
 ;
   %1 = call i32 @llvm.riscv.pulp.OffsetedReadHalf(i16* %data, i32 4)
@@ -783,8 +791,8 @@ declare void @llvm.riscv.pulp.OffsetedWriteHalf(i32, i16*, i32)
 define void @test_llvm_riscv_pulp_OffsetedWriteHalf(i16* %data) {
 ; CHECK-LABEL: @test_llvm_riscv_pulp_OffsetedWriteHalf
 ; CHECK:       # %bb.0:
-; CHECK-DAG:     addi [[OFFSET:a[0-9]+]], zero, 4
-; CHECK-DAG:     addi [[VALUE:a[0-9]+]], zero, 1
+; CHECK-DAG:     li [[OFFSET:a[0-9]+]],  4
+; CHECK-DAG:     li [[VALUE:a[0-9]+]],  1
 ; CHECK:         p.sh [[VALUE]], [[OFFSET]]({{a[0-9]+}})
 ;
   call void @llvm.riscv.pulp.OffsetedWriteHalf(i32 1, i16* %data, i32 4)
@@ -795,7 +803,7 @@ declare i32 @llvm.riscv.pulp.OffsetedReadByte(i8*, i32)
 define i32 @test_llvm_riscv_pulp_OffsetedReadByte(i8* %data) {
 ; CHECK-LABEL: @test_llvm_riscv_pulp_OffsetedReadByte
 ; CHECK:       # %bb.0:
-; CHECK:         addi [[OFFSET:a[0-9]+]], zero, 4
+; CHECK:         li [[OFFSET:a[0-9]+]], 4
 ; CHECK:         p.lb [[PTR:a[0-9]+]], [[OFFSET]]([[PTR]])
 ;
   %1 = call i32 @llvm.riscv.pulp.OffsetedReadByte(i8* %data, i32 4)
@@ -806,8 +814,8 @@ declare void @llvm.riscv.pulp.OffsetedWriteByte(i32, i8*, i32)
 define void @test_llvm_riscv_pulp_OffsetedWriteByte(i8* %data) {
 ; CHECK-LABEL: @test_llvm_riscv_pulp_OffsetedWriteByte
 ; CHECK:       # %bb.0:
-; CHECK-DAG:     addi [[OFFSET:a[0-9]+]], zero, 4
-; CHECK-DAG:     addi [[VALUE:a[0-9]+]], zero, 1
+; CHECK-DAG:     li [[OFFSET:a[0-9]+]],  4
+; CHECK-DAG:     li [[VALUE:a[0-9]+]],  1
 ; CHECK:         p.sb [[VALUE]], [[OFFSET]]({{a[0-9]+}})
 ;
   call void @llvm.riscv.pulp.OffsetedWriteByte(i32 1, i8* %data, i32 4)
@@ -818,7 +826,7 @@ declare i32 @llvm.riscv.pulp.read.base.off(i32* %data, i32)
 define i32 @test_llvm_riscv_pulp_read_base_off(i32* %data) {
 ; CHECK-LABEL: @test_llvm_riscv_pulp_read_base_off
 ; CHECK:       # %bb.0:
-; CHECK:         addi [[OFFSET:a[0-9]+]], zero, 15
+; CHECK:         li [[OFFSET:a[0-9]+]], 15
 ; CHECK:         p.lw [[PTR:a[0-9]+]], [[OFFSET]]([[PTR]])
 ;
   %1 = call i32 @llvm.riscv.pulp.read.base.off(i32* %data, i32 15)
@@ -829,8 +837,8 @@ declare void @llvm.riscv.pulp.write.base.off(i32, i32*, i32)
 define void @test_llvm_riscv_pulp_write_base_off(i32* %data) {
 ; CHECK-LABEL: @test_llvm_riscv_pulp_write_base_off
 ; CHECK:       # %bb.0:
-; CHECK-DAG:     addi [[OFFSET:a[0-9]+]], zero, 15
-; CHECK-DAG:     addi [[VALUE:a[0-9]+]], zero, 1
+; CHECK-DAG:     li [[OFFSET:a[0-9]+]], 15
+; CHECK-DAG:     li [[VALUE:a[0-9]+]],  1
 ; CHECK:         p.sw [[VALUE]], [[OFFSET]]({{a[0-9]+}})
 ;
   call void @llvm.riscv.pulp.write.base.off(i32 1, i32* %data, i32 15)
@@ -841,7 +849,7 @@ declare i32 @llvm.riscv.pulp.read.base.off.v(i32*, i32)
 define i32 @test_llvm_riscv_pulp_read_base_off_v(i32* %data) {
 ; CHECK-LABEL: @test_llvm_riscv_pulp_read_base_off_v
 ; CHECK:       # %bb.0:
-; CHECK:         addi [[OFFSET:a[0-9]+]], zero, 15
+; CHECK-DAG:     li [[OFFSET:a[0-9]+]], 15
 ; CHECK:         p.lw [[PTR:a[0-9]+]], [[OFFSET]]([[PTR]])
 ;
   %1 = call i32 @llvm.riscv.pulp.read.base.off.v(i32* %data, i32 15)
@@ -852,8 +860,8 @@ declare void @llvm.riscv.pulp.write.base.off.v(i32, i32*, i32)
 define void @test_llvm_riscv_pulp_write_base_off_v(i32* %data) {
 ; CHECK-LABEL: @test_llvm_riscv_pulp_write_base_off_v
 ; CHECK:       # %bb.0:
-; CHECK-DAG:     addi [[OFFSET:a[0-9]+]], zero, 15
-; CHECK-DAG:     addi [[VALUE:a[0-9]+]], zero, 1
+; CHECK-DAG:     li [[OFFSET:a[0-9]+]], 15
+; CHECK-DAG:     li [[VALUE:a[0-9]+]],  1
 ; CHECK:         p.sw [[VALUE]], [[OFFSET]]({{a[0-9]+}})
 ;
   call void @llvm.riscv.pulp.write.base.off.v(i32 1, i32* %data, i32 15)

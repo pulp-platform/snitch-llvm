@@ -7,7 +7,7 @@
 // 2. clang with versioned extension
 // RUN: %clang --target=riscv32 -march=rv32imafcxpulpv2 -c -S -emit-llvm %s -o - \
 // RUN:     | FileCheck %s
-// 3. clang with a platform triple that is supposed to provide PULP extensions
+// 3. clang with a platform triple that is expected to provide PULP extensions
 // RUN: %clang --target=riscv32-hero-unknown-elf -c -S -emit-llvm %s -o - \
 // RUN:     | FileCheck %s
 

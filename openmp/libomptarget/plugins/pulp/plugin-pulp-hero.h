@@ -60,9 +60,9 @@ extern "C" {
 #define PULP_HERO_DEFAULT_CLUSTER_ID (0x1U)
 #define PULP_HERO_DEFAULT_FREQ (PULP_DEFAULT_FREQ_MHZ)
 #define PULP_HERO_DEFAULT_MEM_MODE (copy)
-#define PULP_HERO_DEFAULT_RAB_LEVEL (0x2U)
-#define PULP_HERO_DEFAULT_RAB_LOG_EN (0x0U)
-#define PULP_HERO_DEFAULT_INTR_RAB_MISS_DIS (0x1U)
+// #define PULP_HERO_DEFAULT_RAB_LEVEL (0x2U)
+// #define PULP_HERO_DEFAULT_RAB_LOG_EN (0x0U)
+// #define PULP_HERO_DEFAULT_INTR_RAB_MISS_DIS (0x1U)
 #define PULP_HERO_DEFAULT_ACP_EN (0x0U)
 #define PULP_HERO_DEFAULT_TIMEOUT (20U)
 }
@@ -167,7 +167,7 @@ extern "C" bool GOMP_OFFLOAD_fini_device(int n __attribute__((unused))) {
   TRACE("Waiting for EOC...");
   pulp_exe_wait(pulp, PULP_HERO_DEFAULT_TIMEOUT);
 
-  pulp_exe_stop(pulp);
+  // pulp_exe_stop(pulp);
 
   if (GOMP_OFFLOAD_get_caps() & GOMP_OFFLOAD_CAP_SHARED_MEM)
     pulp_rab_soc_mh_disable(pulp);

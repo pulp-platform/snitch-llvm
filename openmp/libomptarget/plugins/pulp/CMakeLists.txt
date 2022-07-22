@@ -41,7 +41,6 @@ endif()
 if(EXISTS $ENV{HERO_PULP_SHARED_DIR}/pulp_shared.h)
   include_directories($ENV{HERO_PULP_SHARED_DIR})
   libomptarget_say("Including PULP shared library.")
-  return()
 endif()
 
 include_directories(${LIBOMPTARGET_DEP_LIBFFI_INCLUDE_DIR})

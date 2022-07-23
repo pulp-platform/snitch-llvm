@@ -117,29 +117,30 @@ static void init_hero_device() {
   TRACE_FUNCTION();
 
   int currFreq = 0x0;
+  uint32_t nr_dev = 1;
 
   pulp = &pulp_dev;
   pulp->cluster_sel = PULP_HERO_DEFAULT_CLUSTER_ID;
 
   // reserve virtual addresses overlapping with PULP's internal physical address
   // space
-  pulp_reserve_v_addr(pulp);
-
-  if (pulp_mmap(pulp) < 0) {
+  // pulp_reserve_v_addr(pulp);
+  
+  if ((int) pulp_mmap_all(nr_dev) < 0) {
     TRACE("ERROR: cannot load device!");
   }
 
-  currFreq = pulp_clking_set_freq(pulp, PULP_HERO_DEFAULT_FREQ);
-  if (currFreq > 0)
-    TRACE("PULP HERO device running @ %d MHz.", currFreq);
+  // currFreq = pulp_clking_set_freq(pulp, PULP_HERO_DEFAULT_FREQ);
+  // if (currFreq > 0)
+  //   TRACE("PULP HERO device running @ %d MHz.", currFreq);
   //  else
   //    GOMP_PLUGIN_fatal("PULP HERO device init failed!");
 
-  pulp_rab_free(pulp, 0x0);
-  pulp_reset(pulp, 0x1);
+  //  pulp_rab_free(pulp, 0x0);
+  pulp_reset(pulp);
 
   // initialization of PULP, static RAB rules (mbox, L2, ...)
-  pulp_init(pulp);
+  // pulp_init(pulp);
 
   // set up accelerator for RAB miss-handling
   // FIXME: reenable after fixing
@@ -162,20 +163,21 @@ extern "C" bool GOMP_OFFLOAD_init_device(int n __attribute__((unused))) {
 extern "C" bool GOMP_OFFLOAD_fini_device(int n __attribute__((unused))) {
   TRACE_FUNCTION();
 
-  pulp_mbox_write(pulp, PULP_STOP);
+  // pulp_mbox_write(pulp, PULP_STOP);
+  pulp_mbox_write(pulp, 0x0);
 
   TRACE("Waiting for EOC...");
   pulp_exe_wait(pulp, PULP_HERO_DEFAULT_TIMEOUT);
 
   // pulp_exe_stop(pulp);
 
-  if (GOMP_OFFLOAD_get_caps() & GOMP_OFFLOAD_CAP_SHARED_MEM)
-    pulp_rab_soc_mh_disable(pulp);
+  // if (GOMP_OFFLOAD_get_caps() & GOMP_OFFLOAD_CAP_SHARED_MEM)
+    // pulp_rab_soc_mh_disable(pulp);
 
-  pulp_rab_free(pulp, 0);
-  pulp_free_v_addr(pulp);
+  // pulp_rab_free(pulp, 0);
+  // pulp_free_v_addr(pulp);
   sleep(1);
-  pulp_munmap(pulp);
+  // pulp_munmap(pulp);
 
   return 1;
 }
@@ -242,11 +244,12 @@ static void offload_image(const void *target_image) {
 
   image->size = image_size;
   sprintf(image->name, "lib%010d.so", num_images++);
-  pulp_load_bin_from_mem(pulp, image_start, image->size);
+  // pulp_load_bin_from_mem(pulp, image_start, image->size);
+  pulp_load_bin(pulp, image->name);
   TRACE("PULP target_image %s @ %p loaded, size = %#x", image->name,
         (void *)image_start, image->size);
 
-  pulp_exe_start(pulp);
+  pulp_exe_start(pulp, 0x1C000000);
 
   int num_funcs = 0;
   int num_vars = 0;
@@ -330,11 +333,12 @@ extern "C" void *GOMP_OFFLOAD_alloc(int n __attribute__((unused)),
   uintptr_t virt_ptr = (uintptr_t)NULL;
   DataDesc data_desc;
 
-  virt_ptr = (uintptr_t)pulp_l3_malloc(pulp, size, (uintptr_t *)&phy_ptr);
+  // virt_ptr = (uintptr_t)pulp_l3_malloc(pulp, size, (uintptr_t *)&phy_ptr);
+  virt_ptr = (uintptr_t)pulp_l3_malloc(pulp, size, (void *)&phy_ptr);
 
   data_desc.sh_mem_ctrl = PULP_HERO_DEFAULT_MEM_MODE;
   data_desc.cache_ctrl = PULP_HERO_DEFAULT_ACP_EN;
-  data_desc.rab_lvl = PULP_HERO_DEFAULT_RAB_LEVEL;
+  // data_desc.rab_lvl = PULP_HERO_DEFAULT_RAB_LEVEL;
   data_desc.ptr_l3_v = (void *)virt_ptr;
   data_desc.ptr_l3_p = (void *)phy_ptr;
   data_desc.size = size;
@@ -438,16 +442,18 @@ extern "C" void GOMP_OFFLOAD_run(int n __attribute__((unused)), void *tgt_fn,
 
   TRACE("tgt_fn @ %p, tgt_vars @ %p, nb_rab_miss_handlers %d", tgt_fn, tgt_vars,
         GOMP_OFFLOAD_hero_get_nb_rab_miss_handlers());
-  pulp_mbox_write(pulp, PULP_START);
+  // pulp_mbox_write(pulp, PULP_START);
+  pulp_mbox_write(pulp, 0x02U);
   pulp_mbox_write(pulp, (uint32_t)tgt_fn);
   pulp_mbox_write(pulp, (uint32_t)tgt_vars);
   pulp_mbox_write(pulp, (uint32_t)GOMP_OFFLOAD_hero_get_nb_rab_miss_handlers());
 
   pulp_mbox_read(pulp, (unsigned int *)&ret, 2);
-  if (PULP_DONE == ret[0])
-    TRACE("Execution done");
-  else
-    TRACE("Returned %#x", ret[0]);
+  // if (PULP_DONE == ret[0])
+  //   TRACE("Execution done");
+  // else
+  //   TRACE("Returned %#x", ret[0]);
+  TRACE("Received from cluster: %d\n", ret[0]);
 
   if (PRINT_CYCLES_PLUGIN_PULP_HERO == 1)
     printf("Execution time, kernel only [PULP cycles] = %d\n", (int)ret[1]);

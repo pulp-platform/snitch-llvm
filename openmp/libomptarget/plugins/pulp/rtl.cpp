@@ -233,7 +233,7 @@ bool map_to_mem(__tgt_device_image *image, void **target, size_t *size) {
   MemTarget devs[] = {
       {&pulp->clusters, 0x10000000, "L1"},
       {&pulp->clusters, 0x1b000000, "alias"},
-      {&pulp->l2_mem, 0x1c000000, "L2"},
+      {&pulp->l2, 0x1c000000, "L2"},
   };
   size_t dev_count = 3;
 
@@ -323,7 +323,7 @@ bool load_and_execute_image(__tgt_device_image *image) {
     return false;
   }
 
-  pulp_exe_start(pulp);
+  pulp_exe_start(pulp, 0x1C000000);
   return true;
 }
 
@@ -484,7 +484,8 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
 
   // instruct PULP to run the offload function
   DP("Start offloading...\n");
-  pulp_mbox_write(pulp, PULP_START);
+  // pulp_mbox_write(pulp, PULP_START);
+  pulp_mbox_write(pulp, 0x02U);
   pulp_mbox_write(pulp, (uint32_t)tgt_entry_ptr);
   pulp_mbox_write(pulp, (uint32_t)dev_arg_buf);
   const uint32_t num_miss_handler_threads = (device_id == BIGPULP_SVM) ? 1 : 0;
@@ -504,11 +505,14 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
          "Software mailbox protocol failure: Expected PULP_DONE.");
   while (pulp_mbox_read(pulp, (unsigned int *)&ret[1], 1));
 
-  for (unsigned i = 0; i < ARCHI_CLUSTER_NB_PE; ++i) {
+  // for (unsigned i = 0; i < ARCHI_CLUSTER_NB_PE; ++i) {
+  for (unsigned i = 0; i < 8; ++i) {
     const size_t stdout_buf_size = 1024*1024; // FIXME: this should be defined in the same place as
                                               // for PULP
-    const size_t stdout_offset_per_core = stdout_buf_size / ARCHI_CLUSTER_NB_PE;
-    const volatile char* ptr = (char*)pulp->l3_mem.v_addr + stdout_offset_per_core * i;
+    // const size_t stdout_offset_per_core = stdout_buf_size / ARCHI_CLUSTER_NB_PE;
+    const size_t stdout_offset_per_core = stdout_buf_size / 8;
+    // const volatile char* ptr = (char*)pulp->l3_mem.v_addr + stdout_offset_per_core * i;
+    const volatile char* ptr = (char*)pulp->l3.v_addr + stdout_offset_per_core * i;
     const volatile char* const end = ptr + stdout_offset_per_core;
     if (!*ptr)
       continue;

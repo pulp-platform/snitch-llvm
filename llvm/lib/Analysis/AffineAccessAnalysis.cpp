@@ -1004,10 +1004,10 @@ void AffineAccess::addAllConflicts(const std::vector<AffAcc *> &all) {
       if (!L) continue;
       if (L == outerMostExpandableExl) break;
       if (!(!L || A->isWellFormed(L))){
-        errs()<<"HERE\n";
         if (L) L->dump();
         if (outerMostExpandableExl) outerMostExpandableExl->dump();
         A->dump();
+        llvm_unreachable("this should not happen!");
       }
       assert(!L || A->isWellFormed(L));
       auto p = expandableAccesses.find(L);
@@ -1064,7 +1064,7 @@ std::pair<AffAccConflict, const Loop*> AffineAccess::calcConflict(AffAcc *A, Aff
     if (B->isWrite()) kind = AffAccConflict::MustNotIntersect; //WaW
     else kind = calcRWConflict(B, A, innermostCommon); //B is read and A is write
   }
-  //at this point, even if the two do not alias, we assume the chance is high that they do at runtime 
+  //at this point, even if the two may alias, we assume the chance is high that they do at runtime 
   //if their base addresses share some SCEVUnknowns (ie. some Value's) (FIXME: this is CONSERVATIVE)
   if (kind == AffAccConflict::MustNotIntersect){
     const Loop *L = innermostCommon->getParentLoop();

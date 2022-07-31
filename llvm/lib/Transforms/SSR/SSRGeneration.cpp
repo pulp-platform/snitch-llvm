@@ -108,7 +108,7 @@ cl::opt<bool> SSRNoInline(
 cl::opt<bool> SSRBarrier(
   "ssr-barrier",
   cl::init(false),
-  cl::desc("Enable the insertion of a spinning loop that waits for the stream to be done before it is dissabled.")
+  cl::desc("Enable the insertion of a spinning loop that waits for the stream to be done before it is disabled.")
 );
 
 } //end of namespace llvm

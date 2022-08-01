@@ -95,6 +95,8 @@ static pthread_once_t is_init_hero_device = PTHREAD_ONCE_INIT;
 // static PulpDev *pulp;
 static pulp_dev_t pulp_dev;
 static pulp_dev_t *pulp;
+static pulp_dev_t **clusters;
+struct axi_tlb_entry tlb_entry;
 
 #define GOMP(X) GOMP_PLUGIN_##X
 #define SELF "pulp: "
@@ -116,19 +118,29 @@ extern "C" int GOMP_OFFLOAD_get_num_devices(void) {
 static void init_hero_device() {
   TRACE_FUNCTION();
 
+  int ret = 0;
   int currFreq = 0x0;
-  uint32_t nr_dev = 1;
+  uint32_t cluster_idx, nr_dev;
 
   pulp = &pulp_dev;
+  TRACE("1");
   pulp->cluster_sel = PULP_HERO_DEFAULT_CLUSTER_ID;
+  TRACE("2");
+  // pulp_set_log_level(LOG_WARN);
+  printf("Set log level\n");
+  cluster_idx = 0;
 
   // reserve virtual addresses overlapping with PULP's internal physical address
   // space
   // pulp_reserve_v_addr(pulp);
-  
-  if ((int) pulp_mmap_all(nr_dev) < 0) {
-    TRACE("ERROR: cannot load device!");
-  }
+  // printf("This is %s\n", argv[0]);
+  clusters = pulp_mmap_all(&nr_dev);
+  // if ((int) pulp_mmap_all(&nr_dev) < 0) {
+  //   TRACE("ERROR: cannot load device!");
+  // }
+  printf("Mapped %d devices\n", nr_dev);
+  nr_dev = 1 ;
+  pulp = clusters[cluster_idx];
 
   // currFreq = pulp_clking_set_freq(pulp, PULP_HERO_DEFAULT_FREQ);
   // if (currFreq > 0)
@@ -137,7 +149,81 @@ static void init_hero_device() {
   //    GOMP_PLUGIN_fatal("PULP HERO device init failed!");
 
   //  pulp_rab_free(pulp, 0x0);
-  pulp_reset(pulp);
+  // pulp_reset(pulp);
+  TRACE("4");
+
+  // Reset the TLB
+  tlb_entry.flags = 0;
+  tlb_entry.first = 0;
+  tlb_entry.last = 0;
+  tlb_entry.base = 0;
+  for(unsigned idx = 0; idx < 32; ++idx) {
+    tlb_entry.idx = idx;
+    tlb_entry.loc = AXI_TLB_NARROW;
+    pulp_tlb_write(pulp, &tlb_entry);
+  }
+
+  // Mapping whole address space in TLB
+  tlb_entry.loc = AXI_TLB_NARROW;
+  tlb_entry.flags = AXI_TLB_VALID;
+  tlb_entry.idx = 0;
+  tlb_entry.first = 0x00000000;
+  tlb_entry.last = 0xffffffff;
+  tlb_entry.base = 0x00000000;
+  pulp_tlb_write(pulp, &tlb_entry);
+
+  for(unsigned i = 0; i < 1; ++i) {
+    memset(&tlb_entry, 0, sizeof(tlb_entry));
+    tlb_entry.loc = AXI_TLB_NARROW;
+    tlb_entry.idx = i;
+    pulp_tlb_read(pulp, &tlb_entry);
+    printf("TLB readback Narrow: idx %ld first %012lx last %012lx base %012lx flags %02x\n", tlb_entry.idx,
+          tlb_entry.first, tlb_entry.last, tlb_entry.base, tlb_entry.flags);
+  }
+
+  // De-isolate quadrant
+  int status;
+  for (uint32_t i = 0; i < nr_dev; ++i) {
+    status = pulp_isolate(clusters[i], 0);
+    if (status != 0) {
+      printf("Deisolation failed for cluster %d: %s\n", i, strerror(ret));
+      ret -= 1;
+    }
+  }
+
+  for (uint32_t i = 0; i < nr_dev; ++i) {
+    status = pulp_isolate(clusters[i], 1);
+    if (status != 0) {
+      printf("Isolation failed for cluster %d: %s\n", i, strerror(ret));
+      ret -= 1;
+    }
+  }
+  
+  if (ret) {
+    for (uint32_t i = 0; i < nr_dev; ++i) {
+    status = pulp_isolate(clusters[i], 1);
+    if (status != 0) {
+      printf("Isolation failed for cluster %d: %s\n", i, strerror(ret));
+      ret -= 1;
+    }
+  }
+    exit(-1);
+  }
+
+  // fill memory with known pattern
+  // if (memtest(pulp->l1.v_addr, pulp->l1.size, "TCDM", 'T'))
+  //   return -1;
+  // 
+  printf("Skipping memtest l1 \n");
+
+  for (uint32_t i = 0; i < nr_dev; ++i) {
+    status = pulp_wakeup(clusters[i]);
+    if (status != 0) {
+      printf("Wakeup failed for cluster %d: %s\n", i, strerror(ret));
+      ret -= 1;
+    }
+  }
+  printf("Chopped the Suey!\n");
 
   // initialization of PULP, static RAB rules (mbox, L2, ...)
   // pulp_init(pulp);
@@ -147,9 +233,13 @@ static void init_hero_device() {
   // pulp_rab_soc_mh_enable(pulp, 0);
 
   address_table = new ImgDevAddrMap;
+  TRACE("5");
   address_map = new AddrVectMap;
+  TRACE("6");
   num_devices = 1;
+  TRACE("7");
   num_images = 0;
+  TRACE("8");
 }
 
 extern "C" bool GOMP_OFFLOAD_init_device(int n __attribute__((unused))) {

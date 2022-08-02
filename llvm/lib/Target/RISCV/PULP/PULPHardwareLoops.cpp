@@ -167,6 +167,13 @@ namespace {
                                        MachineOperand *InitialValue,
                                        const MachineOperand *Endvalue,
                                        int64_t IVBump) const;
+    
+    // Return the internal (used internally by this pass) comparison kind for
+    // the specified RISCV condition code.
+    Comparison::Kind getComparisonKindFromCC(unsigned CC,
+                                        MachineOperand *InitialValue,
+                                        const MachineOperand *EndValue,
+                                        int64_t IVBump) const;
 
     /// Analyze the statements in a loop to determine if the loop
     /// has a computable trip count and, if so, return a value that represents
@@ -494,6 +501,37 @@ PULPHardwareLoops::getComparisonKind(unsigned CondOpc,
   return Cmp;
 }
 
+// Return the internal (used internally by this pass) comparison kind for
+// the specified RISCV condition code.
+PULPHardwareLoops::Comparison::Kind
+PULPHardwareLoops::getComparisonKindFromCC(unsigned CC,
+                                        MachineOperand *InitialValue,
+                                        const MachineOperand *EndValue,
+                                        int64_t IVBump) const {
+  Comparison::Kind Cmp = (Comparison::Kind)0;
+  switch (CC) {
+  default:
+    break;
+  case RISCVCC::COND_EQ:
+    Cmp = Comparison::EQ;
+    break;
+  case RISCVCC::COND_NE:
+    Cmp = Comparison::NE;
+    break;
+  case RISCVCC::COND_LT:
+    Cmp = Comparison::LTs;
+    break;
+  case RISCVCC::COND_LTU:
+    Cmp = Comparison::LTu;
+    break;
+  case RISCVCC::COND_GE:
+  case RISCVCC::COND_GEU:
+    Cmp = Comparison::GEs;
+    break;
+  };
+  return Cmp;
+}
+
 /// Analyze the statements in a loop to determine if the loop has
 /// a computable trip count and, if so, return a value that represents
 /// the trip count expression.
@@ -632,7 +670,7 @@ CountValue *PULPHardwareLoops::getLoopTripCount(MachineLoop *L,
   }
   
 
-  Cmp = getComparisonKind(CondOpc, InitialValue, EndValue, IVBump);
+  Cmp = getComparisonKindFromCC(CondOpc, InitialValue, EndValue, IVBump);
   if (!Cmp) {
     return nullptr;
   }
@@ -1173,6 +1211,7 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
   for (const MachineBasicBlock *LB : L->getBlocks()) {
     loopSize += instructionSize * LB->size();
     if (loopSize > 0xFFF) {
+      LLVM_DEBUG(dbgs() << "\nCannot convert to hwloop: loop body doesn't fit into 12 bits";);
       return Changed;
     }
   }

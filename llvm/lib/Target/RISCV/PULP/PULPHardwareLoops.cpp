@@ -313,10 +313,12 @@ bool PULPHardwareLoops::runOnMachineFunction(MachineFunction &MF) {
 
   // We can only use hardware loops if we have the PULPv2 extension enabled.
   if (!MF.getSubtarget<RISCVSubtarget>().hasPULPExtV2()) {
+    LLVM_DEBUG(dbgs() << "No xPULP extension, skipping.\n");
     return false;
   }
 
   if (skipFunction(MF.getFunction())) {
+    LLVM_DEBUG(dbgs() << "Machine function marked to be skipped, bailing out.\n");
     return false;
   }
 
@@ -1131,11 +1133,13 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
   MachineBasicBlock *LastMBB = L->findLoopControlBlock();
   // Don't generate hw loop if the loop has more than one exit.
   if (!LastMBB) {
+    LLVM_DEBUG(dbgs() << "\nCannot convert to hwloop: multiple loop exit blocks";);
     return Changed;
   }
 
   MachineBasicBlock::iterator LastI = LastMBB->getFirstTerminator();
   if (LastI == LastMBB->end()) {
+    LLVM_DEBUG(dbgs() << "\nCannot convert to hwloop: loop exit block has no terminator";);
     return Changed;
   }
 
@@ -1143,7 +1147,7 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
   // placed there.
   MachineBasicBlock *Preheader = MLI->findLoopPreheader(L, SpecPreheader);
   if (!Preheader) {
-
+    LLVM_DEBUG(dbgs() << "\nCannot convert to hwloop: loop has no preheader";);
     // FIXME: The HEXAGON pass upon which this is based tried to create a new
     //        preheader for the loop here. Instead we just return false, as I am
     //        not sure how common this is on PULP. Perhaps it is better to
@@ -1159,6 +1163,7 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
   // Are we able to determine the trip count for the loop?
   CountValue *TripCount = getLoopTripCount(L, OldInsts);
   if (!TripCount) {
+    LLVM_DEBUG(dbgs() << "\nCannot convert to hwloop: cannot determine trip count";);
     return Changed;
   }
 
@@ -1169,6 +1174,7 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
     MachineInstr *TCDef = MRI->getVRegDef(TripCount->getReg());
     MachineBasicBlock *BBDef = TCDef->getParent();
     if (!MDT->dominates(BBDef, Preheader)) {
+      LLVM_DEBUG(dbgs() << "\nCannot convert to hwloop: induction register not available in preheader";);
       return Changed;
     }
   }
@@ -1182,6 +1188,7 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
     MachineBasicBlock *TB = nullptr, *FB = nullptr;
     SmallVector<MachineOperand, 2> Cond;
     if (TII->analyzeBranch(*ExitingBlock, TB, FB, Cond, false)) {
+      LLVM_DEBUG(dbgs() << "\nCannot convert to hwloop: cannot analyze loop";);
       return Changed;
     }
     if (L->contains(TB))
@@ -1200,6 +1207,7 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
   // We need a single exit block to make sure that this loop can be simplified
   // to a fixed amount of loop iterations.
   if (!ExitBlock) {
+    LLVM_DEBUG(dbgs() << "\nCannot convert to hwloop: multiple loop exit blocks";);
     return Changed;
   }
 

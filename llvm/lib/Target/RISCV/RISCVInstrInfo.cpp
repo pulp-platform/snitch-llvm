@@ -692,6 +692,10 @@ static RISCVCC::CondCode getCondFromBranchOpc(unsigned Opc) {
     return RISCVCC::COND_LTU;
   case RISCV::BGEU:
     return RISCVCC::COND_GEU;
+  case RISCV::P_BEQIMM:
+    return RISCVCC::COND_EQ;
+  case RISCV::P_BNEIMM:
+    return RISCVCC::COND_NE;
   }
 }
 
@@ -745,22 +749,6 @@ RISCVCC::CondCode RISCVCC::getOppositeBranchCondition(RISCVCC::CondCode CC) {
     return RISCVCC::COND_GEU;
   case RISCVCC::COND_GEU:
     return RISCVCC::COND_LTU;
-  // case RISCV::BEQ:
-  //   return RISCV::BNE;
-  // case RISCV::BNE:
-  //   return RISCV::BEQ;
-  // case RISCV::BLT:
-  //   return RISCV::BGE;
-  // case RISCV::BGE:
-  //   return RISCV::BLT;
-  // case RISCV::BLTU:
-  //   return RISCV::BGEU;
-  // case RISCV::BGEU:
-  //   return RISCV::BLTU;
-  // case RISCV::P_BEQIMM:
-  //   return RISCV::P_BNEIMM;
-  // case RISCV::P_BNEIMM:
-  //   return RISCV::P_BEQIMM;
   }
 }
 

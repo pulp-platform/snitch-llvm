@@ -189,6 +189,13 @@ private:
                                      MachineOperand *InitialValue,
                                      const MachineOperand *Endvalue,
                                      int64_t IVBump) const;
+  
+   // Return the internal (used internally by this pass) comparison kind for
+   // the specified RISCV condition code.
+   Comparison::Kind getComparisonKindFromCC(unsigned CC,
+                                       MachineOperand *InitialValue,
+                                       const MachineOperand *EndValue,
+                                       int64_t IVBump) const;
 
   /// Return the expression that represents the number of times
   /// a loop iterates.  The function takes the operands that represent the
@@ -946,7 +953,7 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
   LLVM_DEBUG(dbgs()<<"EndValue reg def : "; MRI->getVRegDef(EndValue->getReg())->dump());
   Comparison::Kind Cmp;
   unsigned CondOpc = Cond[0].getImm();
-  Cmp = getComparisonKind(CondOpc, InitialValue, EndValue, IVBump);
+  Cmp = getComparisonKindFromCC(CondOpc, InitialValue, EndValue, IVBump);
 
   if (!Cmp) {
     return nullptr;
@@ -1248,12 +1255,48 @@ SNITCHFrepLoops::getComparisonKind(unsigned CondOpc,
   case RISCV::BGEU:
     Cmp = Comparison::GEs;
     break;
+  case RISCV::P_BNEIMM:
+    Cmp = Comparison::NE;
+    break;
+  case RISCV::P_BEQIMM:
+    Cmp = Comparison::EQ;
+    break;
   default:
     return (Comparison::Kind)0;
   }
   return Cmp;
 }
 
+// Return the internal (used internally by this pass) comparison kind for
+// the specified RISCV condition code.
+SNITCHFrepLoops::Comparison::Kind
+SNITCHFrepLoops::getComparisonKindFromCC(unsigned CC,
+                                        MachineOperand *InitialValue,
+                                        const MachineOperand *EndValue,
+                                        int64_t IVBump) const {
+  Comparison::Kind Cmp = (Comparison::Kind)0;
+  switch (CC) {
+  default:
+    break;
+  case RISCVCC::COND_EQ:
+    Cmp = Comparison::EQ;
+    break;
+  case RISCVCC::COND_NE:
+    Cmp = Comparison::NE;
+    break;
+  case RISCVCC::COND_LT:
+    Cmp = Comparison::LTs;
+    break;
+  case RISCVCC::COND_LTU:
+    Cmp = Comparison::LTu;
+    break;
+  case RISCVCC::COND_GE:
+  case RISCVCC::COND_GEU:
+    Cmp = Comparison::GEs;
+    break;
+  };
+  return Cmp;
+}
 
 /// Helper function that returns the expression that represents the
 /// number of times a loop iterates.  The function takes the operands that

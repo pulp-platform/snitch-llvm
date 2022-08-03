@@ -10,7 +10,7 @@ target triple = "riscv32-unknown-unknown-elf"
 ; Case 1: Nested loop, inner loop with FREP, outer loop not unrolled
 
 ; CHECK:        csrrsi  {{.*}}, 1984, 1
-; CHECK:        addi  [[rBound:[a-zA-Z0-9_]*]], zero, 127
+; CHECK:        li [[rBound:[a-zA-Z0-9_]*]], 127
 ; CHECK-NEXT:   frep.o  [[rBound]], 2, 0, 0
 ; CHECK-NEXT:   fmul.d  {{.*}}
 ; CHECK-NEXT:   fadd.d  {{.*}}
@@ -56,14 +56,14 @@ for.body4:                                        ; preds = %for.body, %for.body
 ; Case 2: Nested loop, inner loop with FREP, outer loop unrolled 2
 
 ; CHECK:        csrrsi  {{.*}}, 1984, 1
-; CHECK:        addi  [[rBound:[a-zA-Z0-9_]*]], zero, 127
+; CHECK:        li [[rBound:[a-zA-Z0-9_]*]], 127
 ; CHECK-NEXT:   frep.o  [[rBound]], 2, 0, 0
 ; CHECK-NEXT:   fmul.d  {{.*}}
 ; CHECK-NEXT:   fadd.d  {{.*}}
 ; CHECK-NEXT:   fmv.x.w {{.*}}, {{.*}}
 ; CHECK-NEXT:   csrrci  {{.*}}, 1984, 1
 ; CHECK-NEXT:   csrrsi  {{.*}}, 1984, 1
-; CHECK:        addi  [[rBound:[a-zA-Z0-9_]*]], zero, 127
+; CHECK:        li [[rBound:[a-zA-Z0-9_]*]], 127
 ; CHECK:        frep.o  [[rBound]], 2, 0, 0
 ; CHECK-NEXT:   fmul.d  {{.*}}
 ; CHECK-NEXT:   fadd.d  {{.*}}

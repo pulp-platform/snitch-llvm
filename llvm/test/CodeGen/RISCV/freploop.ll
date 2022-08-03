@@ -9,7 +9,7 @@ target triple = "riscv32-unknown-unknown-elf"
 
 ; Case 1 : Loop with a constant number of iterations
 ; CHECK-LABEL: @hwloop1
-; CHECK: addi [[REGISTER:[a-zA-Z0-9_]*]], zero, 127
+; CHECK: li [[REGISTER:[a-zA-Z0-9_]*]], 127
 ; CHECK-NEXT: frep.o [[REGISTER]], 2, 0, 0
 ; CHECK-NEXT: fmul.d {{.*}}
 ; CHECK-NEXT: fadd.d {{.*}}
@@ -46,7 +46,7 @@ for.end:                                          ; preds = %for.cond
 
 ; Case 2 : Loop with a constant number of iterations and rotated form
 ; CHECK-LABEL: @hwloop2
-; CHECK: addi [[REGISTER:[a-zA-Z0-9_]*]], zero, 127
+; CHECK: li [[REGISTER:[a-zA-Z0-9_]*]], 127
 ; CHECK-NEXT: frep.o [[REGISTER]], 1, 0, 0
 ; CHECK-NEXT: fmadd.d {{.*}}
 

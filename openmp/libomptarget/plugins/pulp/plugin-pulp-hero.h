@@ -57,7 +57,7 @@ extern "C" {
 
 #include "libpulp.h"
 
-#define PULP_HERO_DEFAULT_CLUSTER_ID (0x1U)
+#define PULP_HERO_DEFAULT_CLUSTER_ID (0x0U)
 #define PULP_HERO_DEFAULT_FREQ (PULP_DEFAULT_FREQ_MHZ)
 #define PULP_HERO_DEFAULT_MEM_MODE (copy)
 // #define PULP_HERO_DEFAULT_RAB_LEVEL (0x2U)

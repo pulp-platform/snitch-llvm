@@ -232,10 +232,14 @@ bool map_to_mem(__tgt_device_image *image, void **target, size_t *size) {
 
   MemTarget devs[] = {
       {&pulp->clusters, 0x10000000, "L1"},
-      {&pulp->clusters, 0x1b000000, "alias"},
+      // {&pulp->clusters, 0x1b000000, "alias"},
       {&pulp->l2, 0x1c000000, "L2"},
   };
-  size_t dev_count = 3;
+  // FIXME: Statically assigning sizes to L1 and L2
+  // (probably they should be derived from somewhere else)
+  devs[0].dev->size = 0x00040000;
+  devs[0].dev->size = 0x00080000;
+  size_t dev_count = 2;
 
   for (size_t j = 0; j < dev_count; j++) {
     size_t dev_lo = devs[j].vaddr;
@@ -272,23 +276,36 @@ bool map_to_mem(__tgt_device_image *image, void **target, size_t *size) {
     for (size_t j = 0; j < dev_count; j++) {
       MemTarget &tgt = devs[j];
 
+      DP("\n***DEV[%d]***: [%s; 0x%08x]\n", j, tgt.name, tgt.vaddr);
+      DP("\ntgt.dev->v_addr: "DPxMOD"; tgt.dev->p_addr: "DPxMOD"; tgt.dev->size: "DPxMOD"",
+         DPxPTR(tgt.dev->v_addr), DPxPTR(tgt.dev->p_addr), DPxPTR(tgt.dev->size));
       size_t dev_lo = tgt.vaddr;
       size_t dev_hi = dev_lo + tgt.dev->size;
+      DP("\nsc_lo: "DPxMOD" \ndev_lo: "DPxMOD" \nsc_hi: "DPxMOD" \ndev_hi: "DPxMOD" \n",
+         DPxPTR(sc_lo), DPxPTR(dev_lo), DPxPTR(sc_hi), DPxPTR(dev_hi));
 
       if (sc_lo >= dev_lo && sc_hi <= dev_hi) {
         DP("to device %s\n", tgt.name);
         size_t dev_offset = sc_lo - dev_lo;
         uint32_t *dev_mapping =
             (uint32_t *)((uint64_t)tgt.dev->v_addr + dev_offset);
+        DP("Device mapping: "DPxMOD" \nDevice offset: "DPxMOD"\n", DPxPTR(dev_mapping), DPxPTR(dev_offset));
 
         // FIXME: use of memset/memcpy lead to unaligned accesses
+        DP("Mem Size: %d\n", hdr->p_memsz);
+        // int64_t map;
         for (int i = 0; i < hdr->p_memsz / 4; ++i) {
           *(dev_mapping + i) = (int64_t)dev_mapping + i; // 0xcafebabe;
+          // map = dev_mapping + i;
+          // DP("dev_mapping + %d: "DPxMOD"\n", i, DPxPTR(map));
         }
         assert((hdr->p_filesz % 4) == 0);
+        DP("File Size: %d\n", hdr->p_filesz);
         for (int i = 0; i < hdr->p_filesz / 4; ++i) {
           *(dev_mapping + i) =
               *(((uint32_t *)(image->ImageStart + hdr->p_offset)) + i);
+          // map = dev_mapping + i;
+          // DP("dev_mapping + %d: "DPxMOD"\n", i, DPxPTR(map));
         }
         // memset(dev_mapping, 0, 0x100);
         // memcpy(dev_mapping,
@@ -316,6 +333,7 @@ bool map_to_mem(__tgt_device_image *image, void **target, size_t *size) {
 }
 
 bool load_and_execute_image(__tgt_device_image *image) {
+  DP("load_and_execute_image()\n");
   void *image_start;
   size_t image_size;
   bool success = map_to_mem(image, &image_start, &image_size);

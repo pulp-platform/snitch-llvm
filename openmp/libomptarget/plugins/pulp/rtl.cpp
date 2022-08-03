@@ -238,7 +238,7 @@ bool map_to_mem(__tgt_device_image *image, void **target, size_t *size) {
   // FIXME: Statically assigning sizes to L1 and L2
   // (probably they should be derived from somewhere else)
   devs[0].dev->size = 0x00040000;
-  devs[0].dev->size = 0x00080000;
+  devs[1].dev->size = 0x00080000;
   size_t dev_count = 2;
 
   for (size_t j = 0; j < dev_count; j++) {

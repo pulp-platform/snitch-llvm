@@ -164,10 +164,13 @@ def maskWidthMinus1 : SDNodeXForm<imm, [{
 // Opcodes
 //===----------------------------------------------------------------------===//
 
+// Post-increment operations
 def OPC_PULP_LPI : RISCVOpcode<"PULP_LPI", 0b0001011>;
 def OPC_PULP_SPI : RISCVOpcode<"PULP_SPI", 0b0101011>;
 def OPC_PULP_LPI_RR : RISCVOpcode<"PULP_LPI_RR", 0b0000011>;
 def OPC_PULP_SPI_RR : RISCVOpcode<"PULP_SPI_RR", 0b0100011>;
+// General ALU operations, PULP extended
+def OPC_PULP_OP : RISCVOpcode<"PULP_OP", 0b1011011>;
 
 //===----------------------------------------------------------------------===//
 // Instruction class templates
@@ -768,22 +771,22 @@ def P_CLIPU :  Pulp_ALU_ri<0b0001010, 0b010, "p.clipu">;
 def P_CLIPR :  Pulp_ALU_rr<0b0001010, 0b101, OPC_OP, "p.clipr">;
 def P_CLIPUR : Pulp_ALU_rr<0b0001010, 0b110, OPC_OP, "p.clipur">;
 
-def P_ADDN :    Pulp_ALU_rri<0b00, 0b010, OPC_OP, "p.addn">;
-def P_ADDUN :   Pulp_ALU_rri<0b10, 0b010, OPC_OP, "p.addun">;
-def P_ADDRN :   Pulp_ALU_rri<0b00, 0b110, OPC_OP, "p.addrn">;
-def P_ADDURN :  Pulp_ALU_rri<0b10, 0b110, OPC_OP, "p.addurn">;
-def P_SUBN :    Pulp_ALU_rri<0b00, 0b011, OPC_OP, "p.subn">;
-def P_SUBUN :   Pulp_ALU_rri<0b10, 0b011, OPC_OP, "p.subun">;
-def P_SUBRN :   Pulp_ALU_rri<0b00, 0b111, OPC_OP, "p.subrn">;
-def P_SUBURN :  Pulp_ALU_rri<0b10, 0b111, OPC_OP, "p.suburn">;
-def P_ADDNR :   Pulp_ALU_rr_wb<0b0100000, 0b010, OPC_OP, "p.addnr">;
-def P_ADDUNR :  Pulp_ALU_rr_wb<0b1100000, 0b010, OPC_OP, "p.addunr">;
-def P_ADDRNR :  Pulp_ALU_rr_wb<0b0100000, 0b110, OPC_OP, "p.addrnr">;
-def P_ADDURNR : Pulp_ALU_rr_wb<0b1100000, 0b110, OPC_OP, "p.addurnr">;
-def P_SUBNR :   Pulp_ALU_rr_wb<0b0100000, 0b011, OPC_OP, "p.subnr">;
-def P_SUBUNR :  Pulp_ALU_rr_wb<0b1100000, 0b011, OPC_OP, "p.subunr">;
-def P_SUBRNR :  Pulp_ALU_rr_wb<0b0100000, 0b111, OPC_OP, "p.subrnr">;
-def P_SUBURNR : Pulp_ALU_rr_wb<0b1100000, 0b111, OPC_OP, "p.suburnr">;
+def P_ADDN :    Pulp_ALU_rri<0b00, 0b010, OPC_PULP_OP, "p.addn">;
+def P_ADDUN :   Pulp_ALU_rri<0b10, 0b010, OPC_PULP_OP, "p.addun">;
+def P_ADDRN :   Pulp_ALU_rri<0b00, 0b110, OPC_PULP_OP, "p.addrn">;
+def P_ADDURN :  Pulp_ALU_rri<0b10, 0b110, OPC_PULP_OP, "p.addurn">;
+def P_SUBN :    Pulp_ALU_rri<0b00, 0b011, OPC_PULP_OP, "p.subn">;
+def P_SUBUN :   Pulp_ALU_rri<0b10, 0b011, OPC_PULP_OP, "p.subun">;
+def P_SUBRN :   Pulp_ALU_rri<0b00, 0b111, OPC_PULP_OP, "p.subrn">;
+def P_SUBURN :  Pulp_ALU_rri<0b10, 0b111, OPC_PULP_OP, "p.suburn">;
+def P_ADDNR :   Pulp_ALU_rr_wb<0b0100000, 0b010, OPC_PULP_OP, "p.addnr">;
+def P_ADDUNR :  Pulp_ALU_rr_wb<0b1100000, 0b010, OPC_PULP_OP, "p.addunr">;
+def P_ADDRNR :  Pulp_ALU_rr_wb<0b0100000, 0b110, OPC_PULP_OP, "p.addrnr">;
+def P_ADDURNR : Pulp_ALU_rr_wb<0b1100000, 0b110, OPC_PULP_OP, "p.addurnr">;
+def P_SUBNR :   Pulp_ALU_rr_wb<0b0100000, 0b011, OPC_PULP_OP, "p.subnr">;
+def P_SUBUNR :  Pulp_ALU_rr_wb<0b1100000, 0b011, OPC_PULP_OP, "p.subunr">;
+def P_SUBRNR :  Pulp_ALU_rr_wb<0b0100000, 0b111, OPC_PULP_OP, "p.subrnr">;
+def P_SUBURNR : Pulp_ALU_rr_wb<0b1100000, 0b111, OPC_PULP_OP, "p.suburnr">;
 
 // Instructions: immediate branches
 def P_BEQIMM : Pulp_Immediate_Branch<0b010, "p.beqimm">;
@@ -792,30 +795,31 @@ def P_BNEIMM : Pulp_Immediate_Branch<0b011, "p.bneimm">;
 // Instructions: MAC operations
 def P_MAC :      Pulp_ALU_rr_wb<0b0100001, 0b000, OPC_OP, "p.mac">;
 def P_MSU :      Pulp_ALU_rr_wb<0b0100001, 0b001, OPC_OP, "p.msu">;
-def P_MULS :     Pulp_ALU_rr   <0b1000000, 0b000, OPC_OP, "p.muls">;
-def P_MULHHS :   Pulp_ALU_rr   <0b1100000, 0b000, OPC_OP, "p.mulhhs">;
-def P_MULSN :    Pulp_ALU_rri       <0b10, 0b000, OPC_OP, "p.mulsn">;
-def P_MULHHSN :  Pulp_ALU_rri       <0b11, 0b000, OPC_OP, "p.mulhhsn">;
-def P_MULSRN :   Pulp_ALU_rri       <0b10, 0b100, OPC_OP, "p.mulsrn">;
-def P_MULHHSRN : Pulp_ALU_rri       <0b11, 0b100, OPC_OP, "p.mulhhsrn">;
-def P_MULU :     Pulp_ALU_rr   <0b0000000, 0b000, OPC_OP, "p.mulu">;
-def P_MULHHU :   Pulp_ALU_rr   <0b0100000, 0b000, OPC_OP, "p.mulhhu">;
-def P_MULUN :    Pulp_ALU_rri       <0b00, 0b000, OPC_OP, "p.mulun">;
-def P_MULHHUN :  Pulp_ALU_rri       <0b01, 0b000, OPC_OP, "p.mulhhun">;
-def P_MULURN :   Pulp_ALU_rri       <0b00, 0b100, OPC_OP, "p.mulurn">;
-def P_MULHHURN : Pulp_ALU_rri       <0b01, 0b100, OPC_OP, "p.mulhhurn">;
-def P_MACS :     Pulp_ALU_rr_wb<0b1000000, 0b001, OPC_OP, "p.macs">;
-def P_MACHHS :   Pulp_ALU_rr_wb<0b1100000, 0b001, OPC_OP, "p.machhs">;
-def P_MACSN :    Pulp_ALU_rri_wb    <0b10, 0b001, OPC_OP, "p.macsn">;
-def P_MACHHSN :  Pulp_ALU_rri_wb    <0b11, 0b001, OPC_OP, "p.machhsn">;
-def P_MACSRN :   Pulp_ALU_rri_wb    <0b10, 0b101, OPC_OP, "p.macsrn">;
-def P_MACHHSRN : Pulp_ALU_rri_wb    <0b11, 0b101, OPC_OP, "p.machhsrn">;
-def P_MACU :     Pulp_ALU_rr_wb<0b0000000, 0b001, OPC_OP, "p.macu">;
-def P_MACHHU :   Pulp_ALU_rr_wb<0b0100000, 0b001, OPC_OP, "p.machhu">;
-def P_MACUN :    Pulp_ALU_rri_wb    <0b00, 0b001, OPC_OP, "p.macun">;
-def P_MACHHUN :  Pulp_ALU_rri_wb    <0b01, 0b001, OPC_OP, "p.machhun">;
-def P_MACURN :   Pulp_ALU_rri_wb    <0b00, 0b101, OPC_OP, "p.macurn">;
-def P_MACHHURN : Pulp_ALU_rri_wb    <0b01, 0b101, OPC_OP, "p.machhurn">;
+
+def P_MULS :     Pulp_ALU_rr   <0b1000000, 0b000, OPC_PULP_OP, "p.muls">;
+def P_MULHHS :   Pulp_ALU_rr   <0b1100000, 0b000, OPC_PULP_OP, "p.mulhhs">;
+def P_MULSN :    Pulp_ALU_rri       <0b10, 0b000, OPC_PULP_OP, "p.mulsn">;
+def P_MULHHSN :  Pulp_ALU_rri       <0b11, 0b000, OPC_PULP_OP, "p.mulhhsn">;
+def P_MULSRN :   Pulp_ALU_rri       <0b10, 0b100, OPC_PULP_OP, "p.mulsrn">;
+def P_MULHHSRN : Pulp_ALU_rri       <0b11, 0b100, OPC_PULP_OP, "p.mulhhsrn">;
+def P_MULU :     Pulp_ALU_rr   <0b0000000, 0b000, OPC_PULP_OP, "p.mulu">;
+def P_MULHHU :   Pulp_ALU_rr   <0b0100000, 0b000, OPC_PULP_OP, "p.mulhhu">;
+def P_MULUN :    Pulp_ALU_rri       <0b00, 0b000, OPC_PULP_OP, "p.mulun">;
+def P_MULHHUN :  Pulp_ALU_rri       <0b01, 0b000, OPC_PULP_OP, "p.mulhhun">;
+def P_MULURN :   Pulp_ALU_rri       <0b00, 0b100, OPC_PULP_OP, "p.mulurn">;
+def P_MULHHURN : Pulp_ALU_rri       <0b01, 0b100, OPC_PULP_OP, "p.mulhhurn">;
+def P_MACS :     Pulp_ALU_rr_wb<0b1000000, 0b001, OPC_PULP_OP, "p.macs">;
+def P_MACHHS :   Pulp_ALU_rr_wb<0b1100000, 0b001, OPC_PULP_OP, "p.machhs">;
+def P_MACSN :    Pulp_ALU_rri_wb    <0b10, 0b001, OPC_PULP_OP, "p.macsn">;
+def P_MACHHSN :  Pulp_ALU_rri_wb    <0b11, 0b001, OPC_PULP_OP, "p.machhsn">;
+def P_MACSRN :   Pulp_ALU_rri_wb    <0b10, 0b101, OPC_PULP_OP, "p.macsrn">;
+def P_MACHHSRN : Pulp_ALU_rri_wb    <0b11, 0b101, OPC_PULP_OP, "p.machhsrn">;
+def P_MACU :     Pulp_ALU_rr_wb<0b0000000, 0b001, OPC_PULP_OP, "p.macu">;
+def P_MACHHU :   Pulp_ALU_rr_wb<0b0100000, 0b001, OPC_PULP_OP, "p.machhu">;
+def P_MACUN :    Pulp_ALU_rri_wb    <0b00, 0b001, OPC_PULP_OP, "p.macun">;
+def P_MACHHUN :  Pulp_ALU_rri_wb    <0b01, 0b001, OPC_PULP_OP, "p.machhun">;
+def P_MACURN :   Pulp_ALU_rri_wb    <0b00, 0b101, OPC_PULP_OP, "p.macurn">;
+def P_MACHHURN : Pulp_ALU_rri_wb    <0b01, 0b101, OPC_PULP_OP, "p.machhurn">;
 
 // Instructions: packed vector ALU
 defm PV_ADD  : SC_SCI_H_B<0b00000, 0, simm6, "add">;

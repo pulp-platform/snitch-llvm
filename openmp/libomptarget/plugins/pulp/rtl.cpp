@@ -226,23 +226,20 @@ bool map_to_mem(__tgt_device_image *image, void **target, size_t *size) {
 
   struct MemTarget {
     PulpSubDev *dev;
-    size_t vaddr;
+    size_t paddr;
     const char *name;
   };
 
   MemTarget devs[] = {
-      {&pulp->clusters, 0x10000000, "L1"},
-      // {&pulp->clusters, 0x1b000000, "alias"},
-      {&pulp->l2, 0x1c000000, "L2"},
+      {&pulp->l1, pulp->l1.p_addr, "L1"},
+      {&pulp->l2, pulp->l2.p_addr, "L2"},
+      {&pulp->l3, pulp->l3.p_addr, "L3"},
   };
-  // FIXME: Statically assigning sizes to L1 and L2
-  // (probably they should be derived from somewhere else)
-  devs[0].dev->size = 0x00040000;
-  devs[1].dev->size = 0x00080000;
-  size_t dev_count = 2;
+
+  size_t dev_count = sizeof(devs) / sizeof(devs[0]);
 
   for (size_t j = 0; j < dev_count; j++) {
-    size_t dev_lo = devs[j].vaddr;
+    size_t dev_lo = devs[j].paddr;
     size_t dev_hi = dev_lo + devs[j].dev->size;
 
     DP("Device %s: [" DPxMOD ", " DPxMOD "]\n", devs[j].name, DPxPTR(dev_lo),
@@ -276,10 +273,10 @@ bool map_to_mem(__tgt_device_image *image, void **target, size_t *size) {
     for (size_t j = 0; j < dev_count; j++) {
       MemTarget &tgt = devs[j];
 
-      DP("\n***DEV[%d]***: [%s; 0x%08x]\n", j, tgt.name, tgt.vaddr);
-      DP("\ntgt.dev->v_addr: "DPxMOD"; tgt.dev->p_addr: "DPxMOD"; tgt.dev->size: "DPxMOD"",
+      DP("\n***DEV[%d]***: [%s; 0x%08x]\n", j, tgt.name, tgt.paddr);
+      DP("\ntgt.dev->v_addr: "DPxMOD"; tgt.dev->p_addr: "DPxMOD"; tgt.dev->size: "DPxMOD"\n",
          DPxPTR(tgt.dev->v_addr), DPxPTR(tgt.dev->p_addr), DPxPTR(tgt.dev->size));
-      size_t dev_lo = tgt.vaddr;
+      size_t dev_lo = tgt.paddr;
       size_t dev_hi = dev_lo + tgt.dev->size;
       DP("\nsc_lo: "DPxMOD" \ndev_lo: "DPxMOD" \nsc_hi: "DPxMOD" \ndev_hi: "DPxMOD" \n",
          DPxPTR(sc_lo), DPxPTR(dev_lo), DPxPTR(sc_hi), DPxPTR(dev_hi));

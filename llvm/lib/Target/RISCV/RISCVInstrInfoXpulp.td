@@ -172,38 +172,9 @@ def OPC_PULP_SPI_RR : RISCVOpcode<"PULP_SPI_RR", 0b0100011>;
 //===----------------------------------------------------------------------===//
 // Instruction class templates
 //===----------------------------------------------------------------------===//
-let Predicates = [IsRV32, HasPULPExtV2], DecoderNamespace = "RV32Xpulp" in {
-
-// Instruction class: Stores with Immediate increment
-let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
-class PULP_Store_rri_postinc<bits<3> funct3, string opcodestr>
-    : RVInstS<funct3, OPC_PULP_SPI, (outs GPR:$rd),
-              (ins GPR:$rs2, GPR:$rs1, simm12:$imm12),
-              opcodestr, "$rs2, ${imm12}(${rs1}!)">;
-
-// Instruction class: Stores with Register increment
-let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
-class PULP_Store_rrr_postinc<bits<7> funct7, bits<3> funct3, string opcodestr>
-    : RVInstR<funct7, funct3, OPC_PULP_SPI, (outs GPR:$rd),
-              (ins GPR:$rs2, GPR:$rs1, GPR:$rs3),
-              opcodestr, "$rs2, ${rs3}(${rs1}!)">;
-
-// Instruction class: Loads with Immediate increment
-let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
-class PULP_Load_ri_postinc<bits<3> funct3, string opcodestr>
-    : RVInstI<funct3, OPC_PULP_LPI, (outs GPR:$rd, GPR:$rs1_wb),
-              (ins GPR:$rs1, simm12:$imm12),
-              opcodestr, "$rd, ${imm12}(${rs1}!)">;
-
-// Instruction class: Loads with Register increment
-let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
-class PULP_Load_rr_postinc<bits<7> funct7, bits<3> funct3, string opcodestr>
-    : RVInstR<funct7, funct3, OPC_PULP_LPI, (outs GPR:$rd, GPR:$rs1_wb),
-              (ins GPR:$rs1, GPR:$rs2),
-              opcodestr, "$rd, ${rs2}(${rs1}!)">;
-}
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in {
+
 class Pulp_ALU_r<bits<7> funct7, bits<3> funct3,
                  RISCVOpcode opcode, string opcodestr>
     : RVInstR<funct7, funct3, opcode, (outs GPR:$rd), (ins GPR:$rs1),
@@ -307,6 +278,8 @@ class Pulp_ALU_rri_wb<bits<2> funct2, bits<3> funct3, RISCVOpcode opcode, string
   let Constraints = "$rd = $rd_wb";
 }
 
+} // let hasSideEffects = 0, mayLoad = 0, mayStore = 0
+
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 class Pulp_ALU_vsci<bits<5> funct5, bit F, bits<3> funct3, string opcodestr,
                     RegisterClass vec, Operand sci, RegisterClass res = vec>
@@ -348,8 +321,7 @@ class Pulp_ALU_vsci_wb<bits<5> funct5, bit F, bits<3> funct3, string opcodestr,
   let Opcode = 0b1010111;
 }
 
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0,
-    isBranch = 1, isTerminator = 1 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, isBranch = 1, isTerminator = 1 in
 class Pulp_Immediate_Branch<bits<3> funct3, string opcodestr>
       : RVInstB<funct3, OPC_BRANCH, (outs),
                 (ins GPR:$rs1, simm5:$rs2, simm13_lsb0:$imm12),
@@ -383,7 +355,7 @@ multiclass SDOTP<bits<5> funct5, bit F, Operand sci, string opcodestr> {
   def _SCI_B : Pulp_ALU_vsci_wb<funct5, F,    0b111,                         "pv." # opcodestr # ".sci.b", PulpV4, sci, GPR>;
 }
 
-let hasSideEffects = 0, mayLoad = 0, mayStore = 1, Predicates = [IsRV32, HasPULPExtV2] in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
 multiclass Pulp_Store<bits<2> funct2, string opcodestr> {
 
     def _ri_PostIncrement
@@ -403,7 +375,7 @@ multiclass Pulp_Store<bits<2> funct2, string opcodestr> {
       (ins GPR:$rs2, GPR:$rs1, GPR:$rd), opcodestr, "$rs2, ${rd}(${rs1})">;
 }
 
-let hasSideEffects = 0, mayLoad = 1, mayStore = 0, Predicates = [IsRV32, HasPULPExtV2] in
+let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
 multiclass Pulp_Load<bits<7> funct7, bits<3> funct3, string opcodestr> {
 
   def _ri_PostIncrement
@@ -422,19 +394,6 @@ multiclass Pulp_Load<bits<7> funct7, bits<3> funct3, string opcodestr> {
     : RVInstR<funct7, 0b111, OPC_PULP_LPI_RR, (outs GPR:$rd),
     (ins GPR:$rs1, GPR:$rs2), opcodestr, "$rd, ${rs2}(${rs1})">;
 }
-
-let hasSideEffects = 0, mayStore = 0, mayLoad = 0, rs2 = 0 in {
-  def PV_ABS_H : RVInstR<0b0111000, 0b000, OPC_OP_V,
-                         (outs PulpV2:$rd), (ins PulpV2:$rs1),
-                         "pv.abs.h", "$rd, $rs1">, Sched<[WriteIALU, ReadIALU]>;
-
-  def PV_ABS_B : RVInstR<0b0111000, 0b001, OPC_OP_V,
-                         (outs PulpV4:$rd), (ins PulpV4:$rs1),
-                         "pv.abs.b", "$rd, $rs1">, Sched<[WriteIALU, ReadIALU]>;
-}
-
-} // Predicates = [IsRV32, HasPULPExtV2], DecoderNamespace = "RV32Xpulp"
-
 
 //===----------------------------------------------------------------------===//
 // Instructions
@@ -826,46 +785,6 @@ def P_SUBUNR :  Pulp_ALU_rr_wb<0b1100000, 0b011, OPC_OP, "p.subunr">;
 def P_SUBRNR :  Pulp_ALU_rr_wb<0b0100000, 0b111, OPC_OP, "p.subrnr">;
 def P_SUBURNR : Pulp_ALU_rr_wb<0b1100000, 0b111, OPC_OP, "p.suburnr">;
 
-// Instructions: Stores with Immediate increment
-def PULP_SB_IMM_PI : PULP_Store_rri_postinc<0b000, "p.sb">,
-    Sched<[WriteSTB, WriteIALU, ReadStoreData, ReadMemBase]>;
-def PULP_SH_IMM_PI : PULP_Store_rri_postinc<0b001, "p.sh">,
-    Sched<[WriteSTH, WriteIALU, ReadStoreData, ReadMemBase]>;
-def PULP_SW_IMM_PI : PULP_Store_rri_postinc<0b010, "p.sw">,
-    Sched<[WriteSTW, WriteIALU, ReadStoreData, ReadMemBase]>;
-
-// Instructions: Stores with Register increment
-def PULP_SB_REG_PI : PULP_Store_rrr_postinc<0b0000000, 0b100, "p.sb">,
-    Sched<[WriteSTB, WriteIALU, ReadIALU, ReadStoreData, ReadMemBase]>;
-def PULP_SH_REG_PI : PULP_Store_rrr_postinc<0b0000000, 0b101, "p.sh">,
-    Sched<[WriteSTH, WriteIALU, ReadIALU, ReadStoreData, ReadMemBase]>;
-def PULP_SW_REG_PI : PULP_Store_rrr_postinc<0b0000000, 0b110, "p.sw">,
-    Sched<[WriteSTW, WriteIALU, ReadIALU, ReadStoreData, ReadMemBase]>;
-
-// Instructions: Loads with Immediate increment
-def PULP_LB_IMM_PI : PULP_Load_ri_postinc<0b000, "p.lb">,
-    Sched<[WriteLDB, WriteIALU, ReadMemBase]>;
-def PULP_LBU_IMM_PI : PULP_Load_ri_postinc<0b100, "p.lbu">,
-    Sched<[WriteLDB, WriteIALU, ReadMemBase]>;
-def PULP_LH_IMM_PI : PULP_Load_ri_postinc<0b001, "p.lh">,
-    Sched<[WriteLDH, WriteIALU, ReadMemBase]>;
-def PULP_LHU_IMM_PI : PULP_Load_ri_postinc<0b101, "p.lhu">,
-    Sched<[WriteLDH, WriteIALU, ReadMemBase]>;
-def PULP_LW_IMM_PI : PULP_Load_ri_postinc<0b010, "p.lw">,
-    Sched<[WriteLDW, WriteIALU, ReadMemBase]>;
-
-// Instructions: Loads with Register increment
-def PULP_LB_REG_PI : PULP_Load_rr_postinc<0b0000000, 0b111, "p.lb">,
-    Sched<[WriteLDB, WriteIALU, ReadIALU, ReadMemBase]>;
-def PULP_LBU_REG_PI : PULP_Load_rr_postinc<0b0100000, 0b111, "p.lbu">,
-    Sched<[WriteLDB, WriteIALU, ReadIALU, ReadMemBase]>;
-def PULP_LH_REG_PI : PULP_Load_rr_postinc<0b0001000, 0b111, "p.lh">,
-    Sched<[WriteLDH, WriteIALU, ReadIALU, ReadMemBase]>;
-def PULP_LHU_REG_PI : PULP_Load_rr_postinc<0b0101000, 0b111, "p.lhu">,
-    Sched<[WriteLDH, WriteIALU, ReadIALU, ReadMemBase]>;
-def PULP_LW_REG_PI : PULP_Load_rr_postinc<0b0010000, 0b111, "p.lw">,
-    Sched<[WriteLDW, WriteIALU, ReadIALU, ReadMemBase]>;
-
 // Instructions: immediate branches
 def P_BEQIMM : Pulp_Immediate_Branch<0b010, "p.beqimm">;
 def P_BNEIMM : Pulp_Immediate_Branch<0b011, "p.bneimm">;
@@ -913,6 +832,16 @@ defm PV_SLL  : SC_SCI_H_B<0b01010, 0, uimm6, "sll">;
 defm PV_OR   : SC_SCI_H_B<0b01011, 0, simm6, "or">;
 defm PV_XOR  : SC_SCI_H_B<0b01100, 0, simm6, "xor">;
 defm PV_AND  : SC_SCI_H_B<0b01101, 0, simm6, "and">;
+
+let hasSideEffects = 0, mayStore = 0, mayLoad = 0, rs2 = 0 in {
+  def PV_ABS_H : RVInstR<0b0111000, 0b000, OPC_OP_V,
+                         (outs PulpV2:$rd), (ins PulpV2:$rs1),
+                         "pv.abs.h", "$rd, $rs1">, Sched<[WriteIALU, ReadIALU]>;
+
+  def PV_ABS_B : RVInstR<0b0111000, 0b001, OPC_OP_V,
+                         (outs PulpV4:$rd), (ins PulpV4:$rs1),
+                         "pv.abs.b", "$rd, $rs1">, Sched<[WriteIALU, ReadIALU]>;
+}
 
 def PV_EXTRACT_H : Pulp_ALU_vsci<0b01111, 0, 0b110, "pv.extract.h", PulpV2, uimm6, GPR>;
 def PV_EXTRACT_B : Pulp_ALU_vsci<0b01111, 0, 0b111, "pv.extract.b", PulpV4, uimm6, GPR>;
@@ -1152,50 +1081,6 @@ def dotsp_sc_b : dotp_sc_b<sbextract>;
 //===----------------------------------------------------------------------===//
 
 let Predicates = [IsRV32, HasPULPExtV2] in {
-
-// Patterns: Stores with Immediate increment
-def : Pat<(post_truncsti8 GPR:$Rs2, GPR:$Rs1, simm12:$imm12),
-          (PULP_SB_IMM_PI GPR:$Rs2, GPR:$Rs1, simm12:$imm12)>;
-def : Pat<(post_truncsti16 GPR:$Rs2, GPR:$Rs1, simm12:$imm12),
-          (PULP_SH_IMM_PI GPR:$Rs2, GPR:$Rs1, simm12:$imm12)>;
-def : Pat<(post_store i32:$Rs2, GPR:$Rs1, simm12:$imm12),
-          (PULP_SW_IMM_PI GPR:$Rs2, GPR:$Rs1, simm12:$imm12)>;
-
-// Patterns: Stores with Register increment
-def : Pat<(post_truncsti8 GPR:$Rs2, GPR:$Rs1, GPR:$rs3),
-          (PULP_SB_REG_PI GPR:$Rs2, GPR:$Rs1, GPR:$rs3)>;
-def : Pat<(post_truncsti16 GPR:$Rs2, GPR:$Rs1, GPR:$rs3),
-          (PULP_SH_REG_PI GPR:$Rs2, GPR:$Rs1, GPR:$rs3)>;
-def : Pat<(post_store i32:$Rs2, i32:$Rs1, GPR:$rs3),
-          (PULP_SW_REG_PI GPR:$Rs2, GPR:$Rs1, GPR:$rs3)>;
-
-// Patterns: Loads with Immediate increment
-def : Pat<(post_loadi8 GPR:$Rs1, simm12:$imm12),
-          (PULP_LB_IMM_PI GPR:$Rs1, simm12:$imm12)>;
-def : Pat<(post_loadi8u GPR:$Rs1, simm12:$imm12),
-          (PULP_LBU_IMM_PI GPR:$Rs1, simm12:$imm12)>;
-def : Pat<(post_loadi16 GPR:$Rs1, simm12:$imm12),
-          (PULP_LH_IMM_PI GPR:$Rs1, simm12:$imm12)>;
-def : Pat<(post_loadi16u GPR:$Rs1, simm12:$imm12),
-          (PULP_LHU_IMM_PI GPR:$Rs1, simm12:$imm12)>;
-def : Pat<(post_loadi32 GPR:$Rs1, simm12:$imm12),
-          (PULP_LW_IMM_PI GPR:$Rs1, simm12:$imm12)>;
-def : Pat<(post_loadi32u GPR:$Rs1, simm12:$imm12),
-          (PULP_LW_IMM_PI GPR:$Rs1, simm12:$imm12)>;
-
-// Patterns: Loads with Register increment
-def : Pat<(post_loadi8 GPR:$Rs1, GPR:$Rs2),
-          (PULP_LB_REG_PI GPR:$Rs1, GPR:$Rs2)>;
-def : Pat<(post_loadi8u GPR:$Rs1, GPR:$Rs2),
-          (PULP_LBU_REG_PI GPR:$Rs1, GPR:$Rs2)>;
-def : Pat<(post_loadi16 GPR:$Rs1, GPR:$Rs2),
-          (PULP_LH_REG_PI GPR:$Rs1, GPR:$Rs2)>;
-def : Pat<(post_loadi16u GPR:$Rs1, GPR:$Rs2),
-          (PULP_LHU_REG_PI GPR:$Rs1, GPR:$Rs2)>;
-def : Pat<(post_loadi32 GPR:$Rs1, GPR:$Rs2),
-          (PULP_LW_REG_PI GPR:$Rs1, GPR:$Rs2)>;
-def : Pat<(post_loadi32u GPR:$Rs1, GPR:$Rs2),
-          (PULP_LW_REG_PI GPR:$Rs1, GPR:$Rs2)>;
 
 multiclass int_mul_mac_N_RN<string intrin, string instr> {
   // mul<op>N: mul op with normalization factor as immediate

@@ -168,30 +168,11 @@ def OPC_PULP_LPI : RISCVOpcode<"PULP_LPI", 0b0001011>;
 def OPC_PULP_SPI : RISCVOpcode<"PULP_SPI", 0b0101011>;
 def OPC_PULP_LPI_RR : RISCVOpcode<"PULP_LPI_RR", 0b0000011>;
 def OPC_PULP_SPI_RR : RISCVOpcode<"PULP_SPI_RR", 0b0100011>;
-def OPC_PULP_LOOP : RISCVOpcode<"LP", 0b1111011>;
 
 //===----------------------------------------------------------------------===//
 // Instruction class templates
 //===----------------------------------------------------------------------===//
 let Predicates = [IsRV32, HasPULPExtV2], DecoderNamespace = "RV32Xpulp" in {
-
-// class RVInstPULPBit<bits<7> funct7, bits<3> funct3, RISCVOpcode opcode, dag outs,
-//                     dag ins, string opcodestr, string argstr>
-//     : RVInst<outs, ins, opcodestr, argstr, [], InstFormatOther>,
-//     Sched<[WriteIALU, ReadIALU]> {
-//   bits<5> rs1;
-//   bits<5> ls2;
-//   bits<5> ls3;
-//   bits<5> rd;
-
-//   let Inst{31-30} = 0b11;
-//   let Inst{29-25} = ls3;
-//   let Inst{24-20} = ls2;
-//   let Inst{19-15} = rs1;
-//   let Inst{14-12} = funct3;
-//   let Inst{11-7} = rd;
-//   let Opcode = opcode.Value;
-// }
 
 // Instruction class: Stores with Immediate increment
 let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
@@ -222,7 +203,7 @@ class PULP_Load_rr_postinc<bits<7> funct7, bits<3> funct3, string opcodestr>
               opcodestr, "$rd, ${rs2}(${rs1}!)">;
 }
 
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0, Predicates = [IsRV32, HasPULPExtV2] in {
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in {
 class Pulp_ALU_r<bits<7> funct7, bits<3> funct3,
                  RISCVOpcode opcode, string opcodestr>
     : RVInstR<funct7, funct3, opcode, (outs GPR:$rd), (ins GPR:$rs1),
@@ -326,7 +307,7 @@ class Pulp_ALU_rri_wb<bits<2> funct2, bits<3> funct3, RISCVOpcode opcode, string
   let Constraints = "$rd = $rd_wb";
 }
 
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0, Predicates = [IsRV32, HasPULPExtV2] in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 class Pulp_ALU_vsci<bits<5> funct5, bit F, bits<3> funct3, string opcodestr,
                     RegisterClass vec, Operand sci, RegisterClass res = vec>
     : RVInst<(outs res:$rd), (ins vec:$rs1, sci:$Imm6), opcodestr,
@@ -346,7 +327,7 @@ class Pulp_ALU_vsci<bits<5> funct5, bit F, bits<3> funct3, string opcodestr,
   let Opcode = 0b1010111;
 }
 
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0, Predicates = [IsRV32, HasPULPExtV2] in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 class Pulp_ALU_vsci_wb<bits<5> funct5, bit F, bits<3> funct3, string opcodestr,
                     RegisterClass vec, Operand sci, RegisterClass res = vec>
     : RVInst<(outs res:$rd_wb), (ins res:$rd, vec:$rs1, sci:$Imm6), opcodestr,
@@ -368,7 +349,7 @@ class Pulp_ALU_vsci_wb<bits<5> funct5, bit F, bits<3> funct3, string opcodestr,
 }
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0,
-    isBranch = 1, isTerminator = 1, Predicates = [IsRV32, HasPULPExtV2] in
+    isBranch = 1, isTerminator = 1 in
 class Pulp_Immediate_Branch<bits<3> funct3, string opcodestr>
       : RVInstB<funct3, OPC_BRANCH, (outs),
                 (ins GPR:$rs1, simm5:$rs2, simm13_lsb0:$imm12),
@@ -993,13 +974,6 @@ let isCodeGenOnly = 1 in { // Helper for Patterns
   def PV_SHUFFLE_B_GPR : Pulp_ALU_rr<0b1100000, 0b001, OPC_OP_V, "pv.shuffle.b", PulpV4, GPR, GPR>;
 }
 
-} // Predicates = [IsRV32, HasPULPExtV2], DecoderNamespace = "RV32Xpulp"
-
-//===----------------------------------------------------------------------===//
-// Assembler Pseudo Instructions (User-Level ISA)
-//===----------------------------------------------------------------------===//
-
-let Predicates = [IsRV32, HasPULPExtV2], DecoderNamespace = "RV32Xpulp" in {
 } // Predicates = [IsRV32, HasPULPExtV2], DecoderNamespace = "RV32Xpulp"
 
 //===----------------------------------------------------------------------===//

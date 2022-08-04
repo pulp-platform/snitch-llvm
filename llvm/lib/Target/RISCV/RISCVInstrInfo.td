@@ -1581,4 +1581,8 @@ include "RISCVInstrInfoZfh.td"
 // Non-standard extensions
 //===----------------------------------------------------------------------===//
 
-include "RISCVInstrInfoPULP.td"
+include "RISCVInstrInfoXfrep.td"
+include "RISCVInstrInfoXdma.td"
+include "RISCVInstrInfoXssr.td"
+include "RISCVInstrInfoXsmallfloat.td"
+include "RISCVInstrInfoXpulp.td"

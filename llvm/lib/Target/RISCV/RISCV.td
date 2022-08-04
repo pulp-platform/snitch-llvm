@@ -475,10 +475,6 @@ include "RISCVSchedMempool.td"
 include "RISCVSchedRocket.td"
 include "RISCVSchedSiFive7.td"
 include "RISCVSchedSnitch.td"
-include "RISCVInstrInfoXfrep.td"
-include "RISCVInstrInfoXdma.td"
-include "RISCVInstrInfoXssr.td"
-include "RISCVInstrInfoXsmallfloat.td"
 
 //===----------------------------------------------------------------------===//
 // RISC-V processors supported.

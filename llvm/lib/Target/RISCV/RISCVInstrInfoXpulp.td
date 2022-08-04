@@ -6,9 +6,69 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file describes the RISC-V instructions from the PULP extension.
+// This file describes the RISC-V instructions from the non-standard 'PULP'
+// instruction set extension.
 //
 //===----------------------------------------------------------------------===//
+
+//===----------------------------------------------------------------------===//
+// RISC-V specific DAG Nodes
+//===----------------------------------------------------------------------===//
+
+def uimm1 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<1>(Imm);}]> {
+  let ParserMatchClass = UImmAsmOperand<1>;
+  let EncoderMethod = "getImmOpValue";
+  let DecoderMethod = "decodeUImmOperand<1>";
+  let MCOperandPredicate = [{
+    int64_t Imm;
+    if (MCOp.evaluateAsConstantImm(Imm))
+      return isUInt<1>(Imm);
+    return MCOp.isBareSymbolRef();
+  }];
+}
+
+def uimm13_lsb0 : Operand<OtherVT>,
+                  ImmLeaf<XLenVT, [{return isShiftedUInt<12, 1>(Imm);}]>  {
+  let ParserMatchClass = UImmAsmOperand<13, "Lsb0">;
+  let EncoderMethod = "getImmOpValueAsr1";
+  let DecoderMethod = "decodeUImmOperand<13>";
+  let MCOperandPredicate = [{
+    int64_t Imm;
+    if (MCOp.evaluateAsConstantImm(Imm))
+      return isShiftedInt<12, 1>(Imm);
+    return MCOp.isBareSymbolRef();
+  }];
+}
+
+def uimm6 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<6>(Imm);}]> {
+  let ParserMatchClass = UImmAsmOperand<6>;
+  let EncoderMethod = "getImmOpValue";
+  let DecoderMethod = "decodeUImmOperand<6>";
+  let MCOperandPredicate = [{
+    int64_t Imm;
+    if (MCOp.evaluateAsConstantImm(Imm))
+      return isUInt<6>(Imm);
+    return MCOp.isBareSymbolRef();
+  }];
+}
+
+def uimm6_lsb0 : Operand<OtherVT>,
+                 ImmLeaf<XLenVT, [{return isShiftedUInt<5, 1>(Imm);}]>  {
+  let ParserMatchClass = UImmAsmOperand<6, "Lsb0">;
+  let EncoderMethod = "getImmOpValueAsr1";
+  let DecoderMethod = "decodeUImmOperand<13>";
+  let MCOperandPredicate = [{
+    int64_t Imm;
+    if (MCOp.evaluateAsConstantImm(Imm))
+      return isShiftedInt<5, 1>(Imm);
+    return MCOp.isBareSymbolRef();
+  }];
+}
+
+def uimm12pcrel : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<12>(Imm);}]> {
+  let ParserMatchClass = UImmAsmOperand<12>;
+  let DecoderMethod = "decodeUImmOperand<12>";
+}
 
 // tuimm12 predicate - same ass uimm, but use TargetConstant (TImmLeaf)
 // instead of Constant (ImmLeaf)
@@ -37,48 +97,375 @@ def tuimm5 : Operand<XLenVT>, TImmLeaf<XLenVT, [{return isUInt<5>(Imm);}]> {
   let OperandNamespace = "RISCVOp";
 }
 
+def powerOf2Minus1      : TImmLeaf<XLenVT, [{ return isPowerOf2_32(Imm+1);   }]>;
+def negativePowerOf2    : TImmLeaf<XLenVT, [{ return isPowerOf2_32(-Imm);    }]>;
+def powerOf2            : TImmLeaf<XLenVT, [{ return isPowerOf2_32(Imm);     }]>;
+def mask                : TImmLeaf<XLenVT, [{ return isMask_32(Imm);         }]>;
+def flippedMask         : TImmLeaf<XLenVT, [{ return isMask_32(~Imm);        }]>;
+def shiftedMask         : TImmLeaf<XLenVT, [{ return isShiftedMask_32(Imm);  }]>;
+def shiftedFlippedMask  : TImmLeaf<XLenVT, [{ return isShiftedMask_32(~Imm); }]>;
+
+//===----------------------------------------------------------------------===//
+// Operand and SDNode transformation definitions.
+//===----------------------------------------------------------------------===//
+
+def trailing1sPlus1 : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(
+                          countTrailingOnes<uint32_t>(N->getSExtValue()) + 1,
+                          SDLoc(N), N->getValueType(0));
+}]>;
+
+def 31minus : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(31 - N->getSExtValue(),
+                                   SDLoc(N), N->getValueType(0));
+}]>;
+
+def extractOffset : SDNodeXForm<sra, [{
+  return CurDAG->getTargetConstant(N->getConstantOperandVal(1)
+                                   - N->getOperand(0)->getConstantOperandVal(1),
+                                   SDLoc(N), N->getValueType(0));
+}]>;
+
+def trailing1s : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(
+                          countTrailingOnes<uint32_t>(N->getSExtValue()),
+                          SDLoc(N), N->getValueType(0));
+}]>;
+
+def flippedMaskWidthMinus1 : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(31
+                          - countLeadingOnes<uint32_t>(N->getSExtValue())
+                          - countTrailingOnes<uint32_t>(N->getSExtValue()),
+                          SDLoc(N), N->getValueType(0));
+}]>;
+
+def trailing0s : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(
+                          countTrailingZeros<uint32_t>(N->getSExtValue()),
+                          SDLoc(N), N->getValueType(0));
+}]>;
+
+def maskWidthMinus1 : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(31
+                          - countLeadingZeros<uint32_t>(N->getSExtValue())
+                          - countTrailingZeros<uint32_t>(N->getSExtValue()),
+                          SDLoc(N), N->getValueType(0));
+}]>;
+
+// // Converts an immediate offset into an immediate mask with
+// // only one bit set in the position specified by the offset
+// // value itself (aka: at an offset from the lsb)
+// def offsetMask : SDNodeXForm<timm, [{
+//   return CurDAG->getTargetConstant(0x1u << N->getSExtValue(),
+//                                    SDLoc(N), N->getValueType(0));
+// }]>;
+
+//===----------------------------------------------------------------------===//
+// Opcodes
+//===----------------------------------------------------------------------===//
+
+def OPC_PULP_LPI : RISCVOpcode<"PULP_LPI", 0b0001011>;
+def OPC_PULP_SPI : RISCVOpcode<"PULP_SPI", 0b0101011>;
+def OPC_PULP_LPI_RR : RISCVOpcode<"PULP_LPI_RR", 0b0000011>;
+def OPC_PULP_SPI_RR : RISCVOpcode<"PULP_SPI_RR", 0b0100011>;
+def OPC_PULP_LOOP : RISCVOpcode<"LP", 0b1111011>;
+
 //===----------------------------------------------------------------------===//
 // Instruction class templates
 //===----------------------------------------------------------------------===//
+let Predicates = [IsRV32, HasPULPExtV2], DecoderNamespace = "RV32Xpulp" in {
 
-class RVInstPULPBit<bits<7> funct7, bits<3> funct3, RISCVOpcode opcode, dag outs,
-                    dag ins, string opcodestr, string argstr>
-    : RVInst<outs, ins, opcodestr, argstr, [], InstFormatOther>,
-    Sched<[WriteIALU, ReadIALU]> {
+// class RVInstPULPBit<bits<7> funct7, bits<3> funct3, RISCVOpcode opcode, dag outs,
+//                     dag ins, string opcodestr, string argstr>
+//     : RVInst<outs, ins, opcodestr, argstr, [], InstFormatOther>,
+//     Sched<[WriteIALU, ReadIALU]> {
+//   bits<5> rs1;
+//   bits<5> ls2;
+//   bits<5> ls3;
+//   bits<5> rd;
+
+//   let Inst{31-30} = 0b11;
+//   let Inst{29-25} = ls3;
+//   let Inst{24-20} = ls2;
+//   let Inst{19-15} = rs1;
+//   let Inst{14-12} = funct3;
+//   let Inst{11-7} = rd;
+//   let Opcode = opcode.Value;
+// }
+
+// Instruction class: Stores with Immediate increment
+let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
+class PULP_Store_rri_postinc<bits<3> funct3, string opcodestr>
+    : RVInstS<funct3, OPC_PULP_SPI, (outs GPR:$rd),
+              (ins GPR:$rs2, GPR:$rs1, simm12:$imm12),
+              opcodestr, "$rs2, ${imm12}(${rs1}!)">;
+
+// Instruction class: Stores with Register increment
+let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
+class PULP_Store_rrr_postinc<bits<7> funct7, bits<3> funct3, string opcodestr>
+    : RVInstR<funct7, funct3, OPC_PULP_SPI, (outs GPR:$rd),
+              (ins GPR:$rs2, GPR:$rs1, GPR:$rs3),
+              opcodestr, "$rs2, ${rs3}(${rs1}!)">;
+
+// Instruction class: Loads with Immediate increment
+let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
+class PULP_Load_ri_postinc<bits<3> funct3, string opcodestr>
+    : RVInstI<funct3, OPC_PULP_LPI, (outs GPR:$rd, GPR:$rs1_wb),
+              (ins GPR:$rs1, simm12:$imm12),
+              opcodestr, "$rd, ${imm12}(${rs1}!)">;
+
+// Instruction class: Loads with Register increment
+let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
+class PULP_Load_rr_postinc<bits<7> funct7, bits<3> funct3, string opcodestr>
+    : RVInstR<funct7, funct3, OPC_PULP_LPI, (outs GPR:$rd, GPR:$rs1_wb),
+              (ins GPR:$rs1, GPR:$rs2),
+              opcodestr, "$rd, ${rs2}(${rs1}!)">;
+}
+
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, Predicates = [IsRV32, HasPULPExtV2] in {
+class Pulp_ALU_r<bits<7> funct7, bits<3> funct3,
+                 RISCVOpcode opcode, string opcodestr>
+    : RVInstR<funct7, funct3, opcode, (outs GPR:$rd), (ins GPR:$rs1),
+              opcodestr, "$rd, $rs1">,
+      Sched<[WriteIALU, ReadIALU]> {
+  let rs2 = 0;
+}
+
+class Pulp_ALU_rr<bits<7> funct7, bits<3> funct3, RISCVOpcode opcode, string opcodestr,
+                  RegisterClass ty1 = GPR, RegisterClass ty2 = ty1, RegisterClass resty = ty1>
+    : RVInstR<funct7, funct3, opcode, (outs resty:$rd), (ins ty1:$rs1, ty2:$rs2),
+              opcodestr, "$rd, $rs1, $rs2">,
+      Sched<[WriteIALU, ReadIALU, ReadIALU]>;
+
+class Pulp_ALU_rr_wb<bits<7> funct7, bits<3> funct3, RISCVOpcode opcode, string opcodestr,
+                     RegisterClass ty1 = GPR, RegisterClass ty2 = ty1, RegisterClass resty = ty1>
+    : RVInstR<funct7, funct3, opcode, (outs resty:$rd_wb), (ins resty:$rd, ty1:$rs1, ty2:$rs2),
+              opcodestr, "$rd, $rs1, $rs2">,
+      Sched<[WriteIALU, ReadIALU, ReadIALU]> {
+  let Constraints = "$rd = $rd_wb";
+}
+
+class Pulp_ALU_ri<bits<7> funct7, bits<3> funct3, string opcodestr>
+    : RVInstR<funct7, funct3, OPC_OP, (outs GPR:$rd), (ins GPR:$rs1, uimm5:$rs2),
+              opcodestr, "$rd, $rs1, $rs2">,
+      Sched<[WriteIALU, ReadIALU]>;
+
+class Pulp_ALU_rii<bits<2> funct2, bits<3> funct3, string opcodestr>
+    : RVInst<(outs GPR:$rd), (ins GPR:$rs1, uimm5:$Is3, uimm5:$Is2),
+              opcodestr, "$rd, $rs1, $Is3, $Is2", [], InstFormatOther>,
+      Sched<[WriteIALU, ReadIALU]> {
+  bits<5> Is3;
+  bits<5> Is2;
   bits<5> rs1;
-  bits<5> ls2;
-  bits<5> ls3;
   bits<5> rd;
 
-  let Inst{31-30} = 0b11;
-  let Inst{29-25} = ls3;
-  let Inst{24-20} = ls2;
+  let Inst{31-30} = funct2;
+  let Inst{29-25} = Is3;
+  let Inst{24-20} = Is2;
+  let Inst{19-15} = rs1;
+  let Inst{14-12} = funct3;
+  let Inst{11-7} = rd;
+  let Opcode = 0b0110011;
+}
+
+class Pulp_ALU_rii_wb<bits<2> funct2, bits<3> funct3, string opcodestr>
+    : RVInst<(outs GPR:$rd_wb), (ins GPR:$rd, GPR:$rs1, uimm5:$Is3, uimm5:$Is2),
+              opcodestr, "$rd, $rs1, $Is3, $Is2", [], InstFormatOther>,
+      Sched<[WriteIALU, ReadIALU]> {
+  bits<5> Is3;
+  bits<5> Is2;
+  bits<5> rs1;
+  bits<5> rd;
+
+  let Inst{31-30} = funct2;
+  let Inst{29-25} = Is3;
+  let Inst{24-20} = Is2;
+  let Inst{19-15} = rs1;
+  let Inst{14-12} = funct3;
+  let Inst{11-7} = rd;
+  let Opcode = 0b0110011;
+
+  let Constraints = "$rd = $rd_wb";
+}
+
+class Pulp_ALU_rri<bits<2> funct2, bits<3> funct3, RISCVOpcode opcode, string opcodestr>
+    : RVInst<(outs GPR:$rd), (ins GPR:$rs1, GPR:$rs2, uimm5:$Is3),
+              opcodestr, "$rd, $rs1, $rs2, $Is3", [], InstFormatOther>,
+      Sched<[WriteIALU, ReadIALU, ReadIALU]> {
+  bits<5> Is3;
+  bits<5> rs2;
+  bits<5> rs1;
+  bits<5> rd;
+
+  let Inst{31-30} = funct2;
+  let Inst{29-25} = Is3;
+  let Inst{24-20} = rs2;
   let Inst{19-15} = rs1;
   let Inst{14-12} = funct3;
   let Inst{11-7} = rd;
   let Opcode = opcode.Value;
 }
 
+class Pulp_ALU_rri_wb<bits<2> funct2, bits<3> funct3, RISCVOpcode opcode, string opcodestr>
+    : RVInst<(outs GPR:$rd_wb), (ins GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3),
+              opcodestr, "$rd, $rs1, $rs2, $Is3", [], InstFormatOther>,
+      Sched<[WriteIALU, ReadIALU, ReadIALU]> {
+  bits<5> Is3;
+  bits<5> rs2;
+  bits<5> rs1;
+  bits<5> rd;
+
+  let Inst{31-30} = funct2;
+  let Inst{29-25} = Is3;
+  let Inst{24-20} = rs2;
+  let Inst{19-15} = rs1;
+  let Inst{14-12} = funct3;
+  let Inst{11-7} = rd;
+  let Opcode = opcode.Value;
+
+  let Constraints = "$rd = $rd_wb";
+}
+
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, Predicates = [IsRV32, HasPULPExtV2] in
+class Pulp_ALU_vsci<bits<5> funct5, bit F, bits<3> funct3, string opcodestr,
+                    RegisterClass vec, Operand sci, RegisterClass res = vec>
+    : RVInst<(outs res:$rd), (ins vec:$rs1, sci:$Imm6), opcodestr,
+             "$rd, $rs1, $Imm6", [], InstFormatOther>,
+      Sched<[WriteIALU, ReadIALU]> {
+  bits<6> Imm6;
+  bits<5> rs1;
+  bits<5> rd;
+
+  let Inst{31-27} = funct5;
+  let Inst{26} = F;
+  let Inst{25} = Imm6{0};
+  let Inst{24-20} = Imm6{5-1};
+  let Inst{19-15} = rs1;
+  let Inst{14-12} = funct3;
+  let Inst{11-7} = rd;
+  let Opcode = 0b1010111;
+}
+
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, Predicates = [IsRV32, HasPULPExtV2] in
+class Pulp_ALU_vsci_wb<bits<5> funct5, bit F, bits<3> funct3, string opcodestr,
+                    RegisterClass vec, Operand sci, RegisterClass res = vec>
+    : RVInst<(outs res:$rd_wb), (ins res:$rd, vec:$rs1, sci:$Imm6), opcodestr,
+             "$rd, $rs1, $Imm6", [], InstFormatOther>,
+      Sched<[WriteIALU, ReadIALU]> {
+  bits<6> Imm6;
+  bits<5> rs1;
+  bits<5> rd;
+
+  let Constraints = "$rd = $rd_wb";
+  let Inst{31-27} = funct5;
+  let Inst{26} = F;
+  let Inst{25} = Imm6{0};
+  let Inst{24-20} = Imm6{5-1};
+  let Inst{19-15} = rs1;
+  let Inst{14-12} = funct3;
+  let Inst{11-7} = rd;
+  let Opcode = 0b1010111;
+}
+
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0,
+    isBranch = 1, isTerminator = 1, Predicates = [IsRV32, HasPULPExtV2] in
+class Pulp_Immediate_Branch<bits<3> funct3, string opcodestr>
+      : RVInstB<funct3, OPC_BRANCH, (outs),
+                (ins GPR:$rs1, simm5:$rs2, simm13_lsb0:$imm12),
+                opcodestr, "$rs1, $rs2, $imm12">,
+        Sched<[WriteJmp, ReadJmp, ReadJmp]>;
+
+multiclass SC_SCI_H_B<bits<5> funct5, bit F, Operand sci, string opcodestr> {
+  def _H     : Pulp_ALU_rr<{funct5, F, 0}, 0b000, OPC_OP_V, "pv." # opcodestr # ".h", PulpV2>;
+  def _SC_H  : Pulp_ALU_rr<{funct5, F, 0}, 0b100, OPC_OP_V, "pv." # opcodestr # ".sc.h", PulpV2, GPR>;
+  def _SCI_H : Pulp_ALU_vsci<funct5, F,    0b110,                         "pv." # opcodestr # ".sci.h", PulpV2, sci>;
+  def _B     : Pulp_ALU_rr<{funct5, F, 0}, 0b001, OPC_OP_V, "pv." # opcodestr # ".b", PulpV4>;
+  def _SC_B  : Pulp_ALU_rr<{funct5, F, 0}, 0b101, OPC_OP_V, "pv." # opcodestr # ".sc.b", PulpV4, GPR>;
+  def _SCI_B : Pulp_ALU_vsci<funct5, F,    0b111,                         "pv." # opcodestr # ".sci.b", PulpV4, sci>;
+}
+
+multiclass DOTP<bits<5> funct5, bit F, Operand sci, string opcodestr> {
+  def _H     : Pulp_ALU_rr<{funct5, F, 0}, 0b000, OPC_OP_V, "pv." # opcodestr # ".h", PulpV2, PulpV2, GPR>;
+  def _SC_H  : Pulp_ALU_rr<{funct5, F, 0}, 0b100, OPC_OP_V, "pv." # opcodestr # ".sc.h", PulpV2, GPR, GPR>;
+  def _SCI_H : Pulp_ALU_vsci<funct5, F,    0b110,                         "pv." # opcodestr # ".sci.h", PulpV2, sci, GPR>;
+  def _B     : Pulp_ALU_rr<{funct5, F, 0}, 0b001, OPC_OP_V, "pv." # opcodestr # ".b", PulpV4, PulpV4, GPR>;
+  def _SC_B  : Pulp_ALU_rr<{funct5, F, 0}, 0b101, OPC_OP_V, "pv." # opcodestr # ".sc.b", PulpV4, GPR, GPR>;
+  def _SCI_B : Pulp_ALU_vsci<funct5, F,    0b111,                         "pv." # opcodestr # ".sci.b", PulpV4, sci, GPR>;
+}
+
+multiclass SDOTP<bits<5> funct5, bit F, Operand sci, string opcodestr> {
+  def _H     : Pulp_ALU_rr_wb<{funct5, F, 0}, 0b000, OPC_OP_V, "pv." # opcodestr # ".h", PulpV2, PulpV2, GPR>;
+  def _SC_H  : Pulp_ALU_rr_wb<{funct5, F, 0}, 0b100, OPC_OP_V, "pv." # opcodestr # ".sc.h", PulpV2, GPR, GPR>;
+  def _SCI_H : Pulp_ALU_vsci_wb<funct5, F,    0b110,                         "pv." # opcodestr # ".sci.h", PulpV2, sci, GPR>;
+  def _B     : Pulp_ALU_rr_wb<{funct5, F, 0}, 0b001, OPC_OP_V, "pv." # opcodestr # ".b", PulpV4, PulpV4, GPR>;
+  def _SC_B  : Pulp_ALU_rr_wb<{funct5, F, 0}, 0b101, OPC_OP_V, "pv." # opcodestr # ".sc.b", PulpV4, GPR, GPR>;
+  def _SCI_B : Pulp_ALU_vsci_wb<funct5, F,    0b111,                         "pv." # opcodestr # ".sci.b", PulpV4, sci, GPR>;
+}
+
+let hasSideEffects = 0, mayLoad = 0, mayStore = 1, Predicates = [IsRV32, HasPULPExtV2] in
+multiclass Pulp_Store<bits<2> funct2, string opcodestr> {
+
+    def _ri_PostIncrement
+      : RVInstS<{0, funct2}, OPC_PULP_SPI, (outs GPR:$rs1_wb),
+      (ins GPR:$rs2, GPR:$rs1, simm12:$imm12), opcodestr, "$rs2, ${imm12}(${rs1}!)">{
+        let Constraints = "$rs1 = $rs1_wb";
+      }
+
+    def _rr_PostIncrement
+      : RVInstR<0b0000000, {1, funct2}, OPC_PULP_SPI, (outs GPR:$rs1_wb),
+      (ins GPR:$rs2, GPR:$rs1, GPR:$rd), opcodestr, "$rs2, ${rd}(${rs1}!)">{
+        let Constraints = "$rs1 = $rs1_wb";
+      }
+
+    def _rr
+      : RVInstR<0b0000000, {1, funct2}, OPC_PULP_SPI_RR, (outs),
+      (ins GPR:$rs2, GPR:$rs1, GPR:$rd), opcodestr, "$rs2, ${rd}(${rs1})">;
+}
+
+let hasSideEffects = 0, mayLoad = 1, mayStore = 0, Predicates = [IsRV32, HasPULPExtV2] in
+multiclass Pulp_Load<bits<7> funct7, bits<3> funct3, string opcodestr> {
+
+  def _ri_PostIncrement
+    : RVInstI<funct3, OPC_PULP_LPI, (outs GPR:$rd, GPR:$rs1_wb),
+    (ins GPR:$rs1, simm12:$imm12), opcodestr, "$rd, ${imm12}(${rs1}!)">{
+      let Constraints = "$rs1 = $rs1_wb";
+    }
+
+  def _rr_PostIncrement
+    : RVInstR<funct7, 0b111, OPC_PULP_LPI, (outs GPR:$rd, GPR:$rs1_wb),
+    (ins GPR:$rs1, GPR:$rs2), opcodestr, "$rd, ${rs2}(${rs1}!)">{
+      let Constraints = "$rs1 = $rs1_wb";
+    }
+
+  def _rr
+    : RVInstR<funct7, 0b111, OPC_PULP_LPI_RR, (outs GPR:$rd),
+    (ins GPR:$rs1, GPR:$rs2), opcodestr, "$rd, ${rs2}(${rs1})">;
+}
+
+let hasSideEffects = 0, mayStore = 0, mayLoad = 0, rs2 = 0 in {
+  def PV_ABS_H : RVInstR<0b0111000, 0b000, OPC_OP_V,
+                         (outs PulpV2:$rd), (ins PulpV2:$rs1),
+                         "pv.abs.h", "$rd, $rs1">, Sched<[WriteIALU, ReadIALU]>;
+
+  def PV_ABS_B : RVInstR<0b0111000, 0b001, OPC_OP_V,
+                         (outs PulpV4:$rd), (ins PulpV4:$rs1),
+                         "pv.abs.b", "$rd, $rs1">, Sched<[WriteIALU, ReadIALU]>;
+}
+
+} // Predicates = [IsRV32, HasPULPExtV2], DecoderNamespace = "RV32Xpulp"
+
 
 //===----------------------------------------------------------------------===//
 // Instructions
 //===----------------------------------------------------------------------===//
 
-let Predicates = [IsRV32, HasPULPExtV2] in {
-  let hasSideEffects = 1, mayStore = 1 in
-    def PULP_ELW : Load_ri<0b110, "p.elw">, Sched<[WriteLDW, ReadMemBase]>; // LWU in RV64
-}
+let Predicates = [IsRV32, HasPULPExtV2], DecoderNamespace = "RV32Xpulp" in {
 
-//===----------------------------------------------------------------------===//
-// PULPv2 Hardware Loops
-//===----------------------------------------------------------------------===//
+let hasSideEffects = 1, mayStore = 1 in
+  def PULP_ELW : Load_ri<0b110, "p.elw">, Sched<[WriteLDW, ReadMemBase]>;
 
-def uimm12pcrel : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<12>(Imm);}]> {
-  let ParserMatchClass = UImmAsmOperand<12>;
-  let DecoderMethod = "decodeUImmOperand<12>";
-}
+// Hardware loops
 
-let Predicates = [IsRV32, HasPULPExtV2] in {
 def LOOP0setup : Instruction, Sched<[ReadIALU, WriteCSR]> {
 
     bits<32> Inst;
@@ -402,50 +789,61 @@ def LOOP1count : Instruction, Sched<[ReadIALU, WriteCSR]> {
     dag OutOperandList = (outs);
 
     let AsmString = "lp.count\tx1, $uimmS";
-
-}
 }
 
+// Bit manipulation operations
+def P_EXTRACT :   Pulp_ALU_rii   <0b11, 0b000, "p.extract">;
+def P_EXTRACTU :  Pulp_ALU_rii   <0b11, 0b001, "p.extractu">;
+def P_INSERT :    Pulp_ALU_rii_wb<0b11, 0b010, "p.insert">;
+def P_BCLR :      Pulp_ALU_rii   <0b11, 0b011, "p.bclr">;
+def P_BSET :      Pulp_ALU_rii   <0b11, 0b100, "p.bset">;
 
-//===----------------------------------------------------------------------===//
-// Load/Store + Post Increment
-//===----------------------------------------------------------------------===//
+def P_EXTRACTR :  Pulp_ALU_rr   <0b1000000, 0b000, OPC_OP, "p.extractr">;
+def P_EXTRACTUR : Pulp_ALU_rr   <0b1000000, 0b001, OPC_OP, "p.extractur">;
+def P_INSERTR :   Pulp_ALU_rr_wb<0b1000000, 0b010, OPC_OP, "p.insertr">;
+def P_BCLRR :     Pulp_ALU_rr   <0b1000000, 0b011, OPC_OP, "p.bclrr">;
+def P_BSETR :     Pulp_ALU_rr   <0b1000000, 0b100, OPC_OP, "p.bsetr">;
 
-// Opcodes
-def OPC_PULP_LPI : RISCVOpcode<"PULP_LPI", 0b0001011>;
-def OPC_PULP_SPI : RISCVOpcode<"PULP_SPI", 0b0101011>;
-def OPC_PULP_LPI_RR : RISCVOpcode<"PULP_LPI_RR", 0b0000011>;
-def OPC_PULP_SPI_RR : RISCVOpcode<"PULP_SPI_RR", 0b0100011>;
+def P_ROR :       Pulp_ALU_rr<0b0000100, 0b101, OPC_OP, "p.ror">;
+def P_FF1 :       Pulp_ALU_r <0b0001000, 0b000, OPC_OP, "p.ff1">;
+def P_FL1 :       Pulp_ALU_r <0b0001000, 0b001, OPC_OP, "p.fl1">;
+def P_CLB :       Pulp_ALU_r <0b0001000, 0b010, OPC_OP, "p.clb">;
+def P_CNT :       Pulp_ALU_r <0b0001000, 0b011, OPC_OP, "p.cnt">;
 
-// Instruction class: Stores with Immediate increment
-let Predicates = [IsRV32, HasPULPExtV2] in {
-let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
-class PULP_Store_rri_postinc<bits<3> funct3, string opcodestr>
-    : RVInstS<funct3, OPC_PULP_SPI, (outs GPR:$rd),
-              (ins GPR:$rs2, GPR:$rs1, simm12:$imm12),
-              opcodestr, "$rs2, ${imm12}(${rs1}!)">;
+// General ALU operations
+def P_ABS :    Pulp_ALU_r <0b0000010, 0b000, OPC_OP, "p.abs">;
+def P_SLET :   Pulp_ALU_rr<0b0000010, 0b010, OPC_OP, "p.slet">;
+def P_SLETU :  Pulp_ALU_rr<0b0000010, 0b011, OPC_OP, "p.sletu">;
+def P_MIN :    Pulp_ALU_rr<0b0000010, 0b100, OPC_OP, "p.min">;
+def P_MINU :   Pulp_ALU_rr<0b0000010, 0b101, OPC_OP, "p.minu">;
+def P_MAX :    Pulp_ALU_rr<0b0000010, 0b110, OPC_OP, "p.max">;
+def P_MAXU :   Pulp_ALU_rr<0b0000010, 0b111, OPC_OP, "p.maxu">;
+def P_EXTHS :  Pulp_ALU_r <0b0001000, 0b100, OPC_OP, "p.exths">;
+def P_EXTHZ :  Pulp_ALU_r <0b0001000, 0b101, OPC_OP, "p.exthz">;
+def P_EXTBS :  Pulp_ALU_r <0b0001000, 0b110, OPC_OP, "p.extbs">;
+def P_EXTBZ :  Pulp_ALU_r <0b0001000, 0b111, OPC_OP, "p.extbz">;
 
-// Instruction class: Stores with Register increment
-let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
-class PULP_Store_rrr_postinc<bits<7> funct7, bits<3> funct3, string opcodestr>
-    : RVInstR<funct7, funct3, OPC_PULP_SPI, (outs GPR:$rd),
-              (ins GPR:$rs2, GPR:$rs1, GPR:$rs3),
-              opcodestr, "$rs2, ${rs3}(${rs1}!)">;
+def P_CLIP :   Pulp_ALU_ri<0b0001010, 0b001, "p.clip">;
+def P_CLIPU :  Pulp_ALU_ri<0b0001010, 0b010, "p.clipu">;
+def P_CLIPR :  Pulp_ALU_rr<0b0001010, 0b101, OPC_OP, "p.clipr">;
+def P_CLIPUR : Pulp_ALU_rr<0b0001010, 0b110, OPC_OP, "p.clipur">;
 
-// Instruction class: Loads with Immediate increment
-let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
-class PULP_Load_ri_postinc<bits<3> funct3, string opcodestr>
-    : RVInstI<funct3, OPC_PULP_LPI, (outs GPR:$rd, GPR:$rs1_wb),
-              (ins GPR:$rs1, simm12:$imm12),
-              opcodestr, "$rd, ${imm12}(${rs1}!)">;
-
-// Instruction class: Loads with Register increment
-let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
-class PULP_Load_rr_postinc<bits<7> funct7, bits<3> funct3, string opcodestr>
-    : RVInstR<funct7, funct3, OPC_PULP_LPI, (outs GPR:$rd, GPR:$rs1_wb),
-              (ins GPR:$rs1, GPR:$rs2),
-              opcodestr, "$rd, ${rs2}(${rs1}!)">;
-}
+def P_ADDN :    Pulp_ALU_rri<0b00, 0b010, OPC_OP, "p.addn">;
+def P_ADDUN :   Pulp_ALU_rri<0b10, 0b010, OPC_OP, "p.addun">;
+def P_ADDRN :   Pulp_ALU_rri<0b00, 0b110, OPC_OP, "p.addrn">;
+def P_ADDURN :  Pulp_ALU_rri<0b10, 0b110, OPC_OP, "p.addurn">;
+def P_SUBN :    Pulp_ALU_rri<0b00, 0b011, OPC_OP, "p.subn">;
+def P_SUBUN :   Pulp_ALU_rri<0b10, 0b011, OPC_OP, "p.subun">;
+def P_SUBRN :   Pulp_ALU_rri<0b00, 0b111, OPC_OP, "p.subrn">;
+def P_SUBURN :  Pulp_ALU_rri<0b10, 0b111, OPC_OP, "p.suburn">;
+def P_ADDNR :   Pulp_ALU_rr_wb<0b0100000, 0b010, OPC_OP, "p.addnr">;
+def P_ADDUNR :  Pulp_ALU_rr_wb<0b1100000, 0b010, OPC_OP, "p.addunr">;
+def P_ADDRNR :  Pulp_ALU_rr_wb<0b0100000, 0b110, OPC_OP, "p.addrnr">;
+def P_ADDURNR : Pulp_ALU_rr_wb<0b1100000, 0b110, OPC_OP, "p.addurnr">;
+def P_SUBNR :   Pulp_ALU_rr_wb<0b0100000, 0b011, OPC_OP, "p.subnr">;
+def P_SUBUNR :  Pulp_ALU_rr_wb<0b1100000, 0b011, OPC_OP, "p.subunr">;
+def P_SUBRNR :  Pulp_ALU_rr_wb<0b0100000, 0b111, OPC_OP, "p.subrnr">;
+def P_SUBURNR : Pulp_ALU_rr_wb<0b1100000, 0b111, OPC_OP, "p.suburnr">;
 
 // Instructions: Stores with Immediate increment
 def PULP_SB_IMM_PI : PULP_Store_rri_postinc<0b000, "p.sb">,
@@ -487,229 +885,13 @@ def PULP_LHU_REG_PI : PULP_Load_rr_postinc<0b0101000, 0b111, "p.lhu">,
 def PULP_LW_REG_PI : PULP_Load_rr_postinc<0b0010000, 0b111, "p.lw">,
     Sched<[WriteLDW, WriteIALU, ReadIALU, ReadMemBase]>;
 
-// Patterns: Stores with Immediate increment
-def : Pat<(post_truncsti8 GPR:$Rs2, GPR:$Rs1, simm12:$imm12),
-          (PULP_SB_IMM_PI GPR:$Rs2, GPR:$Rs1, simm12:$imm12)>;
-def : Pat<(post_truncsti16 GPR:$Rs2, GPR:$Rs1, simm12:$imm12),
-          (PULP_SH_IMM_PI GPR:$Rs2, GPR:$Rs1, simm12:$imm12)>;
-def : Pat<(post_store i32:$Rs2, GPR:$Rs1, simm12:$imm12),
-          (PULP_SW_IMM_PI GPR:$Rs2, GPR:$Rs1, simm12:$imm12)>;
-
-// Patterns: Stores with Register increment
-def : Pat<(post_truncsti8 GPR:$Rs2, GPR:$Rs1, GPR:$rs3),
-          (PULP_SB_REG_PI GPR:$Rs2, GPR:$Rs1, GPR:$rs3)>;
-def : Pat<(post_truncsti16 GPR:$Rs2, GPR:$Rs1, GPR:$rs3),
-          (PULP_SH_REG_PI GPR:$Rs2, GPR:$Rs1, GPR:$rs3)>;
-def : Pat<(post_store i32:$Rs2, i32:$Rs1, GPR:$rs3),
-          (PULP_SW_REG_PI GPR:$Rs2, GPR:$Rs1, GPR:$rs3)>;
-
-// Patterns: Loads with Immediate increment
-def : Pat<(post_loadi8 GPR:$Rs1, simm12:$imm12),
-          (PULP_LB_IMM_PI GPR:$Rs1, simm12:$imm12)>;
-def : Pat<(post_loadi8u GPR:$Rs1, simm12:$imm12),
-          (PULP_LBU_IMM_PI GPR:$Rs1, simm12:$imm12)>;
-def : Pat<(post_loadi16 GPR:$Rs1, simm12:$imm12),
-          (PULP_LH_IMM_PI GPR:$Rs1, simm12:$imm12)>;
-def : Pat<(post_loadi16u GPR:$Rs1, simm12:$imm12),
-          (PULP_LHU_IMM_PI GPR:$Rs1, simm12:$imm12)>;
-def : Pat<(post_loadi32 GPR:$Rs1, simm12:$imm12),
-          (PULP_LW_IMM_PI GPR:$Rs1, simm12:$imm12)>;
-def : Pat<(post_loadi32u GPR:$Rs1, simm12:$imm12),
-          (PULP_LW_IMM_PI GPR:$Rs1, simm12:$imm12)>;
-
-// Patterns: Loads with Register increment
-def : Pat<(post_loadi8 GPR:$Rs1, GPR:$Rs2),
-          (PULP_LB_REG_PI GPR:$Rs1, GPR:$Rs2)>;
-def : Pat<(post_loadi8u GPR:$Rs1, GPR:$Rs2),
-          (PULP_LBU_REG_PI GPR:$Rs1, GPR:$Rs2)>;
-def : Pat<(post_loadi16 GPR:$Rs1, GPR:$Rs2),
-          (PULP_LH_REG_PI GPR:$Rs1, GPR:$Rs2)>;
-def : Pat<(post_loadi16u GPR:$Rs1, GPR:$Rs2),
-          (PULP_LHU_REG_PI GPR:$Rs1, GPR:$Rs2)>;
-def : Pat<(post_loadi32 GPR:$Rs1, GPR:$Rs2),
-          (PULP_LW_REG_PI GPR:$Rs1, GPR:$Rs2)>;
-def : Pat<(post_loadi32u GPR:$Rs1, GPR:$Rs2),
-          (PULP_LW_REG_PI GPR:$Rs1, GPR:$Rs2)>;
-
-//===----------------------------------------------------------------------===//
-//===----------------------------------------------------------------------===//
-
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0, Predicates = [IsRV32, HasPULPExtV2] in {
-class Pulp_ALU_r<bits<7> funct7, bits<3> funct3,
-                 RISCVOpcode opcode, string opcodestr>
-    : RVInstR<funct7, funct3, opcode, (outs GPR:$rd), (ins GPR:$rs1),
-              opcodestr, "$rd, $rs1">,
-      Sched<[WriteIALU, ReadIALU]> {
-  let rs2 = 0;
-}
-
-class Pulp_ALU_rr<bits<7> funct7, bits<3> funct3, RISCVOpcode opcode, string opcodestr,
-                  RegisterClass ty1 = GPR, RegisterClass ty2 = ty1, RegisterClass resty = ty1>
-    : RVInstR<funct7, funct3, opcode, (outs resty:$rd), (ins ty1:$rs1, ty2:$rs2),
-              opcodestr, "$rd, $rs1, $rs2">,
-      Sched<[WriteIALU, ReadIALU, ReadIALU]>;
-
-class Pulp_ALU_rr_wb<bits<7> funct7, bits<3> funct3, RISCVOpcode opcode, string opcodestr,
-                     RegisterClass ty1 = GPR, RegisterClass ty2 = ty1, RegisterClass resty = ty1>
-    : RVInstR<funct7, funct3, opcode, (outs resty:$rd_wb), (ins resty:$rd, ty1:$rs1, ty2:$rs2),
-              opcodestr, "$rd, $rs1, $rs2">,
-      Sched<[WriteIALU, ReadIALU, ReadIALU]> {
-  let Constraints = "$rd = $rd_wb";
-}
-
-class Pulp_ALU_ri<bits<7> funct7, bits<3> funct3, string opcodestr>
-    : RVInstR<funct7, funct3, OPC_OP, (outs GPR:$rd), (ins GPR:$rs1, uimm5:$rs2),
-              opcodestr, "$rd, $rs1, $rs2">,
-      Sched<[WriteIALU, ReadIALU]>;
-
-class Pulp_ALU_rii<bits<2> funct2, bits<3> funct3, string opcodestr>
-    : RVInst<(outs GPR:$rd), (ins GPR:$rs1, uimm5:$Is3, uimm5:$Is2),
-              opcodestr, "$rd, $rs1, $Is3, $Is2", [], InstFormatOther>,
-      Sched<[WriteIALU, ReadIALU]> {
-  bits<5> Is3;
-  bits<5> Is2;
-  bits<5> rs1;
-  bits<5> rd;
-
-  let Inst{31-30} = funct2;
-  let Inst{29-25} = Is3;
-  let Inst{24-20} = Is2;
-  let Inst{19-15} = rs1;
-  let Inst{14-12} = funct3;
-  let Inst{11-7} = rd;
-  let Opcode = 0b0110011;
-}
-
-class Pulp_ALU_rii_wb<bits<2> funct2, bits<3> funct3, string opcodestr>
-    : RVInst<(outs GPR:$rd_wb), (ins GPR:$rd, GPR:$rs1, uimm5:$Is3, uimm5:$Is2),
-              opcodestr, "$rd, $rs1, $Is3, $Is2", [], InstFormatOther>,
-      Sched<[WriteIALU, ReadIALU]> {
-  bits<5> Is3;
-  bits<5> Is2;
-  bits<5> rs1;
-  bits<5> rd;
-
-  let Inst{31-30} = funct2;
-  let Inst{29-25} = Is3;
-  let Inst{24-20} = Is2;
-  let Inst{19-15} = rs1;
-  let Inst{14-12} = funct3;
-  let Inst{11-7} = rd;
-  let Opcode = 0b0110011;
-
-  let Constraints = "$rd = $rd_wb";
-}
-
-class Pulp_ALU_rri<bits<2> funct2, bits<3> funct3, RISCVOpcode opcode, string opcodestr>
-    : RVInst<(outs GPR:$rd), (ins GPR:$rs1, GPR:$rs2, uimm5:$Is3),
-              opcodestr, "$rd, $rs1, $rs2, $Is3", [], InstFormatOther>,
-      Sched<[WriteIALU, ReadIALU, ReadIALU]> {
-  bits<5> Is3;
-  bits<5> rs2;
-  bits<5> rs1;
-  bits<5> rd;
-
-  let Inst{31-30} = funct2;
-  let Inst{29-25} = Is3;
-  let Inst{24-20} = rs2;
-  let Inst{19-15} = rs1;
-  let Inst{14-12} = funct3;
-  let Inst{11-7} = rd;
-  let Opcode = opcode.Value;
-}
-
-class Pulp_ALU_rri_wb<bits<2> funct2, bits<3> funct3, RISCVOpcode opcode, string opcodestr>
-    : RVInst<(outs GPR:$rd_wb), (ins GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3),
-              opcodestr, "$rd, $rs1, $rs2, $Is3", [], InstFormatOther>,
-      Sched<[WriteIALU, ReadIALU, ReadIALU]> {
-  bits<5> Is3;
-  bits<5> rs2;
-  bits<5> rs1;
-  bits<5> rd;
-
-  let Inst{31-30} = funct2;
-  let Inst{29-25} = Is3;
-  let Inst{24-20} = rs2;
-  let Inst{19-15} = rs1;
-  let Inst{14-12} = funct3;
-  let Inst{11-7} = rd;
-  let Opcode = opcode.Value;
-
-  let Constraints = "$rd = $rd_wb";
-}
-}
-
-// Bit manipulation operations
-def P_EXTRACT :   Pulp_ALU_rii   <0b11, 0b000, "p.extract">;
-def P_EXTRACTU :  Pulp_ALU_rii   <0b11, 0b001, "p.extractu">;
-def P_INSERT :    Pulp_ALU_rii_wb<0b11, 0b010, "p.insert">;
-def P_BCLR :      Pulp_ALU_rii   <0b11, 0b011, "p.bclr">;
-def P_BSET :      Pulp_ALU_rii   <0b11, 0b100, "p.bset">;
-
-def P_EXTRACTR :  Pulp_ALU_rr   <0b1000000, 0b000, OPC_OP, "p.extractr">;
-def P_EXTRACTUR : Pulp_ALU_rr   <0b1000000, 0b001, OPC_OP, "p.extractur">;
-def P_INSERTR :   Pulp_ALU_rr_wb<0b1000000, 0b010, OPC_OP, "p.insertr">;
-def P_BCLRR :     Pulp_ALU_rr   <0b1000000, 0b011, OPC_OP, "p.bclrr">;
-def P_BSETR :     Pulp_ALU_rr   <0b1000000, 0b100, OPC_OP, "p.bsetr">;
-
-def P_ROR :       Pulp_ALU_rr<0b0000100, 0b101, OPC_OP, "p.ror">;
-def P_FF1 :       Pulp_ALU_r <0b0001000, 0b000, OPC_OP, "p.ff1">;
-def P_FL1 :       Pulp_ALU_r <0b0001000, 0b001, OPC_OP, "p.fl1">;
-def P_CLB :       Pulp_ALU_r <0b0001000, 0b010, OPC_OP, "p.clb">;
-def P_CNT :       Pulp_ALU_r <0b0001000, 0b011, OPC_OP, "p.cnt">;
-
-
-// General ALU operations
-def P_ABS :    Pulp_ALU_r <0b0000010, 0b000, OPC_OP, "p.abs">;
-def P_SLET :   Pulp_ALU_rr<0b0000010, 0b010, OPC_OP, "p.slet">;
-def P_SLETU :  Pulp_ALU_rr<0b0000010, 0b011, OPC_OP, "p.sletu">;
-def P_MIN :    Pulp_ALU_rr<0b0000010, 0b100, OPC_OP, "p.min">;
-def P_MINU :   Pulp_ALU_rr<0b0000010, 0b101, OPC_OP, "p.minu">;
-def P_MAX :    Pulp_ALU_rr<0b0000010, 0b110, OPC_OP, "p.max">;
-def P_MAXU :   Pulp_ALU_rr<0b0000010, 0b111, OPC_OP, "p.maxu">;
-def P_EXTHS :  Pulp_ALU_r <0b0001000, 0b100, OPC_OP, "p.exths">;
-def P_EXTHZ :  Pulp_ALU_r <0b0001000, 0b101, OPC_OP, "p.exthz">;
-def P_EXTBS :  Pulp_ALU_r <0b0001000, 0b110, OPC_OP, "p.extbs">;
-def P_EXTBZ :  Pulp_ALU_r <0b0001000, 0b111, OPC_OP, "p.extbz">;
-
-def P_CLIP :   Pulp_ALU_ri<0b0001010, 0b001, "p.clip">;
-def P_CLIPU :  Pulp_ALU_ri<0b0001010, 0b010, "p.clipu">;
-def P_CLIPR :  Pulp_ALU_rr<0b0001010, 0b101, OPC_OP, "p.clipr">;
-def P_CLIPUR : Pulp_ALU_rr<0b0001010, 0b110, OPC_OP, "p.clipur">;
-
-def P_ADDN :    Pulp_ALU_rri<0b00, 0b010, OPC_OP, "p.addn">;
-def P_ADDUN :   Pulp_ALU_rri<0b10, 0b010, OPC_OP, "p.addun">;
-def P_ADDRN :   Pulp_ALU_rri<0b00, 0b110, OPC_OP, "p.addrn">;
-def P_ADDURN :  Pulp_ALU_rri<0b10, 0b110, OPC_OP, "p.addurn">;
-def P_SUBN :    Pulp_ALU_rri<0b00, 0b011, OPC_OP, "p.subn">;
-def P_SUBUN :   Pulp_ALU_rri<0b10, 0b011, OPC_OP, "p.subun">;
-def P_SUBRN :   Pulp_ALU_rri<0b00, 0b111, OPC_OP, "p.subrn">;
-def P_SUBURN :  Pulp_ALU_rri<0b10, 0b111, OPC_OP, "p.suburn">;
-def P_ADDNR :   Pulp_ALU_rr_wb<0b0100000, 0b010, OPC_OP, "p.addnr">;
-def P_ADDUNR :  Pulp_ALU_rr_wb<0b1100000, 0b010, OPC_OP, "p.addunr">;
-def P_ADDRNR :  Pulp_ALU_rr_wb<0b0100000, 0b110, OPC_OP, "p.addrnr">;
-def P_ADDURNR : Pulp_ALU_rr_wb<0b1100000, 0b110, OPC_OP, "p.addurnr">;
-def P_SUBNR :   Pulp_ALU_rr_wb<0b0100000, 0b011, OPC_OP, "p.subnr">;
-def P_SUBUNR :  Pulp_ALU_rr_wb<0b1100000, 0b011, OPC_OP, "p.subunr">;
-def P_SUBRNR :  Pulp_ALU_rr_wb<0b0100000, 0b111, OPC_OP, "p.subrnr">;
-def P_SUBURNR : Pulp_ALU_rr_wb<0b1100000, 0b111, OPC_OP, "p.suburnr">;
-
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0,
-    isBranch = 1, isTerminator = 1, Predicates = [IsRV32, HasPULPExtV2] in
-class Pulp_Immediate_Branch<bits<3> funct3, string opcodestr>
-      : RVInstB<funct3, OPC_BRANCH, (outs),
-                (ins GPR:$rs1, simm5:$rs2, simm13_lsb0:$imm12),
-                opcodestr, "$rs1, $rs2, $imm12">,
-        Sched<[WriteJmp, ReadJmp, ReadJmp]>;
-
+// Instructions: immediate branches
 def P_BEQIMM : Pulp_Immediate_Branch<0b010, "p.beqimm">;
 def P_BNEIMM : Pulp_Immediate_Branch<0b011, "p.bneimm">;
 
-// MAC Operations
-
+// Instructions: MAC operations
 def P_MAC :      Pulp_ALU_rr_wb<0b0100001, 0b000, OPC_OP, "p.mac">;
 def P_MSU :      Pulp_ALU_rr_wb<0b0100001, 0b001, OPC_OP, "p.msu">;
-
 def P_MULS :     Pulp_ALU_rr   <0b1000000, 0b000, OPC_OP, "p.muls">;
 def P_MULHHS :   Pulp_ALU_rr   <0b1100000, 0b000, OPC_OP, "p.mulhhs">;
 def P_MULSN :    Pulp_ALU_rri       <0b10, 0b000, OPC_OP, "p.mulsn">;
@@ -735,93 +917,7 @@ def P_MACHHUN :  Pulp_ALU_rri_wb    <0b01, 0b001, OPC_OP, "p.machhun">;
 def P_MACURN :   Pulp_ALU_rri_wb    <0b00, 0b101, OPC_OP, "p.macurn">;
 def P_MACHHURN : Pulp_ALU_rri_wb    <0b01, 0b101, OPC_OP, "p.machhurn">;
 
-
-def uimm6 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<6>(Imm);}]> {
-  let ParserMatchClass = UImmAsmOperand<6>;
-  let EncoderMethod = "getImmOpValue";
-  let DecoderMethod = "decodeUImmOperand<6>";
-  let MCOperandPredicate = [{
-    int64_t Imm;
-    if (MCOp.evaluateAsConstantImm(Imm))
-      return isUInt<6>(Imm);
-    return MCOp.isBareSymbolRef();
-  }];
-}
-
-
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0, Predicates = [IsRV32, HasPULPExtV2] in
-class Pulp_ALU_vsci<bits<5> funct5, bit F, bits<3> funct3, string opcodestr,
-                    RegisterClass vec, Operand sci, RegisterClass res = vec>
-    : RVInst<(outs res:$rd), (ins vec:$rs1, sci:$Imm6), opcodestr,
-             "$rd, $rs1, $Imm6", [], InstFormatOther>,
-      Sched<[WriteIALU, ReadIALU]> {
-  bits<6> Imm6;
-  bits<5> rs1;
-  bits<5> rd;
-
-  let Inst{31-27} = funct5;
-  let Inst{26} = F;
-  let Inst{25} = Imm6{0};
-  let Inst{24-20} = Imm6{5-1};
-  let Inst{19-15} = rs1;
-  let Inst{14-12} = funct3;
-  let Inst{11-7} = rd;
-  let Opcode = 0b1010111;
-}
-
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0, Predicates = [IsRV32, HasPULPExtV2] in
-class Pulp_ALU_vsci_wb<bits<5> funct5, bit F, bits<3> funct3, string opcodestr,
-                    RegisterClass vec, Operand sci, RegisterClass res = vec>
-    : RVInst<(outs res:$rd_wb), (ins res:$rd, vec:$rs1, sci:$Imm6), opcodestr,
-             "$rd, $rs1, $Imm6", [], InstFormatOther>,
-      Sched<[WriteIALU, ReadIALU]> {
-  bits<6> Imm6;
-  bits<5> rs1;
-  bits<5> rd;
-
-  let Constraints = "$rd = $rd_wb";
-  let Inst{31-27} = funct5;
-  let Inst{26} = F;
-  let Inst{25} = Imm6{0};
-  let Inst{24-20} = Imm6{5-1};
-  let Inst{19-15} = rs1;
-  let Inst{14-12} = funct3;
-  let Inst{11-7} = rd;
-  let Opcode = 0b1010111;
-}
-
-
-multiclass SC_SCI_H_B<bits<5> funct5, bit F, Operand sci, string opcodestr> {
-  def _H     : Pulp_ALU_rr<{funct5, F, 0}, 0b000, OPC_OP_V, "pv." # opcodestr # ".h", PulpV2>;
-  def _SC_H  : Pulp_ALU_rr<{funct5, F, 0}, 0b100, OPC_OP_V, "pv." # opcodestr # ".sc.h", PulpV2, GPR>;
-  def _SCI_H : Pulp_ALU_vsci<funct5, F,    0b110,                         "pv." # opcodestr # ".sci.h", PulpV2, sci>;
-  def _B     : Pulp_ALU_rr<{funct5, F, 0}, 0b001, OPC_OP_V, "pv." # opcodestr # ".b", PulpV4>;
-  def _SC_B  : Pulp_ALU_rr<{funct5, F, 0}, 0b101, OPC_OP_V, "pv." # opcodestr # ".sc.b", PulpV4, GPR>;
-  def _SCI_B : Pulp_ALU_vsci<funct5, F,    0b111,                         "pv." # opcodestr # ".sci.b", PulpV4, sci>;
-}
-
-multiclass DOTP<bits<5> funct5, bit F, Operand sci, string opcodestr> {
-  def _H     : Pulp_ALU_rr<{funct5, F, 0}, 0b000, OPC_OP_V, "pv." # opcodestr # ".h", PulpV2, PulpV2, GPR>;
-  def _SC_H  : Pulp_ALU_rr<{funct5, F, 0}, 0b100, OPC_OP_V, "pv." # opcodestr # ".sc.h", PulpV2, GPR, GPR>;
-  def _SCI_H : Pulp_ALU_vsci<funct5, F,    0b110,                         "pv." # opcodestr # ".sci.h", PulpV2, sci, GPR>;
-  def _B     : Pulp_ALU_rr<{funct5, F, 0}, 0b001, OPC_OP_V, "pv." # opcodestr # ".b", PulpV4, PulpV4, GPR>;
-  def _SC_B  : Pulp_ALU_rr<{funct5, F, 0}, 0b101, OPC_OP_V, "pv." # opcodestr # ".sc.b", PulpV4, GPR, GPR>;
-  def _SCI_B : Pulp_ALU_vsci<funct5, F,    0b111,                         "pv." # opcodestr # ".sci.b", PulpV4, sci, GPR>;
-}
-
-multiclass SDOTP<bits<5> funct5, bit F, Operand sci, string opcodestr> {
-  def _H     : Pulp_ALU_rr_wb<{funct5, F, 0}, 0b000, OPC_OP_V, "pv." # opcodestr # ".h", PulpV2, PulpV2, GPR>;
-  def _SC_H  : Pulp_ALU_rr_wb<{funct5, F, 0}, 0b100, OPC_OP_V, "pv." # opcodestr # ".sc.h", PulpV2, GPR, GPR>;
-  def _SCI_H : Pulp_ALU_vsci_wb<funct5, F,    0b110,                         "pv." # opcodestr # ".sci.h", PulpV2, sci, GPR>;
-  def _B     : Pulp_ALU_rr_wb<{funct5, F, 0}, 0b001, OPC_OP_V, "pv." # opcodestr # ".b", PulpV4, PulpV4, GPR>;
-  def _SC_B  : Pulp_ALU_rr_wb<{funct5, F, 0}, 0b101, OPC_OP_V, "pv." # opcodestr # ".sc.b", PulpV4, GPR, GPR>;
-  def _SCI_B : Pulp_ALU_vsci_wb<funct5, F,    0b111,                         "pv." # opcodestr # ".sci.b", PulpV4, sci, GPR>;
-}
-
-
-
-// Vectorial ALU Operations
-
+// Instructions: packed vector ALU
 defm PV_ADD  : SC_SCI_H_B<0b00000, 0, simm6, "add">;
 defm PV_SUB  : SC_SCI_H_B<0b00001, 0, simm6, "sub">;
 defm PV_AVG  : SC_SCI_H_B<0b00010, 0, simm6, "avg">;
@@ -836,17 +932,6 @@ defm PV_SLL  : SC_SCI_H_B<0b01010, 0, uimm6, "sll">;
 defm PV_OR   : SC_SCI_H_B<0b01011, 0, simm6, "or">;
 defm PV_XOR  : SC_SCI_H_B<0b01100, 0, simm6, "xor">;
 defm PV_AND  : SC_SCI_H_B<0b01101, 0, simm6, "and">;
-
-let hasSideEffects = 0, mayStore = 0, mayLoad = 0,
-    Predicates = [IsRV32, HasPULPExtV2], rs2 = 0 in {
-  def PV_ABS_H : RVInstR<0b0111000, 0b000, OPC_OP_V,
-                         (outs PulpV2:$rd), (ins PulpV2:$rs1),
-                         "pv.abs.h", "$rd, $rs1">, Sched<[WriteIALU, ReadIALU]>;
-
-  def PV_ABS_B : RVInstR<0b0111000, 0b001, OPC_OP_V,
-                         (outs PulpV4:$rd), (ins PulpV4:$rs1),
-                         "pv.abs.b", "$rd, $rs1">, Sched<[WriteIALU, ReadIALU]>;
-}
 
 def PV_EXTRACT_H : Pulp_ALU_vsci<0b01111, 0, 0b110, "pv.extract.h", PulpV2, uimm6, GPR>;
 def PV_EXTRACT_B : Pulp_ALU_vsci<0b01111, 0, 0b111, "pv.extract.b", PulpV4, uimm6, GPR>;
@@ -879,7 +964,6 @@ def PV_PACKLO_B : Pulp_ALU_rr_wb<0b1110000, 0b001, OPC_OP_V, "pv.packlo.b", GPR,
 let isCodeGenOnly = 1 in
 def PV_PACKHI_B_nowb : Pulp_ALU_rr<0b1101100, 0b001, OPC_OP_V, "pv.packhi.b", GPR, GPR, PulpV4>;
 
-
 // Vectorial comparison operations
 defm PV_CMPEQ  : SC_SCI_H_B<0b00000, 1, simm6, "cmpeq">;
 defm PV_CMPNE  : SC_SCI_H_B<0b00001, 1, simm6, "cmpne">;
@@ -892,175 +976,35 @@ defm PV_CMPGEU : SC_SCI_H_B<0b00111, 1, uimm6, "cmpgeu">;
 defm PV_CMPLTU : SC_SCI_H_B<0b01000, 1, uimm6, "cmpltu">;
 defm PV_CMPLEU : SC_SCI_H_B<0b01001, 1, uimm6, "cmpleu">;
 
-
-let hasSideEffects = 0, mayLoad = 1, mayStore = 0, Predicates = [IsRV32, HasPULPExtV2] in
-multiclass Pulp_Load<bits<7> funct7, bits<3> funct3, string opcodestr> {
-
-  def _ri_PostIncrement
-    : RVInstI<funct3, OPC_PULP_LPI, (outs GPR:$rd, GPR:$rs1_wb),
-    (ins GPR:$rs1, simm12:$imm12), opcodestr, "$rd, ${imm12}(${rs1}!)">{
-      let Constraints = "$rs1 = $rs1_wb";
-    }
-
-  def _rr_PostIncrement
-    : RVInstR<funct7, 0b111, OPC_PULP_LPI, (outs GPR:$rd, GPR:$rs1_wb),
-    (ins GPR:$rs1, GPR:$rs2), opcodestr, "$rd, ${rs2}(${rs1}!)">{
-      let Constraints = "$rs1 = $rs1_wb";
-    }
-
-  def _rr
-    : RVInstR<funct7, 0b111, OPC_PULP_LPI_RR, (outs GPR:$rd),
-    (ins GPR:$rs1, GPR:$rs2), opcodestr, "$rd, ${rs2}(${rs1})">;
-}
-
-
 defm P_LB  : Pulp_Load<0b0000000, 0b000, "p.lb">,  Sched<[WriteLDB, ReadMemBase]>;
 defm P_LBU : Pulp_Load<0b0100000, 0b100, "p.lbu">, Sched<[WriteLDB, ReadMemBase]>;
 defm P_LH  : Pulp_Load<0b0001000, 0b001, "p.lh">,  Sched<[WriteLDH, ReadMemBase]>;
 defm P_LHU : Pulp_Load<0b0101000, 0b101, "p.lhu">, Sched<[WriteLDH, ReadMemBase]>;
 defm P_LW  : Pulp_Load<0b0010000, 0b010, "p.lw">,  Sched<[WriteLDW, ReadMemBase]>;
 
-
-let hasSideEffects = 0, mayLoad = 0, mayStore = 1, Predicates = [IsRV32, HasPULPExtV2] in
-multiclass Pulp_Store<bits<2> funct2, string opcodestr> {
-
-    def _ri_PostIncrement
-      : RVInstS<{0, funct2}, OPC_PULP_SPI, (outs GPR:$rs1_wb),
-      (ins GPR:$rs2, GPR:$rs1, simm12:$imm12), opcodestr, "$rs2, ${imm12}(${rs1}!)">{
-        let Constraints = "$rs1 = $rs1_wb";
-      }
-
-    def _rr_PostIncrement
-      : RVInstR<0b0000000, {1, funct2}, OPC_PULP_SPI, (outs GPR:$rs1_wb),
-      (ins GPR:$rs2, GPR:$rs1, GPR:$rd), opcodestr, "$rs2, ${rd}(${rs1}!)">{
-        let Constraints = "$rs1 = $rs1_wb";
-      }
-
-    def _rr
-      : RVInstR<0b0000000, {1, funct2}, OPC_PULP_SPI_RR, (outs),
-      (ins GPR:$rs2, GPR:$rs1, GPR:$rd), opcodestr, "$rs2, ${rd}(${rs1})">;
-}
-
 defm P_SB : Pulp_Store<0b00, "p.sb">, Sched<[WriteSTB, ReadStoreData, ReadMemBase]>;
 defm P_SH : Pulp_Store<0b01, "p.sh">, Sched<[WriteSTH, ReadStoreData, ReadMemBase]>;
 defm P_SW : Pulp_Store<0b10, "p.sw">, Sched<[WriteSTW, ReadStoreData, ReadMemBase]>;
 
-def uimm1 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<1>(Imm);}]> {
-  let ParserMatchClass = UImmAsmOperand<1>;
-  let EncoderMethod = "getImmOpValue";
-  let DecoderMethod = "decodeUImmOperand<1>";
-  let MCOperandPredicate = [{
-    int64_t Imm;
-    if (MCOp.evaluateAsConstantImm(Imm))
-      return isUInt<1>(Imm);
-    return MCOp.isBareSymbolRef();
-  }];
+let isCodeGenOnly = 1 in { // Helper for Patterns
+  def P_INSERTR_v2 : Pulp_ALU_rr_wb<0b1000000, 0b010, OPC_OP, "p.insertr", GPR, GPR, PulpV2>;
+  def P_INSERTR_v4 : Pulp_ALU_rr_wb<0b1000000, 0b010, OPC_OP, "p.insertr", GPR, GPR, PulpV4>;
+  def PV_SHUFFLE_H_GPR : Pulp_ALU_rr<0b1100000, 0b000, OPC_OP_V, "pv.shuffle.h", PulpV2, GPR, GPR>;
+  def PV_SHUFFLE_B_GPR : Pulp_ALU_rr<0b1100000, 0b001, OPC_OP_V, "pv.shuffle.b", PulpV4, GPR, GPR>;
 }
 
-def uimm13_lsb0 : Operand<OtherVT>,
-                  ImmLeaf<XLenVT, [{return isShiftedUInt<12, 1>(Imm);}]>  {
-  let ParserMatchClass = UImmAsmOperand<13, "Lsb0">;
-  let EncoderMethod = "getImmOpValueAsr1";
-  let DecoderMethod = "decodeUImmOperand<13>";
-  let MCOperandPredicate = [{
-    int64_t Imm;
-    if (MCOp.evaluateAsConstantImm(Imm))
-      return isShiftedInt<12, 1>(Imm);
-    return MCOp.isBareSymbolRef();
-  }];
-}
+} // Predicates = [IsRV32, HasPULPExtV2], DecoderNamespace = "RV32Xpulp"
 
-def uimm6_lsb0 : Operand<OtherVT>,
-                 ImmLeaf<XLenVT, [{return isShiftedUInt<5, 1>(Imm);}]>  {
-  let ParserMatchClass = UImmAsmOperand<6, "Lsb0">;
-  let EncoderMethod = "getImmOpValueAsr1";
-  let DecoderMethod = "decodeUImmOperand<13>";
-  let MCOperandPredicate = [{
-    int64_t Imm;
-    if (MCOp.evaluateAsConstantImm(Imm))
-      return isShiftedInt<5, 1>(Imm);
-    return MCOp.isBareSymbolRef();
-  }];
-}
+//===----------------------------------------------------------------------===//
+// Assembler Pseudo Instructions (User-Level ISA)
+//===----------------------------------------------------------------------===//
 
-def OPC_PULP_LOOP : RISCVOpcode<"LP", 0b1111011>;
+let Predicates = [IsRV32, HasPULPExtV2], DecoderNamespace = "RV32Xpulp" in {
+} // Predicates = [IsRV32, HasPULPExtV2], DecoderNamespace = "RV32Xpulp"
 
-let Predicates = [IsRV32, HasPULPExtV2],
-    hasSideEffects = 1, mayLoad = 0, mayStore = 0 in {
-  def LP_STARTI : RVInstI<0b000, OPC_PULP_LOOP, (outs),
-                          (ins uimm1:$L, uimm13_lsb0:$imm12),
-                          "lp.starti", "$L, $imm12">, Sched<[WriteCSR]> {
-    bit L;
-
-    let rs1 = 0;
-    let rd{4-1} = 0;
-    let rd{0} = L;
-  }
-
-  def LP_ENDI : RVInstI<0b001, OPC_PULP_LOOP, (outs),
-                        (ins uimm1:$L, uimm13_lsb0:$imm12),
-                        "lp.endi", "$L, $imm12">, Sched<[WriteCSR]> {
-    bit L;
-
-    let rs1 = 0;
-    let rd{4-1} = 0;
-    let rd{0} = L;
-  }
-
-  def LP_COUNT : RVInstI<0b010, OPC_PULP_LOOP, (outs),
-                         (ins uimm1:$L, GPR:$rs1), "lp.count", "$L, $rs1">,
-                         Sched<[WriteCSR]> {
-    bit L;
-
-    let imm12 = 0;
-    let rd{4-1} = 0;
-    let rd{0} = L;
-  }
-
-  def LP_COUNTI : RVInstI<0b011, OPC_PULP_LOOP, (outs),
-                          (ins uimm1:$L, uimm12:$imm12),
-                          "lp.counti", "$L, $imm12">, Sched<[WriteCSR]> {
-    bit L;
-
-    let rs1 = 0;
-    let rd{4-1} = 0;
-    let rd{0} = L;
-  }
-
-  def LP_SETUP : RVInstI<0b100, OPC_PULP_LOOP, (outs),
-                         (ins uimm1:$L, GPR:$rs1, uimm13_lsb0:$imm12),
-                         "lp.setup", "$L, $rs1, $imm12">,
-                         Sched<[WriteCSR, WriteCSR, WriteCSR]> {
-    bit L;
-
-    let rd{4-1} = 0;
-    let rd{0} = L;
-  }
-
-  def LP_SETUPI : RVInstI<0b101, OPC_PULP_LOOP, (outs),
-                          (ins uimm1:$L, uimm12:$imm12, uimm6_lsb0:$imm5),
-                          "lp.setupi", "$L, $imm12, $imm5">,
-                         Sched<[WriteCSR, WriteCSR, WriteCSR]> {
-    bit L;
-    bits<5> imm5;
-
-    let rs1 = imm5;
-    let rd{4-1} = 0;
-    let rd{0} = L;
-  }
-}
-
-// Pattern Fragments
-
-def powerOf2Minus1      : TImmLeaf<XLenVT, [{ return isPowerOf2_32(Imm+1);   }]>;
-def negativePowerOf2    : TImmLeaf<XLenVT, [{ return isPowerOf2_32(-Imm);    }]>;
-def powerOf2            : TImmLeaf<XLenVT, [{ return isPowerOf2_32(Imm);     }]>;
-def mask                : TImmLeaf<XLenVT, [{ return isMask_32(Imm);         }]>;
-def flippedMask         : TImmLeaf<XLenVT, [{ return isMask_32(~Imm);        }]>;
-def shiftedMask         : TImmLeaf<XLenVT, [{ return isShiftedMask_32(Imm);  }]>;
-def shiftedFlippedMask  : TImmLeaf<XLenVT, [{ return isShiftedMask_32(~Imm); }]>;
-
-
+//===----------------------------------------------------------------------===//
+// Codegen pattern templates
+//===----------------------------------------------------------------------===//
 def between
     : PatFrags<(ops node:$lowerBound, node:$upperBound, node:$value),
                [(smin (smax node:$value, node:$lowerBound), node:$upperBound),
@@ -1146,68 +1090,163 @@ def shiftedMask_shiftImmediate : PatFrag<(ops node:$widthMinus1, node:$flippedMa
   return (2U << countTrailingZeros(flippedMask)) == shiftedBit;
 }]>;
 
-//
-// SDNode transform functions
-//
+// Pattern templates for multiply operations
+def muls : PatFrag<(ops node:$rs1, node:$rs2),
+                   (mul (sext_inreg node:$rs1, i16),
+                        (sext_inreg node:$rs2, i16))>;
+def mulhhs : PatFrag<(ops node:$rs1, node:$rs2),
+                     (mul (sra node:$rs1, (i32 16)),
+                          (sra node:$rs2, (i32 16)))>;
+def mulu : PatFrag<(ops node:$rs1, node:$rs2),
+                   (mul (and node:$rs1, 65535),
+                        (and node:$rs2, 65535))>;
+def mulhhu : PatFrag<(ops node:$rs1, node:$rs2),
+                     (mul (srl node:$rs1, (i32 16)),
+                          (srl node:$rs2, (i32 16)))>;
 
-def trailing1sPlus1 : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(
-                          countTrailingOnes<uint32_t>(N->getSExtValue()) + 1,
-                          SDLoc(N), N->getValueType(0));
-}]>;
+def macs : PatFrag<(ops node:$rd, node:$rs1, node:$rs2),
+                   (add node:$rd, (muls node:$rs1, node:$rs2))>;
+def machhs : PatFrag<(ops node:$rd, node:$rs1, node:$rs2),
+                     (add node:$rd, (mulhhs node:$rs1, node:$rs2))>;
+def macu : PatFrag<(ops node:$rd, node:$rs1, node:$rs2),
+                   (add node:$rd, (mulu node:$rs1, node:$rs2))>;
+def machhu : PatFrag<(ops node:$rd, node:$rs1, node:$rs2),
+                     (add node:$rd, (mulhhu node:$rs1, node:$rs2))>;
+
+class vec_avg<ValueType vectype, SDNode shiftOp>
+    : PatFrag<(ops node:$rs1, node:$rs2),
+              (shiftOp (add node:$rs1, node:$rs2),
+                       (vectype (splat_vector (i32 1))))>;
 
 
-def 31minus : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(31 - N->getSExtValue(),
-                                   SDLoc(N), N->getValueType(0));
-}]>;
+def sbextract : PatFrag<(ops node:$vector, node:$index),
+                        (sext_inreg (vector_extract (v4i8 node:$vector), node:$index), i8)>;
+def ubextract : PatFrag<(ops node:$vector, node:$index),
+                        (and (vector_extract (v4i8 node:$vector), node:$index), 255)>;
+def shextract : PatFrag<(ops node:$vector, node:$index),
+                        (sext_inreg (vector_extract (v2i16 node:$vector), node:$index), i16)>;
+def uhextract : PatFrag<(ops node:$vector, node:$index),
+                        (and (vector_extract (v2i16 node:$vector), node:$index), 65535)>;
 
-def extractOffset : SDNodeXForm<sra, [{
-  return CurDAG->getTargetConstant(N->getConstantOperandVal(1)
-                                   - N->getOperand(0)->getConstantOperandVal(1),
-                                   SDLoc(N), N->getValueType(0));
-}]>;
+class dotp_h<PatFrag extractOp1, PatFrag extractOp2>
+    : PatFrag<(ops node:$rs1, node:$rs2),
+              (add (mul (extractOp1 node:$rs1, 0), (extractOp2 node:$rs2, 0)),
+                   (mul (extractOp1 node:$rs1, 1), (extractOp2 node:$rs2, 1)))>;
 
+def dotup_h  : dotp_h<uhextract, uhextract>;
+def dotusp_h : dotp_h<uhextract, shextract>;
+def dotsp_h  : dotp_h<shextract, shextract>;
 
-def trailing1s : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(
-                          countTrailingOnes<uint32_t>(N->getSExtValue()),
-                          SDLoc(N), N->getValueType(0));
-}]>;
+class dotp_sc_h<PatFrag extractOp>
+    : PatFrag<(ops node:$rs1, node:$sc),
+              (mul (add (extractOp node:$rs1, 0), (extractOp node:$rs1, 1)), node:$sc)>;
 
-def flippedMaskWidthMinus1 : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(31
-                          - countLeadingOnes<uint32_t>(N->getSExtValue())
-                          - countTrailingOnes<uint32_t>(N->getSExtValue()),
-                          SDLoc(N), N->getValueType(0));
-}]>;
+def dotup_sc_h : dotp_sc_h<uhextract>;
+def dotsp_sc_h : dotp_sc_h<shextract>;
 
-def trailing0s : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(
-                          countTrailingZeros<uint32_t>(N->getSExtValue()),
-                          SDLoc(N), N->getValueType(0));
-}]>;
+// Tablegen only permutes 3 operands, so we have to permute the 4th operand manually
+def sum4 : PatFrags<(ops node:$a, node:$b, node:$c, node:$d),
+                    [(add (add (add node:$a, node:$b), node:$c), node:$d),
+                     (add (add (add node:$a, node:$b), node:$d), node:$c),
+                     (add (add (add node:$a, node:$d), node:$c), node:$b),
+                     (add (add (add node:$d, node:$b), node:$c), node:$a),
+                     (add (add node:$a, node:$b), (add node:$c, node:$d))]>;
 
-def maskWidthMinus1 : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(31
-                          - countLeadingZeros<uint32_t>(N->getSExtValue())
-                          - countTrailingZeros<uint32_t>(N->getSExtValue()),
-                          SDLoc(N), N->getValueType(0));
-}]>;
+class dotp_b<PatFrag extractOp1, PatFrag extractOp2>
+    : PatFrag<(ops node:$rs1, node:$rs2),
+              (sum4 (mul (extractOp1 node:$rs1, 0), (extractOp2 node:$rs2, 0)),
+                    (mul (extractOp1 node:$rs1, 1), (extractOp2 node:$rs2, 1)),
+                    (mul (extractOp1 node:$rs1, 2), (extractOp2 node:$rs2, 2)),
+                    (mul (extractOp1 node:$rs1, 3), (extractOp2 node:$rs2, 3)))>;
 
-// // Converts an immediate offset into an immediate mask with
-// // only one bit set in the position specified by the offset
-// // value itself (aka: at an offset from the lsb)
-// def offsetMask : SDNodeXForm<timm, [{
-//   return CurDAG->getTargetConstant(0x1u << N->getSExtValue(),
-//                                    SDLoc(N), N->getValueType(0));
-// }]>;
+def dotup_b  : dotp_b<ubextract, ubextract>;
+def dotusp_b : dotp_b<ubextract, sbextract>;
+def dotsp_b  : dotp_b<sbextract, sbextract>;
 
+class dotp_sc_b<PatFrag extractOp>
+    : PatFrag<(ops node:$rs1, node:$sc),
+              (mul (sum4 (extractOp node:$rs1, 0),
+                         (extractOp node:$rs1, 1),
+                         (extractOp node:$rs1, 2),
+                         (extractOp node:$rs1, 3)), node:$sc)>;
+
+def dotup_sc_b : dotp_sc_b<ubextract>;
+def dotsp_sc_b : dotp_sc_b<sbextract>;
+
+//===----------------------------------------------------------------------===//
+// Pseudo-instructions and codegen patterns
+//===----------------------------------------------------------------------===//
 
 let Predicates = [IsRV32, HasPULPExtV2] in {
-//
+
+// Patterns: Stores with Immediate increment
+def : Pat<(post_truncsti8 GPR:$Rs2, GPR:$Rs1, simm12:$imm12),
+          (PULP_SB_IMM_PI GPR:$Rs2, GPR:$Rs1, simm12:$imm12)>;
+def : Pat<(post_truncsti16 GPR:$Rs2, GPR:$Rs1, simm12:$imm12),
+          (PULP_SH_IMM_PI GPR:$Rs2, GPR:$Rs1, simm12:$imm12)>;
+def : Pat<(post_store i32:$Rs2, GPR:$Rs1, simm12:$imm12),
+          (PULP_SW_IMM_PI GPR:$Rs2, GPR:$Rs1, simm12:$imm12)>;
+
+// Patterns: Stores with Register increment
+def : Pat<(post_truncsti8 GPR:$Rs2, GPR:$Rs1, GPR:$rs3),
+          (PULP_SB_REG_PI GPR:$Rs2, GPR:$Rs1, GPR:$rs3)>;
+def : Pat<(post_truncsti16 GPR:$Rs2, GPR:$Rs1, GPR:$rs3),
+          (PULP_SH_REG_PI GPR:$Rs2, GPR:$Rs1, GPR:$rs3)>;
+def : Pat<(post_store i32:$Rs2, i32:$Rs1, GPR:$rs3),
+          (PULP_SW_REG_PI GPR:$Rs2, GPR:$Rs1, GPR:$rs3)>;
+
+// Patterns: Loads with Immediate increment
+def : Pat<(post_loadi8 GPR:$Rs1, simm12:$imm12),
+          (PULP_LB_IMM_PI GPR:$Rs1, simm12:$imm12)>;
+def : Pat<(post_loadi8u GPR:$Rs1, simm12:$imm12),
+          (PULP_LBU_IMM_PI GPR:$Rs1, simm12:$imm12)>;
+def : Pat<(post_loadi16 GPR:$Rs1, simm12:$imm12),
+          (PULP_LH_IMM_PI GPR:$Rs1, simm12:$imm12)>;
+def : Pat<(post_loadi16u GPR:$Rs1, simm12:$imm12),
+          (PULP_LHU_IMM_PI GPR:$Rs1, simm12:$imm12)>;
+def : Pat<(post_loadi32 GPR:$Rs1, simm12:$imm12),
+          (PULP_LW_IMM_PI GPR:$Rs1, simm12:$imm12)>;
+def : Pat<(post_loadi32u GPR:$Rs1, simm12:$imm12),
+          (PULP_LW_IMM_PI GPR:$Rs1, simm12:$imm12)>;
+
+// Patterns: Loads with Register increment
+def : Pat<(post_loadi8 GPR:$Rs1, GPR:$Rs2),
+          (PULP_LB_REG_PI GPR:$Rs1, GPR:$Rs2)>;
+def : Pat<(post_loadi8u GPR:$Rs1, GPR:$Rs2),
+          (PULP_LBU_REG_PI GPR:$Rs1, GPR:$Rs2)>;
+def : Pat<(post_loadi16 GPR:$Rs1, GPR:$Rs2),
+          (PULP_LH_REG_PI GPR:$Rs1, GPR:$Rs2)>;
+def : Pat<(post_loadi16u GPR:$Rs1, GPR:$Rs2),
+          (PULP_LHU_REG_PI GPR:$Rs1, GPR:$Rs2)>;
+def : Pat<(post_loadi32 GPR:$Rs1, GPR:$Rs2),
+          (PULP_LW_REG_PI GPR:$Rs1, GPR:$Rs2)>;
+def : Pat<(post_loadi32u GPR:$Rs1, GPR:$Rs2),
+          (PULP_LW_REG_PI GPR:$Rs1, GPR:$Rs2)>;
+
+multiclass int_mul_mac_N_RN<string intrin, string instr> {
+  // mul<op>N: mul op with normalization factor as immediate
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mul" # intrin # "N")
+              GPR:$rs1, GPR:$rs2, tuimm5:$shift),
+            (!cast<RVInst>("P_MUL" # instr # "N")
+              GPR:$rs1, GPR:$rs2, tuimm5:$shift)>;
+  // mul<op>RN: mul op with normalization and rounding factors as immediates
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mul" # intrin # "RN")
+              GPR:$rs1, GPR:$rs2, tuimm5:$shift, timm),
+            (!cast<RVInst>("P_MUL" # instr # "RN")
+              GPR:$rs1, GPR:$rs2, tuimm5:$shift)>;
+  // mac<op>N: mac op with normalization factor as immediate
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mac" # intrin # "N")
+              GPR:$rs1, GPR:$rs2, GPR:$rd, tuimm5:$shift),
+            (!cast<RVInst>("P_MAC" # instr # "N")
+              GPR:$rd, GPR:$rs1, GPR:$rs2, tuimm5:$shift)>;
+  // mac<op>RN: mac op with normalization and rounding factors as immediates
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mac" # intrin # "RN")
+              GPR:$rs1, GPR:$rs2, GPR:$rd, tuimm5:$shift, timm),
+            (!cast<RVInst>("P_MAC" # instr # "RN")
+              GPR:$rd, GPR:$rs1, GPR:$rs2, tuimm5:$shift)>;
+}
+
 // Patterns for bit manipulation operations
-//
 
 // extract
 // widthMinus1 and shift immediates
@@ -1330,7 +1369,6 @@ def : Pat<(or GPR:$rs1, (add (shl 2, GPR:$widthMinus1), -1)),
 def : Pat<(or (maskFromRegs GPR:$widthMinus1, GPR:$shift), GPR:$rs1),
           (P_BSETR GPR:$rs1, (P_INSERT GPR:$shift, GPR:$widthMinus1, 4, 5))>;
 
-
 def : Pat<(cttz GPR:$rs1), (P_FF1 GPR:$rs1)>;
 def : Pat<(ctlz_zero_undef GPR:$rs1), (XORI (P_FL1 GPR:$rs1), 31)>;
 def : Pat<(xor (ctlz_zero_undef GPR:$rs1), 31), (P_FL1 GPR:$rs1)>;
@@ -1338,9 +1376,7 @@ def : Pat<(ctlz_zero_undef (xor GPR:$rs1, (sra GPR:$rs1, (i32 31)))), (P_CLB GPR
 def : Pat<(ctpop GPR:$rs1), (P_CNT GPR:$rs1)>;
 def : PatGprGpr<rotr, P_ROR>;
 
-//
 // Patterns for general ALU operations
-//
 
 def : Pat<(abs GPR:$rs1), (P_ABS GPR:$rs1)>;
 def : PatGprGpr<setle, P_SLET>;
@@ -1400,41 +1436,11 @@ def : Pat<(sra (add (sub GPR:$rd, GPR:$rs1), (roundBit GPR:$rs2)), GPR:$rs2),
 def : Pat<(srl (add (sub GPR:$rd, GPR:$rs1), (roundBit GPR:$rs2)), GPR:$rs2),
           (P_SUBURNR GPR:$rd, GPR:$rs1, GPR:$rs2)>;
 
-
 // Patterns for immediate branching Operations
 def : Pat<(brcond (XLenVT (seteq GPR:$rs1, simm5:$imm5)), bb:$imm12),
           (P_BEQIMM GPR:$rs1, simm5:$imm5, simm13_lsb0:$imm12)>;
 def : Pat<(brcond (XLenVT (setne GPR:$rs1, simm5:$imm5)), bb:$imm12),
           (P_BNEIMM GPR:$rs1, simm5:$imm5, simm13_lsb0:$imm12)>;
-
-}
-
-// Patterns for multiply operations
-
-def muls : PatFrag<(ops node:$rs1, node:$rs2),
-                   (mul (sext_inreg node:$rs1, i16),
-                        (sext_inreg node:$rs2, i16))>;
-def mulhhs : PatFrag<(ops node:$rs1, node:$rs2),
-                     (mul (sra node:$rs1, (i32 16)),
-                          (sra node:$rs2, (i32 16)))>;
-def mulu : PatFrag<(ops node:$rs1, node:$rs2),
-                   (mul (and node:$rs1, 65535),
-                        (and node:$rs2, 65535))>;
-def mulhhu : PatFrag<(ops node:$rs1, node:$rs2),
-                     (mul (srl node:$rs1, (i32 16)),
-                          (srl node:$rs2, (i32 16)))>;
-
-def macs : PatFrag<(ops node:$rd, node:$rs1, node:$rs2),
-                   (add node:$rd, (muls node:$rs1, node:$rs2))>;
-def machhs : PatFrag<(ops node:$rd, node:$rs1, node:$rs2),
-                     (add node:$rd, (mulhhs node:$rs1, node:$rs2))>;
-def macu : PatFrag<(ops node:$rd, node:$rs1, node:$rs2),
-                   (add node:$rd, (mulu node:$rs1, node:$rs2))>;
-def machhu : PatFrag<(ops node:$rd, node:$rs1, node:$rs2),
-                     (add node:$rd, (mulhhu node:$rs1, node:$rs2))>;
-
-
-let Predicates = [IsRV32, HasPULPExtV2] in {
 
 def : Pat<(add GPR:$rd, (mul GPR:$rs1, GPR:$rs2)),
           (P_MAC GPR:$rd, GPR:$rs1, GPR:$rs2)>;
@@ -1492,7 +1498,6 @@ def : Pat<(ushiftRound (macu GPR:$rd, GPR:$rs1, GPR:$rs2), uimm5:$Is3),
           (P_MACURN GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
 def : Pat<(ushiftRound (machhu GPR:$rd, GPR:$rs1, GPR:$rs2), uimm5:$Is3),
           (P_MACHHURN GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-}
 
 // Patterns for vectorial ALU operations
 class PatV2V2<SDPatternOperator OpNode, RVInst Inst>
@@ -1537,14 +1542,6 @@ multiclass GeneralUVectorPattern<SDPatternOperator OpNode, string Inst> {
   def : PatV4Uimm6<OpNode, !cast<RVInst>("PV_" # Inst # "_SCI_B")>;
 }
 
-class vec_avg<ValueType vectype, SDNode shiftOp>
-    : PatFrag<(ops node:$rs1, node:$rs2),
-              (shiftOp (add node:$rs1, node:$rs2),
-                       (vectype (splat_vector (i32 1))))>;
-
-
-let Predicates = [IsRV32, HasPULPExtV2] in {
-
 defm : GeneralSVectorPattern<add, "ADD">;
 defm : GeneralSVectorPattern<sub, "SUB">;
 defm : GeneralSVectorPattern<smin, "MIN">;
@@ -1575,7 +1572,6 @@ def : PatV4Simm6<vec_avg<v4i8, srl>, PV_AVGU_SCI_B>;
 def : Pat<(abs PulpV2:$rs1), (PV_ABS_H PulpV2:$rs1)>;
 def : Pat<(abs PulpV4:$rs1), (PV_ABS_B PulpV4:$rs1)>;
 
-
 def : Pat<(i32 (vector_extract (v2i16 PulpV2:$rs1), uimm6:$index)),
           (PV_EXTRACT_H PulpV2:$rs1, uimm6:$index)>;
 def : Pat<(i32 (vector_extract (v4i8 PulpV4:$rs1), uimm6:$index)),
@@ -1593,16 +1589,7 @@ def : Pat<(vector_insert PulpV2:$rd, GPR:$rs1, uimm6:$index),
 def : Pat<(vector_insert PulpV4:$rd, GPR:$rs1, uimm6:$index),
           (PV_INSERT_B PulpV4:$rd, GPR:$rs1, uimm6:$index)>;
 
-
-let isCodeGenOnly = 1 in { // Helper for Patterns
-  def P_INSERTR_v2 : Pulp_ALU_rr_wb<0b1000000, 0b010, OPC_OP, "p.insertr", GPR, GPR, PulpV2>;
-  def P_INSERTR_v4 : Pulp_ALU_rr_wb<0b1000000, 0b010, OPC_OP, "p.insertr", GPR, GPR, PulpV4>;
-  def PV_SHUFFLE_H_GPR : Pulp_ALU_rr<0b1100000, 0b000, OPC_OP_V, "pv.shuffle.h", PulpV2, GPR, GPR>;
-  def PV_SHUFFLE_B_GPR : Pulp_ALU_rr<0b1100000, 0b001, OPC_OP_V, "pv.shuffle.b", PulpV4, GPR, GPR>;
-}
-
 // insert/extract without immediate index
-
 def : Pat<(vector_insert PulpV2:$rd, GPR:$rs1, GPR:$index),
           (P_INSERTR_v2 PulpV2:$rd, GPR:$rs1,
                      (P_INSERT (ADDI X0, 0b111100000), GPR:$index, 0, 4))>;
@@ -1614,64 +1601,6 @@ def : Pat<(i32 (vector_extract PulpV2:$rs1, GPR:$rs2)),
           (PV_SHUFFLE_H_GPR PulpV2:$rs1, GPR:$rs2)>;
 def : Pat<(i32 (vector_extract PulpV4:$rs1, GPR:$rs2)),
           (PV_SHUFFLE_B_GPR PulpV4:$rs1, GPR:$rs2)>;
-
-}
-
-def sbextract : PatFrag<(ops node:$vector, node:$index),
-                        (sext_inreg (vector_extract (v4i8 node:$vector), node:$index), i8)>;
-def ubextract : PatFrag<(ops node:$vector, node:$index),
-                        (and (vector_extract (v4i8 node:$vector), node:$index), 255)>;
-def shextract : PatFrag<(ops node:$vector, node:$index),
-                        (sext_inreg (vector_extract (v2i16 node:$vector), node:$index), i16)>;
-def uhextract : PatFrag<(ops node:$vector, node:$index),
-                        (and (vector_extract (v2i16 node:$vector), node:$index), 65535)>;
-
-class dotp_h<PatFrag extractOp1, PatFrag extractOp2>
-    : PatFrag<(ops node:$rs1, node:$rs2),
-              (add (mul (extractOp1 node:$rs1, 0), (extractOp2 node:$rs2, 0)),
-                   (mul (extractOp1 node:$rs1, 1), (extractOp2 node:$rs2, 1)))>;
-
-def dotup_h  : dotp_h<uhextract, uhextract>;
-def dotusp_h : dotp_h<uhextract, shextract>;
-def dotsp_h  : dotp_h<shextract, shextract>;
-
-class dotp_sc_h<PatFrag extractOp>
-    : PatFrag<(ops node:$rs1, node:$sc),
-              (mul (add (extractOp node:$rs1, 0), (extractOp node:$rs1, 1)), node:$sc)>;
-
-def dotup_sc_h : dotp_sc_h<uhextract>;
-def dotsp_sc_h : dotp_sc_h<shextract>;
-
-// Tablegen only permutes 3 operands, so we have to permute the 4th operand manually
-def sum4 : PatFrags<(ops node:$a, node:$b, node:$c, node:$d),
-                    [(add (add (add node:$a, node:$b), node:$c), node:$d),
-                     (add (add (add node:$a, node:$b), node:$d), node:$c),
-                     (add (add (add node:$a, node:$d), node:$c), node:$b),
-                     (add (add (add node:$d, node:$b), node:$c), node:$a),
-                     (add (add node:$a, node:$b), (add node:$c, node:$d))]>;
-
-class dotp_b<PatFrag extractOp1, PatFrag extractOp2>
-    : PatFrag<(ops node:$rs1, node:$rs2),
-              (sum4 (mul (extractOp1 node:$rs1, 0), (extractOp2 node:$rs2, 0)),
-                    (mul (extractOp1 node:$rs1, 1), (extractOp2 node:$rs2, 1)),
-                    (mul (extractOp1 node:$rs1, 2), (extractOp2 node:$rs2, 2)),
-                    (mul (extractOp1 node:$rs1, 3), (extractOp2 node:$rs2, 3)))>;
-
-def dotup_b  : dotp_b<ubextract, ubextract>;
-def dotusp_b : dotp_b<ubextract, sbextract>;
-def dotsp_b  : dotp_b<sbextract, sbextract>;
-
-class dotp_sc_b<PatFrag extractOp>
-    : PatFrag<(ops node:$rs1, node:$sc),
-              (mul (sum4 (extractOp node:$rs1, 0),
-                         (extractOp node:$rs1, 1),
-                         (extractOp node:$rs1, 2),
-                         (extractOp node:$rs1, 3)), node:$sc)>;
-
-def dotup_sc_b : dotp_sc_b<ubextract>;
-def dotsp_sc_b : dotp_sc_b<sbextract>;
-
-let Predicates = [IsRV32, HasPULPExtV2] in {
 
 def : PatV2V2<dotup_h, PV_DOTUP_H>;
 
@@ -1850,9 +1779,6 @@ def : Pat<(truncstorei16 GPR:$val, (add GPR:$base, GPR:$offset)),
 def : Pat<(store GPR:$val, (add GPR:$base, GPR:$offset)),
     (P_SW_rr GPR:$val, GPR:$base, GPR:$offset)>;
 
-
-
-
 //===----------------------------------------------------------------------===//
 // Pseudo-instructions and codegen patterns
 //===----------------------------------------------------------------------===//
@@ -1969,29 +1895,6 @@ def : PatGprGpr<int_riscv_pulp_mulu, P_MULU>;
 def : PatGprGpr<int_riscv_pulp_mulhhs, P_MULHHS>;
 def : PatGprGpr<int_riscv_pulp_mulhhu, P_MULHHU>;
 
-multiclass int_mul_mac_N_RN<string intrin, string instr> {
-  // mul<op>N: mul op with normalization factor as immediate
-  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mul" # intrin # "N")
-              GPR:$rs1, GPR:$rs2, tuimm5:$shift),
-            (!cast<RVInst>("P_MUL" # instr # "N")
-              GPR:$rs1, GPR:$rs2, tuimm5:$shift)>;
-  // mul<op>RN: mul op with normalization and rounding factors as immediates
-  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mul" # intrin # "RN")
-              GPR:$rs1, GPR:$rs2, tuimm5:$shift, timm),
-            (!cast<RVInst>("P_MUL" # instr # "RN")
-              GPR:$rs1, GPR:$rs2, tuimm5:$shift)>;
-  // mac<op>N: mac op with normalization factor as immediate
-  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mac" # intrin # "N")
-              GPR:$rs1, GPR:$rs2, GPR:$rd, tuimm5:$shift),
-            (!cast<RVInst>("P_MAC" # instr # "N")
-              GPR:$rd, GPR:$rs1, GPR:$rs2, tuimm5:$shift)>;
-  // mac<op>RN: mac op with normalization and rounding factors as immediates
-  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mac" # intrin # "RN")
-              GPR:$rs1, GPR:$rs2, GPR:$rd, tuimm5:$shift, timm),
-            (!cast<RVInst>("P_MAC" # instr # "RN")
-              GPR:$rd, GPR:$rs1, GPR:$rs2, tuimm5:$shift)>;
-}
-
 defm : int_mul_mac_N_RN<"s",   "S">;
 defm : int_mul_mac_N_RN<"u",   "U">;
 defm : int_mul_mac_N_RN<"hhs", "HHS">;
@@ -2024,7 +1927,6 @@ defm : int_N_RN_r<"add",  "ADD">;
 defm : int_N_RN_r<"addu", "ADDU">;
 defm : int_N_RN_r<"sub",  "SUB">;
 defm : int_N_RN_r<"subu", "SUBU">;
-
 
 def : Pat<(int_riscv_pulp_pack2 GPR:$rs1, GPR:$rs2),
           (PV_PACK_H GPR:$rs2, GPR:$rs1)>;
@@ -2072,7 +1974,6 @@ def : Pat<(int_riscv_pulp_clipu GPR:$rs1, 0, powerOf2Minus1:$upperBound),
           (P_CLIPU GPR:$rs1, (trailing1sPlus1 imm:$upperBound))>;
 def : PatGprGpr<int_riscv_pulp_clipu_r, P_CLIPUR>;
 
-
 def : Pat<(int_riscv_pulp_OffsetedRead GPR:$rs1, GPR:$rs2), (P_LW_rr GPR:$rs1, GPR:$rs2)>;
 def : Pat<(int_riscv_pulp_OffsetedReadHalf GPR:$rs1, GPR:$rs2), (P_LH_rr GPR:$rs1, GPR:$rs2)>;
 def : Pat<(int_riscv_pulp_OffsetedReadByte GPR:$rs1, GPR:$rs2), (P_LB_rr GPR:$rs1, GPR:$rs2)>;
@@ -2111,4 +2012,5 @@ def : Pat<(int_riscv_pulp_IsFc), (SRLI (ANDI (CSRRS MHARTID.Encoding, X0), 0b100
 // Symbols below must be provided by the platform, no CSR involved
 // Note: HERO has not fabric controller
 def : Pat<(int_riscv_pulp_HasFc), (ANDI X0, 0)>;
-}
+
+} // Predicates = [IsRV32, HasPULPExtV2]

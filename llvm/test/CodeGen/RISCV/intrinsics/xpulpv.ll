@@ -977,6 +977,10 @@ define i32 @test_llvm_riscv_pulp_dotsp2(i32 %a, i32 %b) {
 
 declare i32 @llvm.riscv.pulp.dotup2(<2 x i16>, <2 x i16>)
 define i32 @test_llvm_riscv_pulp_dotup2(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_dotup2
+; CHECK:       # %bb.0:
+; CHECK:         pv.dotup.h {{a[0-9]+}}, {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %vb = bitcast i32 %b to <2 x i16>
   %ret = call i32 @llvm.riscv.pulp.dotup2(<2 x i16> %va, <2 x i16> %vb)
@@ -985,6 +989,10 @@ define i32 @test_llvm_riscv_pulp_dotup2(i32 %a, i32 %b) {
 
 declare i32 @llvm.riscv.pulp.dotspsc2(<2 x i16>, i32)
 define i32 @test_llvm_riscv_pulp_dotspsc2(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_dotspsc2
+; CHECK:       # %bb.0:
+; CHECK:         pv.dotsp.sc.h {{a[0-9]+}}, {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %ret = call i32 @llvm.riscv.pulp.dotspsc2(<2 x i16> %va, i32 %b)
   ret i32 %ret
@@ -992,6 +1000,10 @@ define i32 @test_llvm_riscv_pulp_dotspsc2(i32 %a, i32 %b) {
 
 declare i32 @llvm.riscv.pulp.dotusp2(<2 x i16>, <2 x i16>)
 define i32 @test_llvm_riscv_pulp_dotusp2(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_dotusp2
+; CHECK:       # %bb.0:
+; CHECK:         pv.dotusp.h {{a[0-9]+}}, {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %vb = bitcast i32 %b to <2 x i16>
   %ret = call i32 @llvm.riscv.pulp.dotusp2(<2 x i16> %va, <2 x i16> %vb)
@@ -1000,6 +1012,10 @@ define i32 @test_llvm_riscv_pulp_dotusp2(i32 %a, i32 %b) {
 
 declare i32 @llvm.riscv.pulp.sdotsp2(<2 x i16>, <2 x i16>, i32)
 define i32 @test_llvm_riscv_pulp_sdotsp2(i32 %a, i32 %b, i32 %c) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_sdotsp2
+; CHECK:       # %bb.0:
+; CHECK:         pv.sdotsp.h {{a[0-9]+}}, {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %vb = bitcast i32 %b to <2 x i16>
   %ret = call i32 @llvm.riscv.pulp.sdotsp2(<2 x i16> %va, <2 x i16> %vb, i32 %c)
@@ -1008,6 +1024,10 @@ define i32 @test_llvm_riscv_pulp_sdotsp2(i32 %a, i32 %b, i32 %c) {
 
 declare i32 @llvm.riscv.pulp.sdotspsc2(<2 x i16>, i32, i32)
 define i32 @test_llvm_riscv_pulp_sdotspsc2(i32 %a, i32 %b, i32 %c) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_sdotspsc2
+; CHECK:       # %bb.0:
+; CHECK:         pv.sdotsp.sc.h {{a[0-9]+}}, {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %ret = call i32 @llvm.riscv.pulp.sdotspsc2(<2 x i16> %va, i32 %b, i32 %c)
   ret i32 %ret
@@ -1015,6 +1035,10 @@ define i32 @test_llvm_riscv_pulp_sdotspsc2(i32 %a, i32 %b, i32 %c) {
 
 declare i32 @llvm.riscv.pulp.sdotusp2(<2 x i16>, <2 x i16>, i32)
 define i32 @test_llvm_riscv_pulp_sdotusp2(i32 %a, i32 %b, i32 %c) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_sdotusp2
+; CHECK:       # %bb.0:
+; CHECK:         pv.sdotusp.h {{a[0-9]+}}, {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %vb = bitcast i32 %b to <2 x i16>
   %ret = call i32 @llvm.riscv.pulp.sdotusp2(<2 x i16> %va, <2 x i16> %vb, i32 %c)
@@ -1023,6 +1047,10 @@ define i32 @test_llvm_riscv_pulp_sdotusp2(i32 %a, i32 %b, i32 %c) {
 
 declare i32 @llvm.riscv.pulp.dotupsc2(<2 x i16>, i32)
 define i32 @test_llvm_riscv_pulp_dotupsc2(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_dotupsc2
+; CHECK:       # %bb.0:
+; CHECK:         pv.dotup.sc.h {{a[0-9]+}}, {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %ret = call i32 @llvm.riscv.pulp.dotupsc2(<2 x i16> %va, i32 %b)
   ret i32 %ret
@@ -1030,6 +1058,10 @@ define i32 @test_llvm_riscv_pulp_dotupsc2(i32 %a, i32 %b) {
 
 declare i32 @llvm.riscv.pulp.dotuspsc2(<2 x i16>, i32)
 define i32 @test_llvm_riscv_pulp_dotuspsc2(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_dotuspsc2
+; CHECK:       # %bb.0:
+; CHECK:         pv.dotusp.sc.h {{a[0-9]+}}, {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %ret = call i32 @llvm.riscv.pulp.dotuspsc2(<2 x i16> %va, i32 %b)
   ret i32 %ret
@@ -1037,6 +1069,10 @@ define i32 @test_llvm_riscv_pulp_dotuspsc2(i32 %a, i32 %b) {
 
 declare i32 @llvm.riscv.pulp.sdotup2(<2 x i16>, <2 x i16>, i32)
 define i32 @test_llvm_riscv_pulp_sdotup2(i32 %a, i32 %b, i32 %c) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_sdotup2
+; CHECK:       # %bb.0:
+; CHECK:         pv.sdotup.h {{a[0-9]+}}, {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %vb = bitcast i32 %b to <2 x i16>
   %ret = call i32 @llvm.riscv.pulp.sdotup2(<2 x i16> %va, <2 x i16> %vb, i32 %c)
@@ -1045,6 +1081,10 @@ define i32 @test_llvm_riscv_pulp_sdotup2(i32 %a, i32 %b, i32 %c) {
 
 declare i32 @llvm.riscv.pulp.sdotupsc2(<2 x i16>, i32, i32)
 define i32 @test_llvm_riscv_pulp_sdotupsc2(i32 %a, i32 %b, i32 %c) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_sdotupsc2
+; CHECK:       # %bb.0:
+; CHECK:         pv.sdotup.sc.h {{a[0-9]+}}, {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %ret = call i32 @llvm.riscv.pulp.sdotupsc2(<2 x i16> %va, i32 %b, i32 %c)
   ret i32 %ret
@@ -1052,6 +1092,10 @@ define i32 @test_llvm_riscv_pulp_sdotupsc2(i32 %a, i32 %b, i32 %c) {
 
 declare i32 @llvm.riscv.pulp.sdotuspsc2(<2 x i16>, i32, i32)
 define i32 @test_llvm_riscv_pulp_sdotuspsc2(i32 %a, i32 %b, i32 %c) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_sdotuspsc2
+; CHECK:       # %bb.0:
+; CHECK:         pv.sdotusp.sc.h {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %ret = call i32 @llvm.riscv.pulp.sdotuspsc2(<2 x i16> %va, i32 %b, i32 %c)
   ret i32 %ret
@@ -1061,7 +1105,7 @@ declare <2 x i16> @llvm.riscv.pulp.abs2(<2 x i16>)
 define i32 @test_llvm_riscv_pulp_abs2(i32 %a) {
 ; CHECK-LABEL: @test_llvm_riscv_pulp_abs2
 ; CHECK:       # %bb.0:
-; CHECK:         pv.abs.h {{a[0-9]+}}, {{a[0-9]+}}
+; CHECK:         pv.abs.h {{a[0-9]+}}
 ;
   %va = bitcast i32 %a to <2 x i16>
   %res = call <2 x i16> @llvm.riscv.pulp.abs2(<2 x i16> %va)
@@ -1071,6 +1115,10 @@ define i32 @test_llvm_riscv_pulp_abs2(i32 %a) {
 
 declare <2 x i16> @llvm.riscv.pulp.add2(<2 x i16>, <2 x i16>)
 define i32 @test_llvm_riscv_pulp_add2(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_add2
+; CHECK:       # %bb.0:
+; CHECK:         pv.add.h {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %vb = bitcast i32 %b to <2 x i16>
   %res = call <2 x i16> @llvm.riscv.pulp.add2(<2 x i16> %va, <2 x i16> %vb)
@@ -1080,6 +1128,10 @@ define i32 @test_llvm_riscv_pulp_add2(i32 %a, i32 %b) {
 
 declare <2 x i16> @llvm.riscv.pulp.and2(<2 x i16>, <2 x i16>)
 define i32 @test_llvm_riscv_pulp_and2(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_and2
+; CHECK:       # %bb.0:
+; CHECK:         pv.and.h {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %vb = bitcast i32 %b to <2 x i16>
   %res = call <2 x i16> @llvm.riscv.pulp.and2(<2 x i16> %va, <2 x i16> %vb)
@@ -1089,6 +1141,10 @@ define i32 @test_llvm_riscv_pulp_and2(i32 %a, i32 %b) {
 
 declare <2 x i16> @llvm.riscv.pulp.avg2(<2 x i16>, <2 x i16>)
 define i32 @test_llvm_riscv_pulp_avg2(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_avg2
+; CHECK:       # %bb.0:
+; CHECK:         pv.avg.h {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %vb = bitcast i32 %b to <2 x i16>
   %res = call <2 x i16> @llvm.riscv.pulp.avg2(<2 x i16> %va, <2 x i16> %vb)
@@ -1098,6 +1154,10 @@ define i32 @test_llvm_riscv_pulp_avg2(i32 %a, i32 %b) {
 
 declare <2 x i16> @llvm.riscv.pulp.avgu2(<2 x i16>, <2 x i16>)
 define i32 @test_llvm_riscv_pulp_avgu2(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_avgu2
+; CHECK:       # %bb.0:
+; CHECK:         pv.avgu.h {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %vb = bitcast i32 %b to <2 x i16>
   %res = call <2 x i16> @llvm.riscv.pulp.avgu2(<2 x i16> %va, <2 x i16> %vb)
@@ -1107,6 +1167,10 @@ define i32 @test_llvm_riscv_pulp_avgu2(i32 %a, i32 %b) {
 
 declare <2 x i16> @llvm.riscv.pulp.exor2(<2 x i16>, <2 x i16>)
 define i32 @test_llvm_riscv_pulp_exor2(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_exor2
+; CHECK:       # %bb.0:
+; CHECK:         pv.xor.h {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %vb = bitcast i32 %b to <2 x i16>
   %res = call <2 x i16> @llvm.riscv.pulp.exor2(<2 x i16> %va, <2 x i16> %vb)
@@ -1116,6 +1180,10 @@ define i32 @test_llvm_riscv_pulp_exor2(i32 %a, i32 %b) {
 
 declare <2 x i16> @llvm.riscv.pulp.max2(<2 x i16>, <2 x i16>)
 define i32 @test_llvm_riscv_pulp_max2(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_max2
+; CHECK:       # %bb.0:
+; CHECK:         pv.max.h {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %vb = bitcast i32 %b to <2 x i16>
   %res = call <2 x i16> @llvm.riscv.pulp.max2(<2 x i16> %va, <2 x i16> %vb)
@@ -1125,6 +1193,10 @@ define i32 @test_llvm_riscv_pulp_max2(i32 %a, i32 %b) {
 
 declare <2 x i16> @llvm.riscv.pulp.min2(<2 x i16>, <2 x i16>)
 define i32 @test_llvm_riscv_pulp_min2(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_min2
+; CHECK:       # %bb.0:
+; CHECK:         pv.min.h {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %vb = bitcast i32 %b to <2 x i16>
   %res = call <2 x i16> @llvm.riscv.pulp.min2(<2 x i16> %va, <2 x i16> %vb)
@@ -1134,6 +1206,10 @@ define i32 @test_llvm_riscv_pulp_min2(i32 %a, i32 %b) {
 
 declare <2 x i16> @llvm.riscv.pulp.maxu2(<2 x i16>, <2 x i16>)
 define i32 @test_llvm_riscv_pulp_maxu2(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_maxu
+; CHECK:       # %bb.0:
+; CHECK:         pv.maxu.h {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %vb = bitcast i32 %b to <2 x i16>
   %res = call <2 x i16> @llvm.riscv.pulp.maxu2(<2 x i16> %va, <2 x i16> %vb)
@@ -1143,6 +1219,10 @@ define i32 @test_llvm_riscv_pulp_maxu2(i32 %a, i32 %b) {
 
 declare <2 x i16> @llvm.riscv.pulp.minu2(<2 x i16>, <2 x i16>)
 define i32 @test_llvm_riscv_pulp_minu2(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_minu2
+; CHECK:       # %bb.0:
+; CHECK:         pv.minu.h {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %vb = bitcast i32 %b to <2 x i16>
   %res = call  <2 x i16> @llvm.riscv.pulp.minu2(<2 x i16> %va, <2 x i16> %vb)
@@ -1152,6 +1232,10 @@ define i32 @test_llvm_riscv_pulp_minu2(i32 %a, i32 %b) {
 
 declare <2 x i16> @llvm.riscv.pulp.neg2(<2 x i16>)
 define i32 @test_llvm_riscv_pulp_neg2(i32 %a) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_neg2
+; CHECK:       # %bb.0:
+; CHECK:         pv.sub.h {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %res = call <2 x i16> @llvm.riscv.pulp.neg2(<2 x i16> %va)
   %ret = bitcast <2 x i16> %res to i32
@@ -1160,6 +1244,10 @@ define i32 @test_llvm_riscv_pulp_neg2(i32 %a) {
 
 declare <2 x i16> @llvm.riscv.pulp.or2(<2 x i16>, <2 x i16>)
 define i32 @test_llvm_riscv_pulp_or2(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_or2
+; CHECK:       # %bb.0:
+; CHECK:         pv.or.h {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %vb = bitcast i32 %b to <2 x i16>
   %res = call <2 x i16> @llvm.riscv.pulp.or2(<2 x i16> %va, <2 x i16> %vb)
@@ -1169,6 +1257,10 @@ define i32 @test_llvm_riscv_pulp_or2(i32 %a, i32 %b) {
 
 declare <2 x i16> @llvm.riscv.pulp.sll2(<2 x i16>, <2 x i16>)
 define i32 @test_llvm_riscv_pulp_sll2(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_sll2
+; CHECK:       # %bb.0:
+; CHECK:         pv.sll.h {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %vb = bitcast i32 %b to <2 x i16>
   %res = call <2 x i16> @llvm.riscv.pulp.sll2(<2 x i16> %va, <2 x i16> %vb)
@@ -1178,6 +1270,10 @@ define i32 @test_llvm_riscv_pulp_sll2(i32 %a, i32 %b) {
 
 declare <2 x i16> @llvm.riscv.pulp.sra2(<2 x i16>, <2 x i16>)
 define i32 @test_llvm_riscv_pulp_sra2(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_sra2
+; CHECK:       # %bb.0:
+; CHECK:         pv.sra.h {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %vb = bitcast i32 %b to <2 x i16>
   %res = call <2 x i16> @llvm.riscv.pulp.sra2(<2 x i16> %va, <2 x i16> %vb)
@@ -1187,6 +1283,10 @@ define i32 @test_llvm_riscv_pulp_sra2(i32 %a, i32 %b) {
 
 declare <2 x i16> @llvm.riscv.pulp.sub2(<2 x i16>, <2 x i16>)
 define i32 @test_llvm_riscv_pulp_sub2(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_sub2
+; CHECK:       # %bb.0:
+; CHECK:         pv.sub.h {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %vb = bitcast i32 %b to <2 x i16>
   %res = call <2 x i16> @llvm.riscv.pulp.sub2(<2 x i16> %va, <2 x i16> %vb)
@@ -1207,6 +1307,10 @@ define i32 @test_llvm_riscv_pulp_pack2(i32 %a, i32 %b) {
 
 declare <2 x i16> @llvm.riscv.pulp.srl2(<2 x i16>, <2 x i16>)
 define i32 @test_llvm_riscv_pulp_srl2(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_srl2
+; CHECK:       # %bb.0:
+; CHECK:         pv.srl.h {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %vb = bitcast i32 %b to <2 x i16>
   %res = call  <2 x i16> @llvm.riscv.pulp.srl2(<2 x i16> %va, <2 x i16> %vb)
@@ -1216,6 +1320,10 @@ define i32 @test_llvm_riscv_pulp_srl2(i32 %a, i32 %b) {
 
 declare <2 x i16> @llvm.riscv.pulp.shuffle2h(<2 x i16>, <2 x i16>, <2 x i16>)
 define i32 @test_llvm_riscv_pulp_shuffle2h(i32 %a, i32 %b, i32 %c) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_shuffle2h
+; CHECK:       # %bb.0:
+; CHECK:         pv.shuffle2.h {{a[0-9]+}}, {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %vb = bitcast i32 %b to <2 x i16>
   %vc = bitcast i32 %c to <2 x i16>
@@ -1226,6 +1334,10 @@ define i32 @test_llvm_riscv_pulp_shuffle2h(i32 %a, i32 %b, i32 %c) {
 
 declare <2 x i16> @llvm.riscv.pulp.shuffleh(<2 x i16>, <2 x i16>)
 define i32 @test_llvm_riscv_pulp_shuffleh(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_shuffleh
+; CHECK:       # %bb.0:
+; CHECK:         pv.shuffle.h {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <2 x i16>
   %vb = bitcast i32 %b to <2 x i16>
   %res = call <2 x i16> @llvm.riscv.pulp.shuffleh(<2 x i16> %va, <2 x i16> %vb)
@@ -1238,6 +1350,10 @@ define i32 @test_llvm_riscv_pulp_shuffleh(i32 %a, i32 %b) {
 
 declare i32 @llvm.riscv.pulp.dotsp4(<4 x i8>, <4 x i8>)
 define i32 @test_llvm_riscv_pulp_dotsp4(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_dotsp4
+; CHECK:       # %bb.0:
+; CHECK:         pv.dotsp.b {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %vb = bitcast i32 %b to <4 x i8>
   %ret = call i32 @llvm.riscv.pulp.dotsp4(<4 x i8> %va, <4 x i8> %vb)
@@ -1246,6 +1362,10 @@ define i32 @test_llvm_riscv_pulp_dotsp4(i32 %a, i32 %b) {
 
 declare i32 @llvm.riscv.pulp.dotspsc4(<4 x i8>, i32)
 define i32 @test_llvm_riscv_pulp_dotspsc4(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_dotspsc4
+; CHECK:       # %bb.0:
+; CHECK:         pv.dotsp.sc.b {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %ret = call i32 @llvm.riscv.pulp.dotspsc4(<4 x i8> %va, i32 %b)
   ret i32 %ret
@@ -1253,6 +1373,10 @@ define i32 @test_llvm_riscv_pulp_dotspsc4(i32 %a, i32 %b) {
 
 declare i32 @llvm.riscv.pulp.dotup4(<4 x i8>, <4 x i8>)
 define i32 @test_llvm_riscv_pulp_dotup4(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_dotup4
+; CHECK:       # %bb.0:
+; CHECK:         pv.dotup.b {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %vb = bitcast i32 %b to <4 x i8>
   %ret = call i32 @llvm.riscv.pulp.dotup4(<4 x i8> %va, <4 x i8> %vb)
@@ -1261,6 +1385,10 @@ define i32 @test_llvm_riscv_pulp_dotup4(i32 %a, i32 %b) {
 
 declare i32 @llvm.riscv.pulp.dotupsc4(<4 x i8>, i32)
 define i32 @test_llvm_riscv_pulp_dotupsc4(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_dotupsc4
+; CHECK:       # %bb.0:
+; CHECK:         pv.dotup.sc.b {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %ret = call i32 @llvm.riscv.pulp.dotupsc4(<4 x i8> %va, i32 %b)
   ret i32 %ret
@@ -1268,6 +1396,10 @@ define i32 @test_llvm_riscv_pulp_dotupsc4(i32 %a, i32 %b) {
 
 declare i32 @llvm.riscv.pulp.dotusp4(<4 x i8>, <4 x i8>)
 define i32 @test_llvm_riscv_pulp_dotusp4(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_dotusp
+; CHECK:       # %bb.0:
+; CHECK:         pv.dotusp.b {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %vb = bitcast i32 %b to <4 x i8>
   %ret = call i32 @llvm.riscv.pulp.dotusp4(<4 x i8> %va, <4 x i8> %vb)
@@ -1276,6 +1408,10 @@ define i32 @test_llvm_riscv_pulp_dotusp4(i32 %a, i32 %b) {
 
 declare i32 @llvm.riscv.pulp.dotuspsc4(<4 x i8>, i32)
 define i32 @test_llvm_riscv_pulp_dotuspsc4(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_dotuspsc4
+; CHECK:       # %bb.0:
+; CHECK:         pv.dotusp.sc.b {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %ret = call i32 @llvm.riscv.pulp.dotuspsc4(<4 x i8> %va, i32 %b)
   ret i32 %ret
@@ -1283,6 +1419,10 @@ define i32 @test_llvm_riscv_pulp_dotuspsc4(i32 %a, i32 %b) {
 
 declare i32 @llvm.riscv.pulp.sdotsp4(<4 x i8>, <4 x i8>, i32)
 define i32 @test_llvm_riscv_pulp_sdotsp4(i32 %a, i32 %b, i32 %c) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_sdotsp4
+; CHECK:       # %bb.0:
+; CHECK:         pv.sdotsp.b {{a[0-9]+}}, {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %vb = bitcast i32 %b to <4 x i8>
   %ret = call i32 @llvm.riscv.pulp.sdotsp4(<4 x i8> %va, <4 x i8> %vb, i32 %c)
@@ -1291,6 +1431,10 @@ define i32 @test_llvm_riscv_pulp_sdotsp4(i32 %a, i32 %b, i32 %c) {
 
 declare i32 @llvm.riscv.pulp.sdotspsc4(<4 x i8>, i32, i32)
 define i32 @test_llvm_riscv_pulp_sdotspsc4(i32 %a, i32 %b, i32 %c) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_sdotspsc4
+; CHECK:       # %bb.0:
+; CHECK:         pv.sdotsp.sc.b {{a[0-9]+}}, {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %ret = call i32 @llvm.riscv.pulp.sdotspsc4(<4 x i8> %va, i32 %b, i32 %c)
   ret i32 %ret
@@ -1298,6 +1442,10 @@ define i32 @test_llvm_riscv_pulp_sdotspsc4(i32 %a, i32 %b, i32 %c) {
 
 declare i32 @llvm.riscv.pulp.sdotup4(<4 x i8>, <4 x i8>, i32)
 define i32 @test_llvm_riscv_pulp_sdotup4(i32 %a, i32 %b, i32 %c) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_sdotup4
+; CHECK:       # %bb.0:
+; CHECK:         pv.sdotup.b {{a[0-9]+}}, {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %vb = bitcast i32 %b to <4 x i8>
   %ret = call i32 @llvm.riscv.pulp.sdotup4(<4 x i8> %va, <4 x i8> %vb, i32 %c)
@@ -1306,6 +1454,10 @@ define i32 @test_llvm_riscv_pulp_sdotup4(i32 %a, i32 %b, i32 %c) {
 
 declare i32 @llvm.riscv.pulp.sdotupsc4(<4 x i8>, i32, i32)
 define i32 @test_llvm_riscv_pulp_sdotupsc4(i32 %a, i32 %b, i32 %c) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_sdotupsc4
+; CHECK:       # %bb.0:
+; CHECK:         pv.sdotup.sc.b {{a[0-9]+}}, {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %ret = call i32 @llvm.riscv.pulp.sdotupsc4(<4 x i8> %va, i32 %b, i32 %c)
   ret i32 %ret
@@ -1313,6 +1465,10 @@ define i32 @test_llvm_riscv_pulp_sdotupsc4(i32 %a, i32 %b, i32 %c) {
 
 declare i32 @llvm.riscv.pulp.sdotusp4(<4 x i8>, <4 x i8>, i32)
 define i32 @test_llvm_riscv_pulp_sdotusp4(i32 %a, i32 %b, i32 %c) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_sdotusp4
+; CHECK:       # %bb.0:
+; CHECK:         pv.sdotusp.b {{a[0-9]+}}, {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %vb = bitcast i32 %b to <4 x i8>
   %ret = call i32 @llvm.riscv.pulp.sdotusp4(<4 x i8> %va, <4 x i8> %vb, i32 %c)
@@ -1321,6 +1477,10 @@ define i32 @test_llvm_riscv_pulp_sdotusp4(i32 %a, i32 %b, i32 %c) {
 
 declare i32 @llvm.riscv.pulp.sdotuspsc4(<4 x i8>, i32, i32)
 define i32 @test_llvm_riscv_pulp_sdotuspsc4(i32 %a, i32 %b, i32 %c) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_sdotuspsc4
+; CHECK:       # %bb.0:
+; CHECK:         pv.sdotusp.sc.b {{a[0-9]+}}, {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %ret = call i32 @llvm.riscv.pulp.sdotuspsc4(<4 x i8> %va, i32 %b, i32 %c)
   ret i32 %ret
@@ -1328,6 +1488,10 @@ define i32 @test_llvm_riscv_pulp_sdotuspsc4(i32 %a, i32 %b, i32 %c) {
 
 declare <4 x i8> @llvm.riscv.pulp.abs4(<4 x i8>)
 define i32 @test_llvm_riscv_pulp_abs4(i32 %a) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_abs4
+; CHECK:       # %bb.0:
+; CHECK:         pv.abs.b {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %res = call <4 x i8> @llvm.riscv.pulp.abs4(<4 x i8> %va)
   %ret = bitcast <4 x i8> %res to i32
@@ -1336,6 +1500,10 @@ define i32 @test_llvm_riscv_pulp_abs4(i32 %a) {
 
 declare <4 x i8> @llvm.riscv.pulp.add4(<4 x i8>, <4 x i8>)
 define i32 @test_llvm_riscv_pulp_add4(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_add4
+; CHECK:       # %bb.0:
+; CHECK:         pv.add.b {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %vb = bitcast i32 %b to <4 x i8>
   %res = call <4 x i8> @llvm.riscv.pulp.add4(<4 x i8> %va, <4 x i8> %vb)
@@ -1345,6 +1513,10 @@ define i32 @test_llvm_riscv_pulp_add4(i32 %a, i32 %b) {
 
 declare <4 x i8> @llvm.riscv.pulp.and4(<4 x i8>, <4 x i8>)
 define i32 @test_llvm_riscv_pulp_and4(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_and4
+; CHECK:       # %bb.0:
+; CHECK:         pv.and.b {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %vb = bitcast i32 %b to <4 x i8>
   %res = call <4 x i8> @llvm.riscv.pulp.and4(<4 x i8> %va, <4 x i8> %vb)
@@ -1354,6 +1526,10 @@ define i32 @test_llvm_riscv_pulp_and4(i32 %a, i32 %b) {
 
 declare <4 x i8> @llvm.riscv.pulp.avg4(<4 x i8>, <4 x i8>)
 define i32 @test_llvm_riscv_pulp_avg4(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_avg4
+; CHECK:       # %bb.0:
+; CHECK:         pv.avg.b {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %vb = bitcast i32 %b to <4 x i8>
   %res = call <4 x i8> @llvm.riscv.pulp.avg4(<4 x i8> %va, <4 x i8> %vb)
@@ -1363,6 +1539,10 @@ define i32 @test_llvm_riscv_pulp_avg4(i32 %a, i32 %b) {
 
 declare <4 x i8> @llvm.riscv.pulp.avgu4(<4 x i8>, <4 x i8>)
 define i32 @test_llvm_riscv_pulp_avgu4(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_avgu4
+; CHECK:       # %bb.0:
+; CHECK:         pv.avgu.b {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %vb = bitcast i32 %b to <4 x i8>
   %res = call <4 x i8> @llvm.riscv.pulp.avgu4(<4 x i8> %va, <4 x i8> %vb)
@@ -1372,6 +1552,10 @@ define i32 @test_llvm_riscv_pulp_avgu4(i32 %a, i32 %b) {
 
 declare <4 x i8> @llvm.riscv.pulp.exor4(<4 x i8>, <4 x i8>)
 define i32 @test_llvm_riscv_pulp_exor4(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_exor4
+; CHECK:       # %bb.0:
+; CHECK:         pv.xor.b {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %vb = bitcast i32 %b to <4 x i8>
   %res = call <4 x i8> @llvm.riscv.pulp.exor4(<4 x i8> %va, <4 x i8> %vb)
@@ -1381,6 +1565,10 @@ define i32 @test_llvm_riscv_pulp_exor4(i32 %a, i32 %b) {
 
 declare <4 x i8> @llvm.riscv.pulp.max4(<4 x i8>, <4 x i8>)
 define i32 @test_llvm_riscv_pulp_max4(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_max4
+; CHECK:       # %bb.0:
+; CHECK:         pv.max.b {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %vb = bitcast i32 %b to <4 x i8>
   %res = call <4 x i8> @llvm.riscv.pulp.max4(<4 x i8> %va, <4 x i8> %vb)
@@ -1390,6 +1578,10 @@ define i32 @test_llvm_riscv_pulp_max4(i32 %a, i32 %b) {
 
 declare <4 x i8> @llvm.riscv.pulp.maxu4(<4 x i8>, <4 x i8>)
 define i32 @test_llvm_riscv_pulp_maxu4(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_maxu4
+; CHECK:       # %bb.0:
+; CHECK:         pv.maxu.b {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %vb = bitcast i32 %b to <4 x i8>
   %res = call <4 x i8> @llvm.riscv.pulp.maxu4(<4 x i8> %va, <4 x i8> %vb)
@@ -1399,6 +1591,10 @@ define i32 @test_llvm_riscv_pulp_maxu4(i32 %a, i32 %b) {
 
 declare <4 x i8> @llvm.riscv.pulp.min4(<4 x i8>, <4 x i8>)
 define i32 @test_llvm_riscv_pulp_min4(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_min4
+; CHECK:       # %bb.0:
+; CHECK:         pv.min.b {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %vb = bitcast i32 %b to <4 x i8>
   %res = call <4 x i8> @llvm.riscv.pulp.min4(<4 x i8> %va, <4 x i8> %vb)
@@ -1408,6 +1604,10 @@ define i32 @test_llvm_riscv_pulp_min4(i32 %a, i32 %b) {
 
 declare <4 x i8> @llvm.riscv.pulp.minu4(<4 x i8>, <4 x i8>)
 define i32 @test_llvm_riscv_pulp_minu4(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_minu4
+; CHECK:       # %bb.0:
+; CHECK:         pv.minu.b {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %vb = bitcast i32 %b to <4 x i8>
   %res = call <4 x i8> @llvm.riscv.pulp.minu4(<4 x i8> %va, <4 x i8> %vb)
@@ -1417,6 +1617,10 @@ define i32 @test_llvm_riscv_pulp_minu4(i32 %a, i32 %b) {
 
 declare <4 x i8> @llvm.riscv.pulp.neg4(<4 x i8>)
 define i32 @test_llvm_riscv_pulp_neg4(i32 %a) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_neg4
+; CHECK:       # %bb.0:
+; CHECK:         pv.sub.b {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %res = call <4 x i8> @llvm.riscv.pulp.neg4(<4 x i8> %va)
   %ret = bitcast <4 x i8> %res to i32
@@ -1425,6 +1629,10 @@ define i32 @test_llvm_riscv_pulp_neg4(i32 %a) {
 
 declare <4 x i8> @llvm.riscv.pulp.or4(<4 x i8>, <4 x i8>)
 define i32 @test_llvm_riscv_pulp_or4(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_or4
+; CHECK:       # %bb.0:
+; CHECK:         pv.or.b {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %vb = bitcast i32 %b to <4 x i8>
   %res = call <4 x i8> @llvm.riscv.pulp.or4(<4 x i8> %va, <4 x i8> %vb)
@@ -1434,6 +1642,10 @@ define i32 @test_llvm_riscv_pulp_or4(i32 %a, i32 %b) {
 
 declare <4 x i8> @llvm.riscv.pulp.sll4(<4 x i8>, <4 x i8>)
 define i32 @test_llvm_riscv_pulp_sll4(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_sll4
+; CHECK:       # %bb.0:
+; CHECK:         pv.sll.b {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %vb = bitcast i32 %b to <4 x i8>
   %res = call <4 x i8> @llvm.riscv.pulp.sll4(<4 x i8> %va, <4 x i8> %vb)
@@ -1443,6 +1655,10 @@ define i32 @test_llvm_riscv_pulp_sll4(i32 %a, i32 %b) {
 
 declare <4 x i8> @llvm.riscv.pulp.sra4(<4 x i8>, <4 x i8>)
 define i32 @test_llvm_riscv_pulp_sra4(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_sra4
+; CHECK:       # %bb.0:
+; CHECK:         pv.sra.b {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %vb = bitcast i32 %b to <4 x i8>
   %res = call <4 x i8> @llvm.riscv.pulp.sra4(<4 x i8> %va, <4 x i8> %vb)
@@ -1452,6 +1668,10 @@ define i32 @test_llvm_riscv_pulp_sra4(i32 %a, i32 %b) {
 
 declare <4 x i8> @llvm.riscv.pulp.srl4(<4 x i8>, <4 x i8>)
 define i32 @test_llvm_riscv_pulp_srl4(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_srl4
+; CHECK:       # %bb.0:
+; CHECK:         pv.srl.b {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %vb = bitcast i32 %b to <4 x i8>
   %res = call <4 x i8> @llvm.riscv.pulp.srl4(<4 x i8> %va, <4 x i8> %vb)
@@ -1461,6 +1681,10 @@ define i32 @test_llvm_riscv_pulp_srl4(i32 %a, i32 %b) {
 
 declare <4 x i8> @llvm.riscv.pulp.sub4(<4 x i8>, <4 x i8>)
 define i32 @test_llvm_riscv_pulp_sub4(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_sub4
+; CHECK:       # %bb.0:
+; CHECK:         pv.sub.b {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %vb = bitcast i32 %b to <4 x i8>
   %res = call <4 x i8> @llvm.riscv.pulp.sub4(<4 x i8> %va, <4 x i8> %vb)
@@ -1482,6 +1706,10 @@ define i32 @test_llvm_riscv_pulp_pack4(i32 %a, i32 %b, i32 %c, i32 %d) {
 
 declare <4 x i8> @llvm.riscv.pulp.pack4.hi(i32, i32, <4 x i8>)
 define i32 @test_llvm_riscv_pulp_pack4_hi(i32 %a, i32 %b, i32 %c) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_pack4_hi
+; CHECK:       # %bb.0:
+; CHECK:         pv.packhi.b [[REG:a[0-9]+]], {{a[0-9]+}}, {{a[0-9]+}}
+;
   %vc = bitcast i32 %c to <4 x i8>
   %res = call <4 x i8> @llvm.riscv.pulp.pack4.hi(i32 %a, i32 %b, <4 x i8> %vc)
   %ret = bitcast <4 x i8> %res to i32
@@ -1490,6 +1718,10 @@ define i32 @test_llvm_riscv_pulp_pack4_hi(i32 %a, i32 %b, i32 %c) {
 
 declare <4 x i8> @llvm.riscv.pulp.pack4.lo(i32, i32, <4 x i8>)
 define i32 @test_llvm_riscv_pulp_pack4_lo(i32 %a, i32 %b, i32 %c) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_pack4_lo
+; CHECK:       # %bb.0:
+; CHECK:         pv.packlo.b [[REG:a[0-9]+]], {{a[0-9]+}}, {{a[0-9]+}}
+;
   %vc = bitcast i32 %c to <4 x i8>
   %res = call <4 x i8> @llvm.riscv.pulp.pack4.lo(i32 %a, i32 %b, <4 x i8> %vc)
   %ret = bitcast <4 x i8> %res to i32
@@ -1498,6 +1730,10 @@ define i32 @test_llvm_riscv_pulp_pack4_lo(i32 %a, i32 %b, i32 %c) {
 
 declare <4 x i8> @llvm.riscv.pulp.shuffle4b(<4 x i8>, <4 x i8>, <4 x i8>)
 define i32 @test_llvm_riscv_pulp_shuffle4b(i32 %a, i32 %b, i32 %c) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_shuffle4b
+; CHECK:       # %bb.0:
+; CHECK:         pv.shuffle2.b [[REG:a[0-9]+]], {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %vb = bitcast i32 %b to <4 x i8>
   %vc = bitcast i32 %c to <4 x i8>
@@ -1508,6 +1744,10 @@ define i32 @test_llvm_riscv_pulp_shuffle4b(i32 %a, i32 %b, i32 %c) {
 
 declare <4 x i8> @llvm.riscv.pulp.shuffleb(<4 x i8>, <4 x i8>)
 define i32 @test_llvm_riscv_pulp_shuffleb(i32 %a, i32 %b) {
+; CHECK-LABEL: @test_llvm_riscv_pulp_shuffleb
+; CHECK:       # %bb.0:
+; CHECK:         pv.shuffle.b [[REG:a[0-9]+]], {{a[0-9]+}}, {{a[0-9]+}}
+;
   %va = bitcast i32 %a to <4 x i8>
   %vb = bitcast i32 %b to <4 x i8>
   %res = call <4 x i8> @llvm.riscv.pulp.shuffleb(<4 x i8> %va, <4 x i8> %vb)

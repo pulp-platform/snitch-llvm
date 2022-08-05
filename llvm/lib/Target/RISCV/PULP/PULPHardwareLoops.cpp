@@ -341,10 +341,8 @@ bool PULPHardwareLoops::runOnMachineFunction(MachineFunction &MF) {
     }
 
   if (Changed) {
-    errs().changeColor(raw_fd_ostream::Colors::BLUE, true);
-    errs() << "Created " << NumHWLoopsInternal << " hardware loops in "
-           << MF.getName() << "!\n";
-    errs().resetColor();
+    LLVM_DEBUG(dbgs() << "Created " << NumHWLoopsInternal << 
+               " hardware loops in " << MF.getName() << "\n";);
   }
 
   return Changed;

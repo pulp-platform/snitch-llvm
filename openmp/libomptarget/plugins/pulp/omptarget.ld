@@ -4,8 +4,8 @@ ENTRY( _start )
 MEMORY
 {
   L2           : ORIGIN = 0x1c000000, LENGTH = 0x00080000
-  L1                 : ORIGIN = 0x10000004, LENGTH = 0x0003fffc
-  L1_aliased         : ORIGIN = 0x1b000004, LENGTH = 0x0003fffc
+  L1                 : ORIGIN = 0x10000000, LENGTH = 0x00040000
+  L1_aliased         : ORIGIN = 0x10000000, LENGTH = 0x00040000
 }
 
 __ZERO = DEFINED(__ZERO) ? __ZERO  : 0;

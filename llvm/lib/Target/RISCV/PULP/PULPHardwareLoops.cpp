@@ -413,17 +413,21 @@ bool PULPHardwareLoops::findInductionRegister(MachineLoop *L,
   // Check that the exit branch can be analyzed.
   // AnalyzeBranch returns true if it fails to analyze branch.
   bool NotAnalyzed = TII->analyzeBranch(*ExitingBlock, TB, FB, Cond, false);
+  const auto Terminators = Latch->terminators();
+  assert(!Terminators.empty());
+  const auto NumTerminators = std::distance(std::begin(Terminators), std::end(Terminators));
   if (NotAnalyzed
       // The rest of this function is based on the assumption that we have
-      // at least 2x terminators, so bail out if this is not the case:
+      // at least 2x terminators, so bail out if this is not the case.
+      || NumTerminators < 2
       || Cond.size() < 2) {
     return false;
   }
   
   // We now know there are two terminators, one conditional and one
   // unconditional. If the order does not match what we expect, bail out.
-  MachineInstr *condTerm = &(*Latch->getFirstTerminator());
-  MachineInstr *uncondTerm = &(*std::next(Latch->getFirstTerminator()));
+  MachineInstr *condTerm = &(*std::begin(Terminators));
+  MachineInstr *uncondTerm = &(*std::next(std::begin(Terminators)));
   if (!(condTerm->getDesc().isConditionalBranch() &&
       uncondTerm->getDesc().isUnconditionalBranch())) {
     return false;

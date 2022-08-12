@@ -285,4 +285,40 @@ for.cond.cleanup:                                 ; preds = %for.cond2.for.cond.
   ret i32 %sum.0.lcssa
 }
 
+; Regression test for pulp-sdk's memcpy implementation.
+; While we know that inference fails here, we want to be sure
+; that the inference pass doesn't crash on us.
+; CHECK-LABEL:	strcmp:
+; CHECK-NEXT:	# %bb.0:
+define dso_local i32 @strcmp(i8* nocapture noundef readonly %s1, i8* nocapture noundef readonly %s2) local_unnamed_addr #0 {
+entry:
+  %0 = load i8, i8* %s1, align 1
+  %cmp.not14 = icmp eq i8 %0, 0
+  br i1 %cmp.not14, label %while.end, label %land.rhs
+
+land.rhs:                                         ; preds = %entry, %while.body
+  %1 = phi i8 [ %3, %while.body ], [ %0, %entry ]
+  %s2.addr.016 = phi i8* [ %incdec.ptr6, %while.body ], [ %s2, %entry ]
+  %s1.addr.015 = phi i8* [ %incdec.ptr, %while.body ], [ %s1, %entry ]
+  %2 = load i8, i8* %s2.addr.016, align 1
+  %cmp4 = icmp eq i8 %1, %2
+  br i1 %cmp4, label %while.body, label %while.end
+
+while.body:                                       ; preds = %land.rhs
+  %incdec.ptr = getelementptr inbounds i8, i8* %s1.addr.015, i32 1
+  %incdec.ptr6 = getelementptr inbounds i8, i8* %s2.addr.016, i32 1
+  %3 = load i8, i8* %incdec.ptr, align 1
+  %cmp.not = icmp eq i8 %3, 0
+  br i1 %cmp.not, label %while.end, label %land.rhs
+
+while.end:                                        ; preds = %land.rhs, %while.body, %entry
+  %s2.addr.0.lcssa = phi i8* [ %s2, %entry ], [ %incdec.ptr6, %while.body ], [ %s2.addr.016, %land.rhs ]
+  %.lcssa = phi i8 [ 0, %entry ], [ 0, %while.body ], [ %1, %land.rhs ]
+  %conv7 = zext i8 %.lcssa to i32
+  %4 = load i8, i8* %s2.addr.0.lcssa, align 1
+  %conv8 = zext i8 %4 to i32
+  %sub = sub nsw i32 %conv7, %conv8
+  ret i32 %sub
+}
+
 attributes #0 = { nofree norecurse nosync nounwind readonly "target-features"="+a,+c,+f,+m,+xpulpv" }

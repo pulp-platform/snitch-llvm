@@ -61,7 +61,7 @@ using namespace llvm;
 namespace llvm {
   cl::opt<bool> AggressiveReassociate(
     "ssr-aggressive-reassociation", 
-    cl::init(true), 
+    cl::init(false), 
     cl::desc("Reassociate aggressively and move ssr push/pop out of the way. In particular: reassociate also fast fp-ops")
   );
   
@@ -98,9 +98,9 @@ namespace {
 bool SSRReassociate::runOnFunction(Function &F) {
   bool Modified = false;
 
-  errs()<<"SSR Reassociate Pass running on: "<<F.getNameOrAsOperand()<<"\n";
-  if (BubbleStreams) errs()<<"bubbling streams by "<<BubbleStreams<<"\n";
-  if (AggressiveReassociate) errs()<<"aggressive reassociate enabled \n";
+  LLVM_DEBUG(dbgs()<<"SSR Reassociate Pass running on: "<<F.getNameOrAsOperand()<<"\n");
+  if (BubbleStreams) LLVM_DEBUG(dbgs()<<"bubbling streams by "<<BubbleStreams<<"\n");
+  if (AggressiveReassociate) LLVM_DEBUG(dbgs()<<"aggressive reassociate enabled \n");
 
   for (auto &BB : F) Modified |= runOnBB(BB);
 

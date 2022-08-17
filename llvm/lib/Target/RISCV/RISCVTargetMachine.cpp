@@ -172,7 +172,7 @@ TargetPassConfig *RISCVTargetMachine::createPassConfig(PassManagerBase &PM) {
 }
 
 void RISCVPassConfig::addIRPasses() {
-  addPass(createSSRReassociatePass()); //slow, see top of file for more info
+  //addPass(createSSRReassociatePass()); //slow, see top of file for more info
   //addPass(createReassociatePass()); does not reassociate fast fp-ops ???
   addPass(createAtomicExpandPass());
   TargetPassConfig::addIRPasses();
@@ -217,7 +217,7 @@ void RISCVPassConfig::addPreEmitPass2() {
   //FIXME: scheduling the post ra scheduler after ssr expand gives better results but is unsafe 
   //because it might move insts with ssr regs after ssr-disable (or before enable) or reorder them internally (change in order of stream!)
   // addPass(&PostRASchedulerID); 
-  addPass(createSNITCHAutoFrepPass());
+  //addPass(createSNITCHAutoFrepPass()); //alternative to scheduling and anti-dep-breaking
   
   // Schedule the expansion of AMOs at the last possible moment, avoiding the
   // possibility for other passes to break the requirements for forward

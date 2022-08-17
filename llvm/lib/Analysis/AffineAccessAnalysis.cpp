@@ -49,6 +49,8 @@
 #include <iostream>
 #include <utility>
 
+#define DEBUG_TYPE "ssr"
+
 using namespace llvm;
 
 //================== AffineAcces, helper functions =========================================
@@ -247,11 +249,11 @@ bool isOnAllPredicatedControlFlowPaths(BasicBlock *BB, const Loop *L, const Domi
     vis.insert(Current);
 
     Instruction *T = Current->getTerminator();
-    T->dump();
+    LLVM_DEBUG(T->dump());
     if (BranchInst *BR = dyn_cast<BranchInst>(T)){
       if (BR->isConditional()){
         if (ICmpInst *Cmp = dyn_cast<ICmpInst>(BR->getCondition())){ //FOR NOW: only works with a single ICmpInst as branch condition operand
-          Cmp->dump();
+          LLVM_DEBUG(Cmp->dump());
           auto r = predicatedICmpOutcome(Cmp, Rep, SE);
           if (r.hasValue()){
             if (r.getValue()) q.push_back(BR->getSuccessor(0));
@@ -332,24 +334,6 @@ void updateOutermostExpandableExcl(const Loop *&outerMostExpandableExl, AffAccCo
   }
 }
 
-// void dumpAffAccConflict(AffAccConflict kind) {
-//   switch (kind)
-//   {
-//   case AffAccConflict::Bad:
-//     errs()<<"Bad";
-//     break;
-//   case AffAccConflict::MustNotIntersect:
-//     errs()<<"MustNotIntersect";
-//     break;
-//   case AffAccConflict::NoConflict:
-//     errs()<<"NoConflict";
-//     break;
-//   default:
-//     break;
-//   }
-//   errs()<<"\n";
-// }
-
 Optional<int> findSign(const SCEV *S, ScalarEvolution &SE, std::vector<std::pair<const SCEV *, int>> &known) {
   if (!S) return None;
 
@@ -423,8 +407,8 @@ LoopRep::LoopRep(const Loop *L, ArrayRef<const Loop *> contLoops, ScalarEvolutio
   : SE(SE), DT(DT), L(L), containingLoops(contLoops.begin(), contLoops.end()), safeExpandBound(0u)
   {
   RepSCEV = getLoopBTSCEV(L, DT, SE);
-  if (RepSCEV) errs()<<"new LoopRep with rep scev: "<<*RepSCEV<<"\n";
-  else errs()<<"new LoopRep with rep scev: <nullptr> \n";
+  if (RepSCEV) LLVM_DEBUG(dbgs()<<"new LoopRep with rep scev: "<<*RepSCEV<<"\n");
+  else LLVM_DEBUG(dbgs()<<"new LoopRep with rep scev: <nullptr> \n");
   
   if (RepSCEV){
     while (safeExpandBound < containingLoops.size() 
@@ -721,14 +705,13 @@ void AffAcc::addConflict(AffAcc *A, const Loop *StartL, AffAccConflict kind){
   assert(conflicts.find(A) == conflicts.end() && "no conflict for A yet");
   assert(kind == AffAccConflict::Bad || (isWellFormed(StartL) && A->isWellFormed(StartL)));
   conflicts.insert(std::make_pair(A, std::make_pair(StartL, kind)));
-  //errs()<<"conflict for:\n"; dumpInLoop(StartL); errs()<<"with:\n"; A->dumpInLoop(StartL); errs()<<"is ===> ";
 }
 
 bool AffAcc::promote(LoopRep *LR){
   if (!LR->isAvailable()) return false;
   unsigned newDim = (unsigned)(getMaxDimension() + 1); //getMaxDimension() >= -1
   if (getLoop(newDim) != LR->getLoop()) return false;
-  errs()<<"promote: (1) loops match, ";
+  LLVM_DEBUG(dbgs()<<"promote: (1) loops match, ");
   bool possible = true;
   Instruction *Point = LR->getLoop()->getLoopPreheader()->getTerminator();
   //check all current reps and steps
@@ -736,15 +719,15 @@ bool AffAcc::promote(LoopRep *LR){
     possible &= isSafeToExpandAt(getStep(dim), Point, SE);
     possible &= reps[dim]->isSafeToExpandBefore(LR->getLoop());
   }
-  if (possible) errs()<<"can expand (2) current rep & step, ";
+  if (possible) LLVM_DEBUG(dbgs()<<"can expand (2) current rep & step, ");
   //check rep and step of new dimension
   possible &= steps.size() > newDim && isSafeToExpandAt(getStep(newDim), Point, SE);
   possible &= LR->isSafeToExpandBefore(LR->getLoop());
-  if (possible) errs()<<"(3) new rep & step, ";
+  if (possible) LLVM_DEBUG(dbgs()<<"(3) new rep & step, ");
   //check base address
   possible &= !SCEVContainsCouldNotCompute(getBaseAddr(newDim)) && isSafeToExpandAt(getBaseAddr(newDim), Point, SE);
-  if (possible) errs()<<"and (4) new base addr!";
-  errs()<<"\n";
+  if (possible) LLVM_DEBUG(dbgs()<<"and (4) new base addr!");
+  LLVM_DEBUG(dbgs()<<"\n");
   if (!possible) return false;
 
   reps.push_back(LR); //changes getMaxDimension()
@@ -755,11 +738,11 @@ Value *AffAcc::expandBaseAddr(unsigned dimension, Type *ty, Instruction *InsertB
   assert(isWellFormed(dimension));
   InsertBefore = InsertBefore ? InsertBefore : reps[dimension]->getLoop()->getLoopPreheader()->getTerminator();
   if (!isSafeToExpandAt(getBaseAddr(dimension), InsertBefore, SE)){
-    errs()<<"data not expanable here (note: only preheader guaranteed)\n";
-    errs()<<"SCEV (dim = "<<dimension<<")= "<<*getBaseAddr(dimension)<<"\n";
-    errs()<<"in block:\n"; InsertBefore->getParent()->dump();
-    errs()<<"before inst: "<<*InsertBefore<<"\n";
-    this->dump();
+    LLVM_DEBUG(dbgs()<<"data not expanable here (note: only preheader guaranteed)\n");
+    LLVM_DEBUG(dbgs()<<"SCEV (dim = "<<dimension<<")= "<<*getBaseAddr(dimension)<<"\n");
+    LLVM_DEBUG(dbgs()<<"in block:\n"; InsertBefore->getParent()->dump());
+    LLVM_DEBUG(dbgs()<<"before inst: "<<*InsertBefore<<"\n");
+    LLVM_DEBUG(this->dump());
     llvm_unreachable("cannot expand SCEV at desired location");
   }
   SCEVExpander ex(SE, reps[dimension]->getLoop()->getHeader()->getModule()->getDataLayout(), "addr");
@@ -918,7 +901,7 @@ AffineAccess::AffineAccess(
 }
 
 std::unique_ptr<std::vector<AffAcc *>> AffineAccess::analyze(Loop *Parent, ArrayRef<const Loop *> loopPath){
-  errs()<<"analyze: loop          : "<<Parent->getHeader()->getNameOrAsOperand()<<"\n";
+  LLVM_DEBUG(dbgs()<<"analyze: loop          : "<<Parent->getHeader()->getNameOrAsOperand()<<"\n");
 
   //LoopRep for Parent
   LoopRep *ParentLR = new LoopRep(Parent, loopPath, SE, DT);
@@ -973,7 +956,7 @@ std::unique_ptr<std::vector<AffAcc *>> AffineAccess::analyze(Loop *Parent, Array
     }
   }
   
-  errs()<<"analyze: done with loop: "<<Parent->getHeader()->getNameOrAsOperand()<<"\n";
+  LLVM_DEBUG(dbgs()<<"analyze: done with loop: "<<Parent->getHeader()->getNameOrAsOperand()<<"\n");
   
   return all;
 }
@@ -1004,9 +987,9 @@ void AffineAccess::addAllConflicts(const std::vector<AffAcc *> &all) {
       if (!L) continue;
       if (L == outerMostExpandableExl) break;
       if (!(!L || A->isWellFormed(L))){
-        if (L) L->dump();
-        if (outerMostExpandableExl) outerMostExpandableExl->dump();
-        A->dump();
+        if (L) LLVM_DEBUG(L->dump());
+        if (outerMostExpandableExl) LLVM_DEBUG(outerMostExpandableExl->dump());
+        LLVM_DEBUG(A->dump());
         llvm_unreachable("this should not happen!");
       }
       assert(!L || A->isWellFormed(L));
@@ -1194,7 +1177,7 @@ AnalysisKey AffineAccessAnalysis::Key;
 
 AffineAccess AffineAccessAnalysis::run(Function &F, FunctionAnalysisManager &FAM) {
   
-  errs()<<"running AffineAccessAnalysis on "<<F.getName()<<"\n";
+  LLVM_DEBUG(dbgs()<<"running AffineAccessAnalysis on "<<F.getName()<<"\n");
 
   LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
   DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);

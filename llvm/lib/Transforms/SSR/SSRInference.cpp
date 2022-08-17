@@ -52,11 +52,13 @@
 #include <array>
 #include <vector>
 
+#define DEBUG_TYPE "ssr"
+
 using namespace llvm;
 
 PreservedAnalyses SSRInferencePass::run(Function &F, FunctionAnalysisManager &FAM){
-  errs()<<"SSR Inference Pass on function: "<<F.getNameOrAsOperand()<<"====================================================\n";
-  FunctionPassManager FPM(true);
+  LLVM_DEBUG(dbgs()<<"SSR Inference Pass on function: "<<F.getNameOrAsOperand()<<"====================================================\n");
+  FunctionPassManager FPM(false);
   FPM.addPass(FixIrreduciblePass());//turn some non-loops into loops
   FPM.addPass(LoopSimplifyPass());  //canonicalize loops
   //FPM.addPass(createFunctionToLoopPassAdaptor(LoopRotatePass()));
@@ -72,6 +74,6 @@ PreservedAnalyses SSRInferencePass::run(Function &F, FunctionAnalysisManager &FA
   FPM.addPass(SimplifyCFGPass());   //simplifies CFG again
   FPM.addPass(LoopSimplifyPass());  //canonicalize loops again
   auto pa = FPM.run(F, FAM);
-  errs()<<"SSR Inference Pass on function: "<<F.getNameOrAsOperand()<<" done! =============================================\n";
+  LLVM_DEBUG(dbgs()<<"SSR Inference Pass on function: "<<F.getNameOrAsOperand()<<" done! =============================================\n");
   return pa;
 }

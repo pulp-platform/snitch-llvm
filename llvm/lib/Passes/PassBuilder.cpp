@@ -521,7 +521,6 @@ PassBuilder::buildO1FunctionSimplificationPipeline(OptimizationLevel Level,
                                                    ThinOrFullLTOPhase Phase) {
 
   FunctionPassManager FPM(DebugLogging);
-  errs()<<"O1SimplificationPipeline\n";
   // Form SSA out of local memory accesses after breaking apart aggregates into
   // scalars.
   FPM.addPass(SROA());
@@ -648,7 +647,6 @@ FunctionPassManager
 PassBuilder::buildFunctionSimplificationPipeline(OptimizationLevel Level,
                                                  ThinOrFullLTOPhase Phase) {
   assert(Level != OptimizationLevel::O0 && "Must request optimizations!");
-  errs()<<"O2/3FunctionSimplificationPipeline\n";
   // The O1 pipeline has a separate pipeline creation function to simplify
   // construction readability.
   if (Level.getSpeedupLevel() == 1)
@@ -846,7 +844,6 @@ void PassBuilder::addPGOInstrPasses(ModulePassManager &MPM,
                                     std::string ProfileFile,
                                     std::string ProfileRemappingFile) {
   assert(Level != OptimizationLevel::O0 && "Not expecting O0 here!");
-  errs()<<"addPGOInstrPasses\n";
   if (!IsCS && !DisablePreInliner) {
     InlineParams IP;
 
@@ -940,7 +937,6 @@ ModuleInlinerWrapperPass
 PassBuilder::buildInlinerPipeline(OptimizationLevel Level,
                                   ThinOrFullLTOPhase Phase) {
   InlineParams IP = getInlineParamsFromOptLevel(Level);
-  errs()<<"buildInlinerPipeline\n";
   if (Phase == ThinOrFullLTOPhase::ThinLTOPreLink && PGOOpt &&
       PGOOpt->Action == PGOOptions::SampleUse)
     IP.HotCallSiteThreshold = 0;
@@ -1006,7 +1002,6 @@ PassBuilder::buildInlinerPipeline(OptimizationLevel Level,
 ModulePassManager
 PassBuilder::buildModuleSimplificationPipeline(OptimizationLevel Level,
                                                ThinOrFullLTOPhase Phase) {
-  errs()<<"ModuleSimplificationPipeline\n";
   ModulePassManager MPM(DebugLogging);
 
   // Add UniqueInternalLinkageNames Pass which renames internal linkage
@@ -1167,7 +1162,6 @@ PassBuilder::buildModuleSimplificationPipeline(OptimizationLevel Level,
 ModulePassManager
 PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
                                              bool LTOPreLink) {
-  errs()<<"ModuleOptimizationPipeline\n";
   ModulePassManager MPM(DebugLogging);
 
   // Optimize globals now that the module is fully simplified.
@@ -1411,7 +1405,6 @@ PassBuilder::buildModuleOptimizationPipeline(OptimizationLevel Level,
 ModulePassManager
 PassBuilder::buildPerModuleDefaultPipeline(OptimizationLevel Level,
                                            bool LTOPreLink) {
-  errs()<<"PerModuleDefaultPipeline\n";
   assert(Level != OptimizationLevel::O0 &&
          "Must request optimizations for the default pipeline!");
 
@@ -1452,7 +1445,6 @@ PassBuilder::buildPerModuleDefaultPipeline(OptimizationLevel Level,
 
 ModulePassManager
 PassBuilder::buildThinLTOPreLinkDefaultPipeline(OptimizationLevel Level) {
-  errs()<<"ThinLTOPreLinkDefaultPipeline\n";
   assert(Level != OptimizationLevel::O0 &&
          "Must request optimizations for the default pipeline!");
 
@@ -1509,7 +1501,6 @@ PassBuilder::buildThinLTOPreLinkDefaultPipeline(OptimizationLevel Level) {
 
 ModulePassManager PassBuilder::buildThinLTODefaultPipeline(
     OptimizationLevel Level, const ModuleSummaryIndex *ImportSummary) {
-  errs()<<"buildThinLTODefaultPipeline\n";
   ModulePassManager MPM(DebugLogging);
 
   // Convert @llvm.global.annotations to !annotation metadata.
@@ -1556,7 +1547,6 @@ ModulePassManager PassBuilder::buildThinLTODefaultPipeline(
 
 ModulePassManager
 PassBuilder::buildLTOPreLinkDefaultPipeline(OptimizationLevel Level) {
-  errs()<<"buildLTOPreLinkDefaultPipeline\n";
   assert(Level != OptimizationLevel::O0 &&
          "Must request optimizations for the default pipeline!");
   // FIXME: We should use a customized pre-link pipeline!
@@ -1567,7 +1557,6 @@ PassBuilder::buildLTOPreLinkDefaultPipeline(OptimizationLevel Level) {
 ModulePassManager
 PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
                                      ModuleSummaryIndex *ExportSummary) {
-  errs()<<"buildLTODefaultPipeline\n";
   ModulePassManager MPM(DebugLogging);
 
   // Convert @llvm.global.annotations to !annotation metadata.

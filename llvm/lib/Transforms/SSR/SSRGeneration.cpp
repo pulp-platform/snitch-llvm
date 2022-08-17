@@ -50,6 +50,8 @@
 #include <queue>
 #include <limits>
 
+#define DEBUG_TYPE "ssr"
+
 #define NUM_SSR 3U 
 #define SSR_MAX_DIM 4U
 
@@ -109,6 +111,12 @@ cl::opt<bool> SSRBarrier(
   "ssr-barrier",
   cl::init(false),
   cl::desc("Enable the insertion of a spinning loop that waits for the stream to be done before it is disabled.")
+);
+
+cl::opt<bool> SSRVerbose(
+  "ssr-verbose",
+  cl::init(true),
+  cl::desc("Write information about inferred streams to stderr.")
 );
 
 } //end of namespace llvm
@@ -269,7 +277,7 @@ std::pair<BasicBlock *, BasicBlock *> splitAt(Instruction *X, const Twine &name)
 ///assumes there is a phi node for each value defined in the region that will be cloned in the block of EndBefore that is live after EndBefore
 ///returns the branch that splits region from coloned region and the pair of branches that jump to EndBefore at the end
 std::pair<BranchInst *, std::pair<BranchInst *, BranchInst *>> cloneRegion(Instruction *BeginWith, Instruction *EndBefore){
-  errs()<<"cloning from "<<*BeginWith<<" up to "<<*EndBefore<<"\n";
+  LLVM_DEBUG(dbgs()<<"cloning from "<<*BeginWith<<" up to "<<*EndBefore<<"\n");
 
   auto p = splitAt(BeginWith, "split.before");
   BasicBlock *Head = p.first;
@@ -365,7 +373,7 @@ std::pair<BranchInst *, std::pair<BranchInst *, BranchInst *>> cloneRegion(Instr
       }
     }
   }
-  errs()<<"done cloning \n";
+  LLVM_DEBUG(dbgs()<<"done cloning \n");
 
   return std::make_pair(HeadBr, std::make_pair(BRFuse, cast<BranchInst>(clones.find(BRFuse)->second)));
 }
@@ -395,7 +403,17 @@ void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
   IRBuilder<> builder(Point);
   Type *i32 = Type::getInt32Ty(Point->getContext());
   unsigned dim = E.getDimension();
-  errs()<<"SSR Setup for stream with dim = "<<dim<<"\n";
+  LLVM_DEBUG(dbgs()<<"SSR Setup for stream with dim = "<<dim<<"\n");
+  if (SSRVerbose) {
+    errs()
+      <<"inferring "
+      <<(E.Access->isWrite() ? "write" : "read")
+      <<" stream with base address SCEV "
+      <<*E.Access->getBaseAddr(E.getDimension())
+      <<" of dimension "
+      <<E.getDimension()
+      <<".\n";
+  }
   assert(dim <= SSR_MAX_DIM);
   Constant *Dim = ConstantInt::get(i32, dim - 1U); //dimension - 1, ty=i32
   Constant *DMid = ConstantInt::get(i32, dmid); //ty=i32
@@ -477,7 +495,7 @@ void generateSSREnDis(Instruction *PhP, Instruction *ExP){
   Function *SSRDisable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_disable);
   builder.CreateCall(SSRDisable->getFunctionType(), SSRDisable, ArrayRef<Value *>());
 
-  errs()<<"generated ssr_enable and ssr_disable\n";
+  LLVM_DEBUG(dbgs()<<"generated ssr_enable and ssr_disable\n");
 
   return;
 }
@@ -563,7 +581,7 @@ std::vector<ExpandedAffAcc> expandInLoop(const std::vector<AffAcc *> &accs, cons
   assert(accs.size() <= NUM_SSR);
   assert(L);
 
-  errs()<<"expanding in Loop: "<<L->getHeader()->getNameOrAsOperand()<<" at depth "<<L->getLoopDepth()<<"\n";
+  LLVM_DEBUG(dbgs()<<"expanding in Loop: "<<L->getHeader()->getNameOrAsOperand()<<" at depth "<<L->getLoopDepth()<<"\n");
 
   auto &ctxt = L->getHeader()->getContext();
   IntegerType *i32 = IntegerType::getInt32Ty(ctxt);
@@ -662,7 +680,7 @@ bool visitLoop(const Loop *L, DenseMap<const Loop *, std::vector<AffAcc *>> &pos
   }
   //add to tree:
   int gain = getEstGain(l, L, AAA);
-  errs()<<"est. gain is "<<gain<<" \n";
+  LLVM_DEBUG(dbgs()<<"est. gain is "<<gain<<" \n");
   unsigned val = (unsigned)std::max(0, gain); 
   tree.insertNode(L, val, L->isOutermost() ? nullptr : L->getParentLoop());
 
@@ -715,7 +733,7 @@ DenseSet<const Loop *> findLoopsWithSSR(Function &F, LoopInfo &LI) {
         Instruction *I = &i;
         if (CallBase *C = dyn_cast<CallBase>(I)) {
           if (C->hasFnAttr(SSRFnAttr)) {
-            errs()<<"call "<<*C<<" has attribute "<<SSRFnAttr<<"\n";
+            LLVM_DEBUG(dbgs()<<"call "<<*C<<" has attribute "<<SSRFnAttr<<"\n");
             //all loops that contain this call cannot have ssr streams, but successors can (we assume correct SSR usage) ==> no need to mark the BB
             const Loop *L = LI.getLoopFor(BB);
             while (L) {
@@ -725,13 +743,13 @@ DenseSet<const Loop *> findLoopsWithSSR(Function &F, LoopInfo &LI) {
           }
           if (IntrinsicInst *II = dyn_cast<IntrinsicInst>(C)) { 
             if (ids.contains(II->getIntrinsicID())) {
-              errs()<<"Intrinsic Instr "<<*II<<" calls an SSR intrinsic\n";
+              LLVM_DEBUG(dbgs()<<"Intrinsic Instr "<<*II<<" calls an SSR intrinsic\n");
               marked = true; //mark this (and thus also all following BBs)
             }
           }
           if (C->isInlineAsm()) { //inline asm may contain ssr setup insts!
-            errs()<<"inline asm call "<<*C<<" may contain ssr insts!\n";
-            C->getType()->dump();
+            LLVM_DEBUG(dbgs()<<"inline asm call "<<*C<<" may contain ssr insts!\n");
+            LLVM_DEBUG(C->getType()->dump());
             marked = true;
           }
         }
@@ -743,9 +761,9 @@ DenseSet<const Loop *> findLoopsWithSSR(Function &F, LoopInfo &LI) {
       worklist.push_back(std::make_pair(BB2, marked));
     }
   }
-  if (!invalid.empty()) errs()<<"Loops that are invalid bc of SSR\n";
+  if (!invalid.empty()) LLVM_DEBUG(dbgs()<<"Loops that are invalid bc of SSR\n");
   for (auto l : invalid) {
-    errs()<<"header = "<<l->getHeader()->getNameOrAsOperand()<<" at depth = "<<l->getLoopDepth()<<"\n";
+    LLVM_DEBUG(dbgs()<<"header = "<<l->getHeader()->getNameOrAsOperand()<<" at depth = "<<l->getLoopDepth()<<"\n");
   }
 
   return invalid;
@@ -754,22 +772,22 @@ DenseSet<const Loop *> findLoopsWithSSR(Function &F, LoopInfo &LI) {
 } //end of namespace
 
 PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &FAM){
-  errs()<<"SSRInference Flags: ";
-  if (InferSSR) errs()<<"infer-ssr";
-  if (SSRNoIntersectCheck) errs()<<", ssr-no-intersect-check";
-  if (SSRNoBoundCheck) errs()<<", ssr-no-bound-check";
-  if (SSRNoTCDMCheck) errs()<<", ssr-no-tcdm-check";
-  if (SSRBarrier) errs()<<", ssr-barrier";
-  if (SSRNoInline) errs()<<", ssr-no-inline";
-  if (SSRConflictFreeOnly) errs()<<", ssr-conflict-free-only";
-  errs()<<"\n";
+  LLVM_DEBUG(dbgs()<<"SSRInference Flags: ");
+  if (InferSSR) LLVM_DEBUG(dbgs()<<"infer-ssr");
+  if (SSRNoIntersectCheck) LLVM_DEBUG(dbgs()<<", ssr-no-intersect-check");
+  if (SSRNoBoundCheck) LLVM_DEBUG(dbgs()<<", ssr-no-bound-check");
+  if (SSRNoTCDMCheck) LLVM_DEBUG(dbgs()<<", ssr-no-tcdm-check");
+  if (SSRBarrier) LLVM_DEBUG(dbgs()<<", ssr-barrier");
+  if (SSRNoInline) LLVM_DEBUG(dbgs()<<", ssr-no-inline");
+  if (SSRConflictFreeOnly) LLVM_DEBUG(dbgs()<<", ssr-conflict-free-only");
+  LLVM_DEBUG(dbgs()<<"\n");
 
   if (!InferSSR) return PreservedAnalyses::all();
   if (F.hasFnAttribute(SSRFnAttr)) return PreservedAnalyses::all(); //this function already contains streams ==> skip
 
   AffineAccess &AAA = FAM.getResult<AffineAccessAnalysis>(F);
 
-  errs()<<"SSR Generation Pass on function: "<<F.getNameOrAsOperand()<<" ---------------------------------------------------\n";
+  LLVM_DEBUG(dbgs()<<"SSR Generation Pass on function: "<<F.getNameOrAsOperand()<<" ---------------------------------------------------\n");
 
   bool changed = false;
   auto &toploops = AAA.getLI().getTopLevelLoops();
@@ -788,7 +806,7 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
     worklist.push_back(T);
     while (!worklist.empty()) {
       const Loop *L = worklist.front(); worklist.pop_front();
-      errs()<<"visiting loop: "<<L->getHeader()->getNameOrAsOperand()<<"\n";
+      LLVM_DEBUG(dbgs()<<"visiting loop: "<<L->getHeader()->getNameOrAsOperand()<<"\n");
 
       visitLoop(L, possible, tree, AAA, ssrInvalidLoops.find(L) != ssrInvalidLoops.end());
 

@@ -412,8 +412,10 @@ LoopRep::LoopRep(const Loop *L, ArrayRef<const Loop *> contLoops, ScalarEvolutio
   
   if (RepSCEV){
     while (safeExpandBound < containingLoops.size() 
-      && isSafeToExpandAt(RepSCEV, containingLoops[safeExpandBound]->getLoopPreheader()->getTerminator(), SE)) 
+      && (!containingLoops[safeExpandBound] 
+        || isSafeToExpandAt(RepSCEV, containingLoops[safeExpandBound]->getLoopPreheader()->getTerminator(), SE))){
       safeExpandBound++;
+    }
   }
 }
 
@@ -715,7 +717,7 @@ bool AffAcc::promote(LoopRep *LR){
   bool possible = true;
   Instruction *Point = LR->getLoop()->getLoopPreheader()->getTerminator();
   //check all current reps and steps
-  for (int dim = 1; possible && dim < getMaxDimension(); dim++){ 
+  for (unsigned dim = 1; dim < newDim; dim++){ 
     possible &= isSafeToExpandAt(getStep(dim), Point, SE);
     possible &= reps[dim]->isSafeToExpandBefore(LR->getLoop());
   }
@@ -762,7 +764,12 @@ Value *AffAcc::expandStep(unsigned dimension, Type *ty, Instruction *InsertBefor
 Value *AffAcc::expandRep(unsigned dimension, Type *ty, Instruction *InsertBefore){
   assert(isWellFormed(dimension) && dimension > 0u);
   InsertBefore = InsertBefore ? InsertBefore : reps[dimension]->getLoop()->getLoopPreheader()->getTerminator();
-  assert(isSafeToExpandAt(getRep(dimension), InsertBefore, SE) && "data not expanable here (note: only preheader guaranteed)");
+  if (!isSafeToExpandAt(getRep(dimension), InsertBefore, SE)) {
+    getRep(dimension)->dump();
+    InsertBefore->dump();
+    InsertBefore->getParent()->dump();
+    this->dump();
+  }
   return reps[dimension]->expandAt(ty, InsertBefore);
 }
 

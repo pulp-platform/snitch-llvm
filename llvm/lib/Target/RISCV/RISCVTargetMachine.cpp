@@ -172,8 +172,9 @@ TargetPassConfig *RISCVTargetMachine::createPassConfig(PassManagerBase &PM) {
 }
 
 void RISCVPassConfig::addIRPasses() {
-  //addPass(createSSRReassociatePass()); //slow, see top of file for more info
-  //addPass(createReassociatePass()); does not reassociate fast fp-ops ???
+  //addPass(createSSRReassociatePass()); //slow & incorrect, see top of file for more info
+  //addPass(createReassociatePass()); does not reassociate fast FP-ops ???
+  //addPass(createSSRStatisticsPass()); //counts number of load/store as well as number of streams
   addPass(createAtomicExpandPass());
   TargetPassConfig::addIRPasses();
 }

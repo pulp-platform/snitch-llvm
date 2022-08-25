@@ -42,6 +42,9 @@
 #include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/ADT/ilist.h"
 
+#include <llvm/IR/DebugLoc.h>
+#include <llvm/IR/DebugInfoMetadata.h>
+
 #include <array>
 #include <vector>
 #include <map>
@@ -115,7 +118,7 @@ cl::opt<bool> SSRBarrier(
 
 cl::opt<bool> SSRVerbose(
   "ssr-verbose",
-  cl::init(true),
+  cl::init(false),
   cl::desc("Write information about inferred streams to stderr.")
 );
 
@@ -194,25 +197,7 @@ private:
   const NodeT *Root = nullptr;
 };
 
-/*
-void clobberRegisters(ArrayRef<std::string> regs, IRBuilder<> &builder){
-  std::string constraints = "";
-  if (regs.size() > 0u) {
-    constraints = "~{" + regs[0] + "}";
-    for (unsigned i = 1u; i < regs.size(); i++) {
-      constraints = "~{" + regs[i] + "}," + constraints;
-    }
-  }
-  InlineAsm *IA = InlineAsm::get(
-    FunctionType::get(Type::getVoidTy(builder.getContext()), false), 
-    "", 
-    constraints,
-    true
-  );
-  builder.CreateCall(IA)->dump();
-}
-*/
-
+// copy Phi-nodes from predecessor Basic Block (BB)
 void copyPHIsFromPred(BasicBlock *BB){
   BasicBlock *Pred = nullptr;
   for (BasicBlock *B : predecessors(BB)) {
@@ -390,6 +375,24 @@ BasicBlock *getSingleExitBlock(const Loop *L) {
   return Ex;
 }
 
+void printInfo(ExpandedAffAcc &E) {
+  errs()
+    <<(E.Access->isWrite() ? "write" : "read ")
+    <<" stream of dimension "
+    <<E.getDimension();
+  const auto &DL = E.Access->getAccesses()[0]->getDebugLoc();
+  if (DL.get()) {
+    errs()  
+      <<" orig. on line "
+      <<DL.getLine();
+  }
+  errs()
+    <<" with base address SCEV "
+    <<*E.Access->getBaseAddr(E.getDimension())
+    <<".\n";
+}
+
+//code for run-time checks for TCDM
 Value *GenerateTCDMCheck(ExpandedAffAcc &E, Instruction *Point) {
   IRBuilder<> builder(Point);
   Value *c1 = builder.CreateICmpULE(ConstantInt::get(E.LowerBound->getType(), SSR_SCRATCHPAD_BEGIN), E.LowerBound, "beg.check");
@@ -397,6 +400,7 @@ Value *GenerateTCDMCheck(ExpandedAffAcc &E, Instruction *Point) {
   return builder.CreateAnd(c1, c2, "tcdm.check");
 }
 
+//generate code for SSR setup
 void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
   assert(Point);
   Module *mod = Point->getModule();
@@ -405,14 +409,7 @@ void GenerateSSRSetup(ExpandedAffAcc &E, unsigned dmid, Instruction *Point){
   unsigned dim = E.getDimension();
   LLVM_DEBUG(dbgs()<<"SSR Setup for stream with dim = "<<dim<<"\n");
   if (SSRVerbose) {
-    errs()
-      <<"inferring "
-      <<(E.Access->isWrite() ? "write" : "read")
-      <<" stream with base address SCEV "
-      <<*E.Access->getBaseAddr(E.getDimension())
-      <<" of dimension "
-      <<E.getDimension()
-      <<".\n";
+    errs()<<"Inferring "; printInfo(E);
   }
   assert(dim <= SSR_MAX_DIM);
   Constant *Dim = ConstantInt::get(i32, dim - 1U); //dimension - 1, ty=i32
@@ -484,22 +481,23 @@ void generateSSRBarrier(Instruction *InsertBefore, unsigned dmid) {
 }
 
 /// generates SSR enable & disable calls
-void generateSSREnDis(Instruction *PhP, Instruction *ExP){
+std::pair<Instruction*, Instruction*> generateSSREnDis(Instruction *PhP, Instruction *ExP){
   IRBuilder<> builder(PhP); // ----------- in preheader 
   Module *mod = PhP->getParent()->getModule();
   Function *SSREnable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_enable);
-  builder.CreateCall(SSREnable->getFunctionType(), SSREnable, ArrayRef<Value *>());
+  Instruction *en = builder.CreateCall(SSREnable->getFunctionType(), SSREnable, ArrayRef<Value *>());
 
   builder.SetInsertPoint(ExP); // ----------- in exit block
   //generateFPDependency(builder);
   Function *SSRDisable = Intrinsic::getDeclaration(mod, Intrinsic::riscv_ssr_disable);
-  builder.CreateCall(SSRDisable->getFunctionType(), SSRDisable, ArrayRef<Value *>());
+  Instruction *dis = builder.CreateCall(SSRDisable->getFunctionType(), SSRDisable, ArrayRef<Value *>());
 
   LLVM_DEBUG(dbgs()<<"generated ssr_enable and ssr_disable\n");
 
-  return;
+  return std::make_pair(en, dis);
 }
 
+//estimate how much it costs to compute the SSR setup data (bounds, strides, base address, etc...)
 int getEstExpandCost(AffAcc *A, unsigned dim) {
   int cost = 0;
   cost += A->getBaseAddr(dim)->getExpressionSize();
@@ -512,6 +510,7 @@ int getEstExpandCost(AffAcc *A, unsigned dim) {
   return cost;
 }
 
+//estimate the benefit of turning some AffAccs into streams
 int getEstGain(ArrayRef<AffAcc *> Accs, const Loop *L, AffineAccess &AAA) {
   int gain = 0;
   DenseSet<AffAcc *> accs;
@@ -612,11 +611,14 @@ void cloneAndSetup(Instruction *PhT, Instruction *ExP, Value *Cond, std::vector<
   assert(exp.size() <= NUM_SSR);
   if (exp.size() == 0u) return;
 
+  //generate en/dis range over both loop versions to prevent later runs of this pass to infer streams in the clone version
+  // ExP = generateSSREnDis(PhT, ExP).second; //TODO: this might be better here
+  
+
   if (!isa<ConstantInt>(Cond)){ //if Cond is not a constant we cannot make the decision at compile time ==> clone whole region for if-else
     auto p = cloneRegion(PhT, ExP);
     BranchInst *BR = p.first;
     ExP = p.second.first; //terminator of exit block that jumps to original ExP
-    //PhT = cast<BasicBlock>(BR->getOperand(1u))->getTerminator();
     BR->setCondition(Cond);
   } else {
     //this should never happen, but it means the runtime checks were somehow known at compile time and turned out false:
@@ -632,6 +634,8 @@ void cloneAndSetup(Instruction *PhT, Instruction *ExP, Value *Cond, std::vector<
   generateSSREnDis(PhT, ExP);
 }
 
+//predicate to filter AffAccs
+//in accordance with HW limitations, i.e., dimension <= 4, type = double, see #defines used
 bool isValid(AffAcc *A, const Loop *L) {
   assert(A->isWellFormed(L));
   bool valid = true;
@@ -644,12 +648,16 @@ bool isValid(AffAcc *A, const Loop *L) {
   return valid;
 }
 
+//should be guaranteed by SimplifyLoops in SSRInferencePass, but the pass says that any guarantees should be rechecked when depended upon.
 bool isValidLoop(const Loop *L) {
   assert(L);
   if (!L->getLoopPreheader() || !getSingleExitBlock(L)) return false;
   return true;
 }
 
+// collect some information about loop:
+// possible streams
+// insertion into conflict tree (for mapping to data movers)
 bool visitLoop(const Loop *L, DenseMap<const Loop *, std::vector<AffAcc *>> &possible, ConflictTree<Loop> &tree, AffineAccess &AAA, bool isKnownInvalid) {
   assert(L);
 
@@ -683,6 +691,18 @@ bool visitLoop(const Loop *L, DenseMap<const Loop *, std::vector<AffAcc *>> &pos
   LLVM_DEBUG(dbgs()<<"est. gain is "<<gain<<" \n");
   unsigned val = (unsigned)std::max(0, gain); 
   tree.insertNode(L, val, L->isOutermost() ? nullptr : L->getParentLoop());
+
+  if (SSRVerbose) {
+    for (auto *A : l) {
+      errs()
+        <<"potential stream with base addr SCEV "
+        <<*A->getBaseAddr(L)
+        <<" of dimension "
+        <<A->loopToDimension(L)
+        <<"\n";
+    }
+    if (!l.empty()) errs()<<"With est. gain = "<<gain<<"\n";
+  }
 
   return !isKnownInvalid;
 }
@@ -771,6 +791,7 @@ DenseSet<const Loop *> findLoopsWithSSR(Function &F, LoopInfo &LI) {
 
 } //end of namespace
 
+// main "run" of this pass
 PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &FAM){
   LLVM_DEBUG(dbgs()<<"SSRInference Flags: ");
   if (InferSSR) LLVM_DEBUG(dbgs()<<"infer-ssr");
@@ -782,10 +803,10 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
   if (SSRConflictFreeOnly) LLVM_DEBUG(dbgs()<<", ssr-conflict-free-only");
   LLVM_DEBUG(dbgs()<<"\n");
 
-  if (!InferSSR) return PreservedAnalyses::all();
+  if (!InferSSR) return PreservedAnalyses::all(); //if no SSR inference is enabled, we exit early
   if (F.hasFnAttribute(SSRFnAttr)) return PreservedAnalyses::all(); //this function already contains streams ==> skip
 
-  AffineAccess &AAA = FAM.getResult<AffineAccessAnalysis>(F);
+  AffineAccess &AAA = FAM.getResult<AffineAccessAnalysis>(F); //call analysis
 
   LLVM_DEBUG(dbgs()<<"SSR Generation Pass on function: "<<F.getNameOrAsOperand()<<" ---------------------------------------------------\n");
 
@@ -813,7 +834,7 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
       for (const Loop *x : L->getSubLoops()) worklist.push_back(x);
     }
 
-    //find best expands
+    //find best expands (map best loops to data movers)
     auto f = [](unsigned a, unsigned b){ return a + b; };
     std::vector<const Loop *> best = tree.findBest(f);
 
@@ -844,7 +865,16 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
       if (p != conds.end()) {
         BasicBlock *Ex = getSingleExitBlock(L);
         assert(Ex);
-        //LoopVersioning LV(LAI, ArrayRef<RuntimePointerCheck>(), Parent, &LI, &DT, &SE);LoopAccessInfo LAI(Parent, &SE, nullptr, &AA, &DT, &LI);
+        if (SSRVerbose) {
+          errs()
+            <<"> Function "
+            <<L->getHeader()->getParent()->getNameOrAsOperand()
+            <<": Expanding SSR streams with "
+            <<(L->getLoopDepth()-1)
+            <<" containing loops and setup in preheader of loop with header "
+            <<L->getHeader()->getNameOrAsOperand()
+            <<"\n";
+        }
         cloneAndSetup(L->getLoopPreheader()->getTerminator(), &*Ex->getFirstInsertionPt(), p->second, exps.find(L)->getSecond());
       }
     }
@@ -856,73 +886,3 @@ PreservedAnalyses SSRGenerationPass::run(Function &F, FunctionAnalysisManager &F
   if (SSRNoInline) F.addFnAttr(Attribute::AttrKind::NoInline);
   return PreservedAnalyses::none();
 }
-
-/*
-  unsigned n_reps = 0U;
-  if (isStore){
-    for (Instruction *I : E.Access->getAccesses()){
-      generatePushAsm(I, dmid, cast<StoreInst>(I)->getValueOperand());
-      I->dump();
-      I->eraseFromParent();
-      n_reps++;
-    }
-  }else{
-    for (Instruction *I : E.Access->getAccesses()){
-      builder.SetInsertPoint(I);
-      auto *V = generatePopAsm(I, dmid);
-      V->dump(); I->dump();
-      BasicBlock::iterator ii(I);
-      ReplaceInstWithValue(I->getParent()->getInstList(), ii, V);
-      n_reps++;
-    }
-  }
-
-  ///generates SSR enable & disable calls 
-void generateSSREnDisAsm(Instruction *PhT, Instruction *ExP){
-  constexpr unsigned num_ssr = 3u; //FIXME: make use of NUM_SSR
-
-  IRBuilder<> builder(PhT); // ----------- in preheader 
-  auto &ctxt = builder.getContext();
-  Type *Double = Type::getDoubleTy(ctxt);
-  std::vector<Type *> structTys;
-  for (unsigned i = 0; i < num_ssr; i++) structTys.push_back(Double);
-  Type *ArrTy = StructType::get(ctxt, structTys); //auto *ArrTy = ArrayType::get(Double, num_ssr); //VectorType::get(Double, num_ssr, false);
-  std::vector<Type *> argtypes;
-  for (unsigned i = 0u; i < num_ssr; i++) argtypes.push_back(Double);
-  std::string constraints = "={f0},={f1},={f2},{f0},{f1},{f2},~{memory}";
-  FunctionType* fty = FunctionType::get(ArrTy, argtypes, false);
-  InlineAsm *En = InlineAsm::get(fty, "csrsi 0x7C0, 1\0A", constraints, true);
-  En->dump();
-  std::vector<Value *> args;
-  for (unsigned i = 0u; i < num_ssr; i++) args.push_back(UndefValue::get(Double));
-  CallInst *Dep = builder.CreateCall(En, args, "ssr.enable.dep");
-  Dep->dump();
-
-  builder.SetInsertPoint(ExP); // ----------- in exit block
-  std::vector<Value *> deps;
-  for (unsigned i = 0u; i < num_ssr; i++) 
-    deps.push_back(builder.CreateExtractValue(Dep, i, formatv("dep.{0}", i)));
-  InlineAsm *Dis = InlineAsm::get(fty, "csrci 0x7C0, 1\0A", constraints, true);
-  builder.CreateCall(Dis, deps, "ssr.disable.dep")->dump();
-  
-  errs()<<"generated ssr_enable and ssr_disable\n";
-
-  return;
-}
-
-Value *generatePopAsm(Instruction *InsertBefore, unsigned dmid) {
-  IRBuilder<> builder(InsertBefore);
-  FunctionType *fty = FunctionType::get(Type::getDoubleTy(builder.getContext()), false);
-  std::string inst = formatv("fmv.d $0, ft{0}\0A", dmid);
-  InlineAsm *Pop = InlineAsm::get(fty, inst, "=f", true);
-  return builder.CreateCall(Pop, ArrayRef<Value *>(), "ssr.pop");
-}
-
-void generatePushAsm(Instruction *InsertBefore, unsigned dmid, Value *Val){
-  IRBuilder<> builder(InsertBefore);
-  FunctionType *fty = FunctionType::get(Type::getVoidTy(builder.getContext()), ArrayRef<Type *>(Type::getDoubleTy(builder.getContext())), false);
-  std::string inst = formatv("fmv.d ft{0}, $0\0A", dmid);
-  InlineAsm *Push = InlineAsm::get(fty, inst, "f", true);
-  builder.CreateCall(Push, ArrayRef<Value *>(Val));
-}
-  */

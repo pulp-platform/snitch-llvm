@@ -54,6 +54,9 @@ void initializeSNITCHAutoFrepPass(PassRegistry &);
 FunctionPass *createSSRReassociatePass();
 void initializeSSRReassociatePass(PassRegistry &);
 
+FunctionPass *createSSRStatisticsPass();
+void initializeSSRStatisticsPass(PassRegistry &);
+
 FunctionPass *createRISCVExpandAtomicPseudoPass();
 void initializeRISCVExpandAtomicPseudoPass(PassRegistry &);
 

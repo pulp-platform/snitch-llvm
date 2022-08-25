@@ -95,6 +95,35 @@ static const RISCVSupportedExtension SupportedExtensions[] = {
     {"zve64x", RISCVExtensionVersion{1, 0}},
     {"zve64f", RISCVExtensionVersion{1, 0}},
     {"zve64d", RISCVExtensionVersion{1, 0}},
+    // Snitch extensions
+    {"xssr", RISCVExtensionVersion{0, 1}},
+    {"xdma", RISCVExtensionVersion{0, 1}},
+    {"xfrep", RISCVExtensionVersion{0, 1}},
+    {"xmempool", RISCVExtensionVersion{0, 1}},
+    // Smallfloat extensions
+    {"xfalthalf", RISCVExtensionVersion{0, 1}},
+    {"xfquarter", RISCVExtensionVersion{0, 1}},
+    {"xfaltquarter"  , RISCVExtensionVersion{0, 1}},
+    {"xfvecsingle", RISCVExtensionVersion{0, 1}},
+    {"xfvechalf", RISCVExtensionVersion{0, 1}},
+    {"xfvecalthalf", RISCVExtensionVersion{0, 1}},
+    {"xfvecquarter", RISCVExtensionVersion{0, 1}},
+    {"xfvecaltquarter", RISCVExtensionVersion{0, 1}},
+    {"xfauxhalf", RISCVExtensionVersion{0, 1}},
+    {"xfauxalthalf", RISCVExtensionVersion{0, 1}},
+    {"xfauxquarter", RISCVExtensionVersion{0, 1}},
+    {"xfauxaltquarter", RISCVExtensionVersion{0, 1}},
+    {"xfauxvecsingle", RISCVExtensionVersion{0, 1}},
+    {"xfauxvechalf", RISCVExtensionVersion{0, 1}},
+    {"xfauxvecalthalf", RISCVExtensionVersion{0, 1}},
+    {"xfauxvecquarter", RISCVExtensionVersion{0, 1}},
+    {"xfauxvecaltquarter", RISCVExtensionVersion{0, 1}},
+    {"xfexpauxvechalf", RISCVExtensionVersion{0, 1}},
+    {"xfexpauxvecalthalf", RISCVExtensionVersion{0, 1}},
+    {"xfexpauxvecquarter", RISCVExtensionVersion{0, 1}},
+    {"xfexpauxvecaltquarter", RISCVExtensionVersion{0, 1}},
+    // PULP extensions
+    {"xpulpv", RISCVExtensionVersion{2, 0}},
 };
 
 static const RISCVSupportedExtension SupportedExperimentalExtensions[] = {

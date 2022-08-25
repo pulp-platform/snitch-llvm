@@ -261,6 +261,32 @@ def FPR64C : RegisterClass<"RISCV", [f64], 64, (add
   (sequence "F%u_D", 8, 9)
 )>;
 
+def PulpV2 : RegisterClass<"RISCV", [v2i16], 32, (add
+    (sequence "X%u", 10, 17),
+    (sequence "X%u", 5, 7),
+    (sequence "X%u", 28, 31),
+    (sequence "X%u", 8, 9),
+    (sequence "X%u", 18, 27),
+    (sequence "X%u", 0, 4)
+  )> {
+    let RegInfos = RegInfoByHwMode<
+        [RV32,              RV64,              DefaultMode],
+        [RegInfo<32,32,32>, RegInfo<64,64,64>, RegInfo<32,32,32>]>;
+}
+
+def PulpV4 : RegisterClass<"RISCV", [v4i8], 32, (add
+    (sequence "X%u", 10, 17),
+    (sequence "X%u", 5, 7),
+    (sequence "X%u", 28, 31),
+    (sequence "X%u", 8, 9),
+    (sequence "X%u", 18, 27),
+    (sequence "X%u", 0, 4)
+  )> {
+    let RegInfos = RegInfoByHwMode<
+        [RV32,              RV64,              DefaultMode],
+        [RegInfo<32,32,32>, RegInfo<64,64,64>, RegInfo<32,32,32>]>;
+}
+
 // Vector type mapping to LLVM types.
 //
 // The V vector extension requires that VLEN >= 128 and <= 65536.

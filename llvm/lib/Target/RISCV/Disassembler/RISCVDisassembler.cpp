@@ -259,6 +259,18 @@ static DecodeStatus decodeVMaskReg(MCInst &Inst, uint64_t RegNo,
   return MCDisassembler::Success;
 }
 
+static DecodeStatus DecodePulpV2RegisterClass(MCInst &Inst, uint64_t RegNo,
+                                               uint64_t Address,
+                                               const void *Decoder) {
+  return DecodeGPRRegisterClass(Inst, RegNo, Address, Decoder);
+}
+
+static DecodeStatus DecodePulpV4RegisterClass(MCInst &Inst, uint64_t RegNo,
+                                               uint64_t Address,
+                                               const void *Decoder) {
+  return DecodeGPRRegisterClass(Inst, RegNo, Address, Decoder);
+}
+
 // Add implied SP operand for instructions *SP compressed instructions. The SP
 // operand isn't explicitly encoded in the instruction.
 static void addImplySP(MCInst &Inst, int64_t Address, const void *Decoder) {
@@ -284,6 +296,12 @@ static DecodeStatus decodeUImmOperand(MCInst &Inst, uint64_t Imm,
   addImplySP(Inst, Address, Decoder);
   Inst.addOperand(MCOperand::createImm(Imm));
   return MCDisassembler::Success;
+}
+
+template <unsigned N>
+static DecodeStatus decodeUImmMinus1Operand(MCInst &Inst, uint64_t Imm,
+                                            int64_t Address, const void *Decoder) {
+  return decodeUImmOperand<N>(Inst, Imm + 1, Address, Decoder);
 }
 
 template <unsigned N>
@@ -438,6 +456,17 @@ DecodeStatus RISCVDisassembler::getInstruction(MCInst &MI, uint64_t &Size,
       return MCDisassembler::Fail;
     }
     Insn = support::endian::read32le(Bytes.data());
+
+    if (STI.getFeatureBits()[RISCV::FeaturePULPExtV2]) {
+      LLVM_DEBUG(dbgs() << "Trying RV32Xpulp table (PULP extensions):\n");
+      Result = decodeInstruction(DecoderTableRV32Xpulp32, MI, Insn, Address, this,
+                                 STI);
+      if (Result != MCDisassembler::Fail) {
+        Size = 4;
+        return Result;
+      }
+    }
+
     if (STI.getFeatureBits()[RISCV::FeatureStdExtZdinx] &&
         !STI.getFeatureBits()[RISCV::Feature64Bit]) {
       LLVM_DEBUG(dbgs() << "Trying RV32Zdinx table (Double in Integer and"

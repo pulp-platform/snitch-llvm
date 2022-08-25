@@ -400,6 +400,13 @@ def FeatureStdExtZvfh
                        "'Zvfh' (Vector Half-Precision Floating-Point)",
                        [FeatureStdExtZve32f]>;
 
+// TODO We should remove the "V2" part, since this is handled specially now.
+def FeaturePULPExtV2
+    : SubtargetFeature<"xpulpv", "HasPULPExtV2",
+                       "true", "'pulpv2' (PULP extensions version 2)">;
+def HasPULPExtV2 : Predicate<"Subtarget->hasPULPExtV2()">,
+                             AssemblerPredicate<(all_of FeaturePULPExtV2)>;
+
 def Feature64Bit
     : SubtargetFeature<"64bit", "HasRV64", "true", "Implements RV64">;
 def IsRV64 : Predicate<"Subtarget->is64Bit()">,
@@ -432,6 +439,34 @@ def FeatureSaveRestore : SubtargetFeature<"save-restore", "EnableSaveRestore",
 
 def TuneSiFive7 : SubtargetFeature<"sifive7", "RISCVProcFamily", "SiFive7",
                                    "SiFive 7-Series processors">;
+def FeatureExtXfrep
+    : SubtargetFeature<"xfrep", "HasExtXfrep", "true",
+                       "'Xfrep' (Floating-Point Repetition)">;
+def HasExtXfrep : Predicate<"Subtarget->hasExtXfrep()">,
+                           AssemblerPredicate<(all_of FeatureExtXfrep),
+                           "'Xfrep' (Floating-Point Repetition)">;
+
+def FeatureExtXdma
+    : SubtargetFeature<"xdma", "HasExtXdma", "true",
+                       "'Xdma' (Asynchronous Data Movement)">;
+def HasExtXdma : Predicate<"Subtarget->hasExtXdma()">,
+                           AssemblerPredicate<(all_of FeatureExtXdma),
+                           "'Xdma' (Asynchronous Data Movement)">;
+
+def FeatureExtXssr
+    : SubtargetFeature<"xssr", "HasExtXssr", "true",
+                       "'Xssr' (Stream Semantic Registers)">;
+def HasExtXssr : Predicate<"Subtarget->hasExtXssr()">,
+                           AssemblerPredicate<(all_of FeatureExtXssr),
+                           "'Xssr' (Stream Semantic Registers)">;
+
+def FeatureExtXmempool
+    : SubtargetFeature<"xmempool", "HasExtXmempool", "true",
+                       "'Xmempool' (MemPool System)">;
+def HasExtXmempool : Predicate<"Subtarget->hasExtXmempool()">,
+                           AssemblerPredicate<(all_of FeatureExtXmempool),
+                           "'Xmempool' (MemPool System)">;
+
 
 //===----------------------------------------------------------------------===//
 // Named operands for CSR instructions.
@@ -448,8 +483,10 @@ include "RISCVRegisterInfo.td"
 include "RISCVCallingConv.td"
 include "RISCVInstrInfo.td"
 include "RISCVRegisterBanks.td"
+include "RISCVSchedMempool.td"
 include "RISCVSchedRocket.td"
 include "RISCVSchedSiFive7.td"
+include "RISCVSchedSnitch.td"
 
 //===----------------------------------------------------------------------===//
 // RISC-V processors supported.
@@ -460,7 +497,9 @@ def : ProcessorModel<"generic-rv64", NoSchedModel, [Feature64Bit]>;
 // Support generic for compatibility with other targets. The triple will be used
 // to change to the appropriate rv32/rv64 version.
 def : ProcessorModel<"generic", NoSchedModel, []>;
-
+def : ProcessorModel<"mempool-rv32", MempoolModel, [FeatureStdExtM,
+                                                    FeatureStdExtA,
+                                                    FeatureExtXmempool]>;
 def : ProcessorModel<"rocket-rv32", RocketModel, []>;
 def : ProcessorModel<"rocket-rv64", RocketModel, [Feature64Bit]>;
 
@@ -535,6 +574,36 @@ def : ProcessorModel<"sifive-u74", SiFive7Model, [Feature64Bit,
                                                   FeatureStdExtD,
                                                   FeatureStdExtC],
                      [TuneSiFive7]>;
+
+def : ProcessorModel<"snitch", SnitchModel, [FeatureStdExtM,
+                                             FeatureStdExtA,
+                                             FeatureStdExtF,
+                                             FeatureStdExtD,
+                                             FeatureStdExtZfh,
+                                             FeatureExtXfrep,
+                                             FeatureExtXdma,
+                                             FeatureExtXssr,
+                                             FeatureExtXfalthalf,
+                                             FeatureExtXfquarter,
+                                             FeatureExtXfaltquarter,
+                                             FeatureExtXfvecsingle,
+                                             FeatureExtXfvechalf,
+                                             FeatureExtXfvecalthalf,
+                                             FeatureExtXfvecquarter,
+                                             FeatureExtXfvecaltquarter,
+                                             FeatureExtXfauxhalf,
+                                             FeatureExtXfauxalthalf,
+                                             FeatureExtXfauxquarter,
+                                             FeatureExtXfauxaltquarter,
+                                             FeatureExtXfauxvecsingle,
+                                             FeatureExtXfauxvechalf,
+                                             FeatureExtXfauxvecalthalf,
+                                             FeatureExtXfauxvecquarter,
+                                             FeatureExtXfauxvecaltquarter,
+                                             FeatureExtXfexpauxvechalf,
+                                             FeatureExtXfexpauxvecalthalf,
+                                             FeatureExtXfexpauxvecquarter,
+                                             FeatureExtXfexpauxvecaltquarter ]>;
 
 //===----------------------------------------------------------------------===//
 // Define the RISC-V target.

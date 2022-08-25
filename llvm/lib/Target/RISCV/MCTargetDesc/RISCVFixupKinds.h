@@ -104,6 +104,10 @@ enum Fixups {
   // 6-bit fixup corresponding to R_RISCV_SUB6 for local label assignment in
   // DWARF CFA.
   fixup_riscv_sub_6b,
+  // fixup_pulpv2_loop_setup(i) - Used to get the PC relative end of the
+  // hardware loop setup instructions.
+  fixup_pulpv2_loop_setup,
+  fixup_pulpv2_loop_setupi,
 
   // Used as a sentinel, must be the last
   fixup_riscv_invalid,

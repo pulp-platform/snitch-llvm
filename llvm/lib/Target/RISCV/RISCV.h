@@ -58,6 +58,20 @@ void initializeRISCVInsertVSETVLIPass(PassRegistry &);
 FunctionPass *createRISCVRedundantCopyEliminationPass();
 void initializeRISCVRedundantCopyEliminationPass(PassRegistry &);
 
+FunctionPass *createPULPHardwareLoops();
+void initializePULPHardwareLoopsPass(PassRegistry &);
+
+FunctionPass *createPULPFixupHwLoops();
+
+FunctionPass *createRISCVExpandSSRPass();
+void initializeRISCVExpandSSRPass(PassRegistry &);
+
+FunctionPass *createRISCVExpandSDMAPass();
+void initializeRISCVExpandSDMAPass(PassRegistry &);
+
+FunctionPass *createSNITCHFrepLoopsPass();
+void initializeSNITCHFrepLoopsPass(PassRegistry &);
+
 InstructionSelector *createRISCVInstructionSelector(const RISCVTargetMachine &,
                                                     RISCVSubtarget &,
                                                     RISCVRegisterBankInfo &);

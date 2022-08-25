@@ -1,0 +1,141 @@
+# RUN: llc -x mir -march=riscv32 -mattr=+xssr -run-pass=riscv-expand-ssr < %s \
+# RUN: | FileCheck -check-prefix=RV32-SSR %s
+
+--- |
+  define i32 @outline_0(i32 %a, i32 %b) { ret i32 0 }
+  define i32 @outline_1(i32 %a, i32 %b) { ret i32 0 }
+  define i32 @outline_2(i32 %a, i32 %b) { ret i32 0 }
+  define i32 @outline_3(i32 %a, i32 %b) { ret i32 0 }
+  define i32 @outline_4(i32 %a, i32 %b) { ret i32 0 }
+  define i32 @outline_5(i32 %a, i32 %b) { ret i32 0 }
+  define i32 @outline_6(i32 %a, i32 %b) { ret i32 0 }
+  define i32 @outline_7(i32 %a, i32 %b) { ret i32 0 }
+...
+---
+name:            outline_0
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $x5, $x6, $x7, $x28
+    ; RV32-SSR: SCFGWI $x5, 32
+    ; RV32-SSR-NEXT: SCFGWI $x6, 64
+    ; RV32-SSR-NEXT: SCFGWI $x7, 192
+    ; RV32-SSR-NEXT: SCFGWI $x28, 768
+    PseudoSSRSetup_1D_R 0, $x5, $x6, $x7, $x28 /* streamer, rep, bound, stride, ptr */
+    PseudoRET
+...
+---
+name:            outline_1
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $x5, $x6, $x7, $x28
+    ; RV32-SSR: SCFGWI $x5, 33
+    ; RV32-SSR-NEXT: SCFGWI $x6, 65
+    ; RV32-SSR-NEXT: SCFGWI $x7, 193
+    ; RV32-SSR-NEXT: SCFGWI $x28, 769
+    PseudoSSRSetup_1D_R 1, $x5, $x6, $x7, $x28 /* streamer, rep, bound, stride, ptr */
+    PseudoRET
+...
+---
+name:            outline_2
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $x5, $x6, $x7, $x28
+    ; RV32-SSR: SCFGWI $x5, 33
+    ; RV32-SSR-NEXT: SCFGWI $x6, 65
+    ; RV32-SSR-NEXT: SCFGWI $x7, 193
+    ; RV32-SSR-NEXT: SCFGWI $x28, 897
+    PseudoSSRSetup_1D_W 1, $x5, $x6, $x7, $x28 /* streamer, rep, bound, stride, ptr */
+    PseudoRET
+...
+---
+name:            outline_3
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $x5, $x6, $x7, $x28
+    ; RV32-SSR:      %0:fpr64 = FSGNJ_D $f0_d, $f0_d
+    ; RV32-SSR-NEXT: $f1_d = FSGNJ_D  %0, %0
+    %4:fpr64 = PseudoSSRPop 0
+    PseudoSSRPush 1, %4:fpr64
+    PseudoRET
+...
+
+---
+name:            outline_4
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $x5, $x6, $x7, $x28, $x29
+    ; RV32-SSR: %0:gpr = ADDI $x29, 96
+    ; RV32-SSR-NEXT: %1:gpr = ADDI $x29, 224
+    ; RV32-SSR-NEXT: SCFGW $x5, killed %0
+    ; RV32-SSR-NEXT: SCFGW $x6, killed %1
+    ; RV32-SSR-NEXT: %2:gpr = ADDI $x29, 128
+    ; RV32-SSR-NEXT: %3:gpr = ADDI $x29, 256
+    ; RV32-SSR-NEXT: SCFGW $x5, killed %2
+    ; RV32-SSR-NEXT: SCFGW $x6, killed %3
+    ; RV32-SSR-NEXT: %4:gpr = ADDI $x29, 160
+    ; RV32-SSR-NEXT: %5:gpr = ADDI $x29, 288
+    ; RV32-SSR-NEXT: SCFGW $x5, killed %4
+    ; RV32-SSR-NEXT: SCFGW $x6, killed %5
+    ; RV32-SSR-NEXT: SCFGWI $x5, 32
+    ; RV32-SSR-NEXT: SCFGWI $x6, 64
+    ; RV32-SSR-NEXT: SCFGWI $x7, 192
+    ; RV32-SSR-NEXT: SCFGWI $x28, 768
+    PseudoSSRSetupBoundStride_2D $x29,$x5, $x6 /* streamer, bound, stride */
+    PseudoSSRSetupBoundStride_3D $x29,$x5, $x6 /* streamer, bound, stride */
+    PseudoSSRSetupBoundStride_4D $x29,$x5, $x6 /* streamer, bound, stride */
+    PseudoSSRSetup_1D_R 0, $x5, $x6, $x7, $x28 /* streamer, rep, bound, stride, ptr */
+    PseudoRET
+...
+
+---
+name:            outline_5
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $x5, $x6, $x7, $x28
+    ; RV32-SSR: dead %0:gpr = CSRRSI 1984, 1
+    ; RV32-SSR-NEXT: dead %1:gpr = CSRRCI 1984, 1
+    PseudoSSREnable
+    PseudoSSRDisable
+    PseudoRET
+...
+---
+name:            outline_6
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins:
+    
+    ; RV32-SSR:      bb.1
+    ; RV32-SSR:      %0:gpr = SCFGRI 0
+    ; RV32-SSR-NEXT: %1:gpr = SRLI killed %0, 31
+    ; RV32-SSR-NEXT: BEQ killed %1, $x0, %bb.1
+
+    PseudoSSRBarrier 0
+
+    ; RV32-SSR:      bb.3
+    ; RV32-SSR:      %2:gpr = SCFGRI 1
+    ; RV32-SSR-NEXT: %3:gpr = SRLI killed %2, 31
+    ; RV32-SSR-NEXT: BEQ killed %3, $x0, %bb.3
+
+    PseudoSSRBarrier 1
+
+    PseudoRET
+...
+---
+name:            outline_7
+tracksRegLiveness: true
+body:             |
+  bb.0:
+    liveins: $x1, $x2
+    ; RV32-SSR: SCFGWI $x1, 800
+    ; RV32-SSR-NEXT: SCFGWI $x2, 961
+    PseudoSSRReadImm 0, 1, $x1 /* streamer, dim, ptr */
+    PseudoSSRWriteImm 1, 2, $x2 /* streamer, dim, ptr */
+    PseudoRET
+...

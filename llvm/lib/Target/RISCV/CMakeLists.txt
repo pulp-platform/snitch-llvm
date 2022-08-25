@@ -19,10 +19,14 @@ tablegen(LLVM RISCVGenSubtargetInfo.inc -gen-subtarget)
 add_public_tablegen_target(RISCVCommonTableGen)
 
 add_llvm_target(RISCVCodeGen
+  PULP/PULPHardwareLoops.cpp
+  PULP/PULPFixupHwLoops.cpp
   RISCVAsmPrinter.cpp
   RISCVCallLowering.cpp
   RISCVExpandAtomicPseudoInsts.cpp
   RISCVExpandPseudoInsts.cpp
+  RISCVExpandSSRInsts.cpp
+  RISCVExpandSDMAInsts.cpp
   RISCVFrameLowering.cpp
   RISCVGatherScatterLowering.cpp
   RISCVInsertVSETVLI.cpp
@@ -41,6 +45,7 @@ add_llvm_target(RISCVCodeGen
   RISCVTargetMachine.cpp
   RISCVTargetObjectFile.cpp
   RISCVTargetTransformInfo.cpp
+  Snitch/SNITCHFrepLoops.cpp
 
   LINK_COMPONENTS
   Analysis

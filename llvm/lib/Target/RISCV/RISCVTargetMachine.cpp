@@ -45,8 +45,12 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   initializeRISCVGatherScatterLoweringPass(*PR);
   initializeRISCVMergeBaseOffsetOptPass(*PR);
   initializeRISCVSExtWRemovalPass(*PR);
+  initializeRISCVExpandSSRPass(*PR);
+  initializeSNITCHFrepLoopsPass(*PR);
+  initializeRISCVExpandSDMAPass(*PR);
   initializeRISCVExpandPseudoPass(*PR);
   initializeRISCVInsertVSETVLIPass(*PR);
+  initializePULPHardwareLoopsPass(*PR);
 }
 
 static StringRef computeDataLayout(const Triple &TT) {
@@ -196,6 +200,7 @@ void RISCVPassConfig::addPreEmitPass() { addPass(&BranchRelaxationPassID); }
 
 void RISCVPassConfig::addPreEmitPass2() {
   addPass(createRISCVExpandPseudoPass());
+  addPass(createPULPFixupHwLoops());
   // Schedule the expansion of AMOs at the last possible moment, avoiding the
   // possibility for other passes to break the requirements for forward
   // progress in the LR/SC block.
@@ -210,9 +215,13 @@ void RISCVPassConfig::addMachineSSAOptimization() {
 }
 
 void RISCVPassConfig::addPreRegAlloc() {
+  addPass(createRISCVExpandSDMAPass());
+  addPass(createRISCVExpandSSRPass());
+  addPass(createSNITCHFrepLoopsPass());
   if (TM->getOptLevel() != CodeGenOpt::None)
     addPass(createRISCVMergeBaseOffsetOptPass());
   addPass(createRISCVInsertVSETVLIPass());
+  addPass(createPULPHardwareLoops());
 }
 
 void RISCVPassConfig::addPostRegAlloc() {

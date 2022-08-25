@@ -1,3 +1,11 @@
+//===-- SSRGeneration.cpp - find prefetchable square affine accesses --------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
 #include "llvm/Analysis/AffineAccessAnalysis.h"
 
 #include "llvm/IR/PassManager.h"
@@ -57,6 +65,7 @@ using namespace llvm;
 
 namespace {
 
+//collects the set of unknown values in SCEV
 struct SCEVUknownSetFinder {
   DenseSet<Value *> values;
   // return true to follow this node.
@@ -70,6 +79,7 @@ struct SCEVUknownSetFinder {
   bool isDone() { return false; /*continue forever*/ }
 };
 
+//finds whether two SCEVs share unknown values
 bool shareValues(const SCEV *A, const SCEV *B) {
   SCEVUknownSetFinder finderA;
   SCEVTraversal<SCEVUknownSetFinder> trA(finderA);
@@ -86,6 +96,7 @@ bool shareValues(const SCEV *A, const SCEV *B) {
   return shareValues;
 }
 
+//checks whether SCEV contains the SCEVCouldNotCompute expression
 bool SCEVContainsCouldNotCompute(const SCEV *S) {
   auto pred = [](const SCEV *X) { return !X || X->getSCEVType() == SCEVTypes::scCouldNotCompute || isa<SCEVCouldNotCompute>(X); };
   return SCEVExprContains(S, std::move(pred));
@@ -114,6 +125,7 @@ const SCEV *getLoopBTSCEV(const Loop *L, DominatorTree &DT, ScalarEvolution &SE)
   return bt;
 }
 
+//casts SCEVs to same type if possible (or always if unsafe = true)
 Optional<std::pair<const SCEV *, const SCEV *>> toSameType(const SCEV *LHS, const SCEV *RHS, ScalarEvolution &SE, bool unsafe = false){
   assert(LHS && RHS);
   using PT = std::pair<const SCEV *, const SCEV *>;
@@ -194,6 +206,7 @@ bool isOnAllControlFlowPaths(BasicBlock *BB, const Loop *L, const DominatorTree 
 }
 
 //return result of Cmp predicated on Rep > 0 if possible.
+// i.e. if we can say that Rep > 0 implies that Cmp is always false or true, we return that, o/w return None
 Optional<bool> predicatedICmpOutcome(ICmpInst *Cmp, const SCEV *Rep, ScalarEvolution &SE){
   switch (Cmp->getPredicate())
   {
@@ -275,6 +288,7 @@ bool isOnAllPredicatedControlFlowPaths(BasicBlock *BB, const Loop *L, const Domi
   return true;
 }
 
+//cast to right integer size, insert instruction at `InsPoint`
 Value *castToSize(Value *R, Type *ty, Instruction *InsPoint){
   const DataLayout &DL = InsPoint->getParent()->getModule()->getDataLayout();
   IRBuilder<> builder(InsPoint);
@@ -289,6 +303,7 @@ Value *castToSize(Value *R, Type *ty, Instruction *InsPoint){
   return builder.CreateBitOrPointerCast(R, ty, "scev.cast");
 }
 
+// extract the Address Value of MA (nullptr if not available)
 Value *getAddress(MemoryUseOrDef *MA) {
   assert(MA && "called getAddress on nullptr");
   assert(MA->getMemoryInst());
@@ -298,6 +313,8 @@ Value *getAddress(MemoryUseOrDef *MA) {
   return nullptr;
 }
 
+//find the first L in loops that contains BB
+//loops should be a nesting of loops from inner to outermost
 const Loop *findFirstContaining(ArrayRef<const Loop *> loops, BasicBlock *BB){
   for (const Loop *L : loops) {
     if (L && L->contains(BB)) {
@@ -307,6 +324,7 @@ const Loop *findFirstContaining(ArrayRef<const Loop *> loops, BasicBlock *BB){
   return nullptr;
 }
 
+//find out whether MA stands for some load/store (for some reason they don't always do, maybe bc of DCE?)
 bool hasMemInst(MemoryUseOrDef *MA) { return MA && MA->getMemoryInst(); }
 
 //updates L<-M if M is a descendant of L (or if L is nullptr)
@@ -334,6 +352,7 @@ void updateOutermostExpandableExcl(const Loop *&outerMostExpandableExl, AffAccCo
   }
 }
 
+//tries to find the sign of SCEV which information given
 Optional<int> findSign(const SCEV *S, ScalarEvolution &SE, std::vector<std::pair<const SCEV *, int>> &known) {
   if (!S) return None;
 
@@ -384,6 +403,7 @@ Optional<int> findSign(const SCEV *S, ScalarEvolution &SE, std::vector<std::pair
   llvm_unreachable("");
 }
 
+//cast some SCEVs if necessary
 const SCEV *getZExtIfNeeded(const SCEV *S, Type *Ty, ScalarEvolution &SE) {
   if (SE.getDataLayout().getTypeSizeInBits(S->getType()) < SE.getDataLayout().getTypeSizeInBits(Ty)) {
     return SE.getZeroExtendExpr(S, Ty);
@@ -391,6 +411,7 @@ const SCEV *getZExtIfNeeded(const SCEV *S, Type *Ty, ScalarEvolution &SE) {
   return S;
 }
 
+//cast some SCEVs if necessary
 const SCEV *getSExtIfNeeded(const SCEV *S, Type *Ty, ScalarEvolution &SE) {
   if (SE.getDataLayout().getTypeSizeInBits(S->getType()) < SE.getDataLayout().getTypeSizeInBits(Ty)) {
     return SE.getSignExtendExpr(S, Ty);
@@ -445,6 +466,7 @@ bool LoopRep::isSafeToExpandBefore(const Loop *L) const {
   return false;
 }
 
+//code generation for loop rep, will cache the Value holding the results after calling for the first time to prevent excessive code-gen
 Value *LoopRep::expandAt(Type *ty, Instruction *InsertBefore){
   assert(ty);
   assert(RepSCEV);
@@ -463,6 +485,7 @@ Value *LoopRep::expandAt(Type *ty, Instruction *InsertBefore){
   return Rep;
 }
 
+//code-gen for loop guard, ie. inserts code of rep+1 > 0
 Value *LoopRep::expandLoopGuard(Instruction *InsertBefore) {
   assert(RepPlusOne && "expandAt has to be called before this");
   InsertBefore = InsertBefore ? InsertBefore : L->getLoopPreheader()->getTerminator();
@@ -478,10 +501,10 @@ AffAcc::AffAcc(ArrayRef<Instruction *> accesses, const SCEV *Addr, MemoryUseOrDe
   assert(MA); 
 
   containingLoops.push_back((const Loop *)nullptr); //there is no loop for dim=0
-  containingLoops.append(contLoops.begin(), contLoops.end());
+  containingLoops.append(contLoops.begin(), contLoops.end()); //initialize loops
 
   bool isVolatile = false;
-  for (Instruction *I : accesses) 
+  for (Instruction *I : accesses) //check for volatile mem insts, we don't want to touch those
     isVolatile |= (isa<LoadInst>(I) && cast<LoadInst>(I)->isVolatile()) || (isa<StoreInst>(I) && cast<StoreInst>(I)->isVolatile());
   if (Addr && (SCEVContainsCouldNotCompute(Addr) || isVolatile)) Addr = nullptr; //set to null if contains SCEVCouldNotCompute
   baseAddresses.push_back(Addr);
@@ -495,6 +518,8 @@ AffAcc::AffAcc(ArrayRef<Instruction *> accesses, const SCEV *Addr, MemoryUseOrDe
   }
 }
 
+//fold over A and collect steps in AddRec expressions
+//the found steps might not be valid for square affine access patterns ==> `promote` will check this
 void AffAcc::findSteps(const SCEV *A, const SCEV *Factor, unsigned loop){
   assert(A);
   assert(baseAddresses.size() == 1 && reps.size() == 1 && "we only know dim=0 so far");
@@ -602,7 +627,7 @@ bool AffAcc::isWellFormed(const Loop *L) const { return isWellFormed(loopToDimen
 ///returns the dimension that is defined by `L` (starts at 1)
 unsigned AffAcc::loopToDimension(const Loop *L) const {
   assert(L && "L not nullptr");
-  for (unsigned d = 1u; d < containingLoops.size(); d++){ //FIXME: linear search -> improve with a map
+  for (unsigned d = 1u; d < containingLoops.size(); d++){ //FIXME: linear search -> improve with a <loop,unsigned> map
     if (containingLoops[d] == L) return d;
   }
   llvm_unreachable("The provided loop does not contain `this`!");
@@ -639,6 +664,7 @@ const Loop *AffAcc::getLoop(unsigned dim) const { assert(dim < containingLoops.s
 ///get containing loops from inner- to outermost
 ArrayRef<const Loop *> AffAcc::getContainingLoops() const { return ArrayRef<const Loop *>(containingLoops); }
 
+//dump info known for this AffAcc up to some loop L
 void AffAcc::dumpInLoop(const Loop *L) const {
   errs()<<"Affine Access of \n";
   int dimension = getMaxDimension();
@@ -668,8 +694,10 @@ void AffAcc::dumpInLoop(const Loop *L) const {
   }
 }
 
+//dump all info known about this AffAcc
 void AffAcc::dump() const { dumpInLoop(nullptr); }
 
+//get the actual conflict between this and the AffAcc in the pair for some loop L
 AffAccConflict AffAcc::fromConflictPair(const detail::DenseMapPair<AffAcc*, std::pair<const Loop*, AffAccConflict>> &p, const Loop *L) const {
   const Loop *S = p.getSecond().first;
   if (S == L || L->contains(S)) { //if start is L or more "inner" loop
@@ -679,6 +707,7 @@ AffAccConflict AffAcc::fromConflictPair(const detail::DenseMapPair<AffAcc*, std:
   return AffAccConflict::NoConflict;
 }
 
+//get the actual conflict between this and A for loop L
 AffAccConflict AffAcc::getConflict(AffAcc *A, const Loop *L) const {
   auto p = conflicts.find(A);
   if (p != conflicts.end()) {
@@ -702,6 +731,7 @@ std::vector<std::pair<AffAcc*, AffAccConflict>> AffAcc::getConflicts(const Loop 
 
 MemoryUseOrDef *AffAcc::getMemoryAccess() { return MA; }
 
+//add conflict with A, where StartL is innermost shared loop, with conflict classification `kind`
 void AffAcc::addConflict(AffAcc *A, const Loop *StartL, AffAccConflict kind){
   assert(StartL);
   assert(conflicts.find(A) == conflicts.end() && "no conflict for A yet");
@@ -709,6 +739,9 @@ void AffAcc::addConflict(AffAcc *A, const Loop *StartL, AffAccConflict kind){
   conflicts.insert(std::make_pair(A, std::make_pair(StartL, kind)));
 }
 
+//promote `this` if possible.
+//`LR` should be the rep of the next outer loop where this is not (yet) well-formed
+// if successful, `this` is well-formed for LR->getLoop() afterwards.
 bool AffAcc::promote(LoopRep *LR){
   if (!LR->isAvailable()) return false;
   unsigned newDim = (unsigned)(getMaxDimension() + 1); //getMaxDimension() >= -1
@@ -736,6 +769,7 @@ bool AffAcc::promote(LoopRep *LR){
   return true;
 }
 
+//Code-gen for base address
 Value *AffAcc::expandBaseAddr(unsigned dimension, Type *ty, Instruction *InsertBefore){
   assert(isWellFormed(dimension));
   InsertBefore = InsertBefore ? InsertBefore : reps[dimension]->getLoop()->getLoopPreheader()->getTerminator();
@@ -752,6 +786,7 @@ Value *AffAcc::expandBaseAddr(unsigned dimension, Type *ty, Instruction *InsertB
   return castToSize(ex.expandCodeFor(getBaseAddr(dimension)), ty, InsertBefore);
 }
 
+//code-gen for step
 Value *AffAcc::expandStep(unsigned dimension, Type *ty, Instruction *InsertBefore){
   assert(isWellFormed(dimension) && dimension > 0u);
   InsertBefore = InsertBefore ? InsertBefore : reps[dimension]->getLoop()->getLoopPreheader()->getTerminator();
@@ -761,6 +796,7 @@ Value *AffAcc::expandStep(unsigned dimension, Type *ty, Instruction *InsertBefor
   return castToSize(ex.expandCodeFor(getStep(dimension)), ty, InsertBefore);
 }
 
+//code-gen for rep (calls code-gen of the LoopRep)
 Value *AffAcc::expandRep(unsigned dimension, Type *ty, Instruction *InsertBefore){
   assert(isWellFormed(dimension) && dimension > 0u);
   InsertBefore = InsertBefore ? InsertBefore : reps[dimension]->getLoop()->getLoopPreheader()->getTerminator();
@@ -773,6 +809,8 @@ Value *AffAcc::expandRep(unsigned dimension, Type *ty, Instruction *InsertBefore
   return reps[dimension]->expandAt(ty, InsertBefore);
 }
 
+//code-gen for all info needed to know the square affine access pattern inside of L
+//guaranteed to work if `Point` is the terminator of preheader of L
 ExpandedAffAcc AffAcc::expandAt(const Loop *L, Instruction *Point, 
   Type *PtrTy, IntegerType *ParamTy) 
 {
@@ -822,12 +860,6 @@ ExpandedAffAcc AffAcc::expandAt(const Loop *L, Instruction *Point,
   return Aexp;
 }
 
-// // ================= CustomMultiDRTPointerChecking ===================
-// //takes inspiration from RuntimePointerChecking's .insert(...)
-// void CustomMultiDRTPointerChecking::insert(const AffAcc &A) {
-
-// }
-// Value *generateChecks(Instruction *I, Value *memRangeStart, Value *memRangeEnd);
 
 // ================= MemDep ==============
 
@@ -837,6 +869,8 @@ bool MemDep::alias(MemoryUseOrDef *A, MemoryUseOrDef *B) {
   else return alias(getAddress(A), getAddress(B)); 
 }
 
+//returns all MemoryDefs that might clobber MA
+//i.e. we cannot be sure at compile-time that they *don't* clobber MA
 DenseSet<MemoryUseOrDef *> MemDep::findClobbers(MemoryUseOrDef *MA){
   DenseSet<MemoryUseOrDef *> res;
   std::deque<MemoryAccess *> worklist;
@@ -863,6 +897,7 @@ DenseSet<MemoryUseOrDef *> MemDep::findClobbers(MemoryUseOrDef *MA){
   return res;
 }
 
+//find all MemoryUse's or MemoryDef's that might be clobbered by MA (might = must OR we do not know at compile-time)
 DenseSet<MemoryUseOrDef *> MemDep::findClobberUsers(MemoryDef *MA) {
   DenseSet<MemoryUseOrDef *> res;
   std::deque<MemoryAccess *> worklist;
@@ -894,6 +929,7 @@ DenseSet<MemoryUseOrDef *> MemDep::findClobberUsers(MemoryDef *MA) {
 
 //================== Affine Access ===========================================================
 
+//constructor of analysis result, immediately computes all necessary information
 AffineAccess::AffineAccess(
     Function &F, ScalarEvolution &SE, DominatorTree &DT, 
     LoopInfo &LI, MemorySSA &MSSA, AAResults &AA, 
@@ -907,6 +943,7 @@ AffineAccess::AffineAccess(
   }
 }
 
+//DFS over loop tree, constructs an AffAcc for each memory access and tries to promote it as far as possible
 std::unique_ptr<std::vector<AffAcc *>> AffineAccess::analyze(Loop *Parent, ArrayRef<const Loop *> loopPath){
   LLVM_DEBUG(dbgs()<<"analyze: loop          : "<<Parent->getHeader()->getNameOrAsOperand()<<"\n");
 
@@ -968,6 +1005,7 @@ std::unique_ptr<std::vector<AffAcc *>> AffineAccess::analyze(Loop *Parent, Array
   return all;
 }
 
+//given the list of all AffAccs in a loop-tree, this finds all the conflicts between them
 void AffineAccess::addAllConflicts(const std::vector<AffAcc *> &all) {
   for (AffAcc *A : all) {
     assert(A);
@@ -1009,6 +1047,7 @@ void AffineAccess::addAllConflicts(const std::vector<AffAcc *> &all) {
   }
 }
 
+//classify conflict between Read and Write
 AffAccConflict AffineAccess::calcRWConflict(AffAcc *Read, AffAcc *Write, const Loop *L) const {
   assert(!Read->isWrite());
   assert(Write->isWrite());
@@ -1068,6 +1107,7 @@ std::pair<AffAccConflict, const Loop*> AffineAccess::calcConflict(AffAcc *A, Aff
   return std::make_pair(kind, innermostCommon);
 }
 
+//checks whether access patterns (step, rep) match up to some loop L
 bool AffineAccess::accessPatternsMatch(const AffAcc *A, const AffAcc *B, const Loop *L) const {
   unsigned dimA = A->loopToDimension(L);
   unsigned dimB = B->loopToDimension(L);
@@ -1080,11 +1120,13 @@ bool AffineAccess::accessPatternsMatch(const AffAcc *A, const AffAcc *B, const L
   return true;
 }
 
+//checks whether step, rep, and base address matches up to some loop L
 bool AffineAccess::accessPatternsAndAddressesMatch(const AffAcc *A, const AffAcc *B, const Loop *L) const {
   if (!accessPatternsMatch(A, B, L)) return false;
   return SCEVEquals(A->getBaseAddr(A->loopToDimension(L)), B->getBaseAddr(B->loopToDimension(L)), SE);
 }
 
+//simple access methods
 ScalarEvolution &AffineAccess::getSE() const { return this->SE; }
 DominatorTree &AffineAccess::getDT()const { return this->DT; }
 LoopInfo &AffineAccess::getLI() const { return this->LI; }
@@ -1093,6 +1135,11 @@ AAResults &AffineAccess::getAA() const { return this->AA; }
 DependenceInfo &AffineAccess::getDI() const { return this->DI; }
 SmallVector<Loop *, 4U> AffineAccess::getLoopsInPreorder() const { return this->LI.getLoopsInPreorder(); }
 
+//get accesses with no bad conflicts for some loop L
+//guarantees:
+// no bad conflicts with any other memory instruction in L
+// is well formed for L
+// if conflictFreeOnly: has no conflicts at all (only NoConflict) ==> no run-time checks necessary
 std::vector<AffAcc *> AffineAccess::getExpandableAccesses(const Loop *L, bool conflictFreeOnly) {
   auto p = expandableAccesses.find(L);
   std::vector<AffAcc *> res;
@@ -1103,6 +1150,10 @@ std::vector<AffAcc *> AffineAccess::getExpandableAccesses(const Loop *L, bool co
   return res;
 }
 
+// code-gen: calls code-gen for all AffAccs in list, 
+// generates run-time checks for conflicts,
+// generates run-time checks for loop-trip-counts (if repChecks = true)
+// ANDs all the rt-checks to a single Value and writes it into BoundCheck
 std::vector<ExpandedAffAcc> 
 AffineAccess::expandAllAt(ArrayRef<AffAcc *> Accs, const Loop *L, 
   Instruction *Point, Value *&BoundCheck, 
@@ -1182,6 +1233,7 @@ AffineAccess::expandAllAt(ArrayRef<AffAcc *> Accs, const Loop *L,
 
 AnalysisKey AffineAccessAnalysis::Key;
 
+// run of the analysis pass
 AffineAccess AffineAccessAnalysis::run(Function &F, FunctionAnalysisManager &FAM) {
   
   LLVM_DEBUG(dbgs()<<"running AffineAccessAnalysis on "<<F.getName()<<"\n");

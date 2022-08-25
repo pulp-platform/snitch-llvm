@@ -61,16 +61,14 @@ PreservedAnalyses SSRInferencePass::run(Function &F, FunctionAnalysisManager &FA
   FunctionPassManager FPM(false);
   FPM.addPass(FixIrreduciblePass());//turn some non-loops into loops
   FPM.addPass(LoopSimplifyPass());  //canonicalize loops
-  //FPM.addPass(createFunctionToLoopPassAdaptor(LoopRotatePass()));
   FPM.addPass(LCSSAPass());         //put loops into LCSSA-form
-  //FPM.addPass(createFunctionToLoopPassAdaptor(IndVarSimplifyPass(false)));
 
   FPM.addPass(SSRGenerationPass()); //runs AffineAccess analysis and generates SSR intrinsics
 
   FPM.addPass(LoopSimplifyPass());  //canonicalize loops again
   FPM.addPass(InstCombinePass());   //removes phi nodes from LCSSA
   FPM.addPass(ADCEPass());          //remove potential dead instructions that result from SSR replacement
-  FPM.addPass(createFunctionToLoopPassAdaptor(LICMPass())); //LICM of rt-checks maybe
+  FPM.addPass(createFunctionToLoopPassAdaptor(LICMPass())); //LICM of run-time checks if possible
   FPM.addPass(SimplifyCFGPass());   //simplifies CFG again
   FPM.addPass(LoopSimplifyPass());  //canonicalize loops again
   auto pa = FPM.run(F, FAM);

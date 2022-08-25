@@ -75,6 +75,10 @@ private:
   unsigned RVPushStackSize = 0;
   unsigned RVPushRegs = 0;
   int RVPushRlist = llvm::RISCVZC::RLISTENCODE::INVALID_RLIST;
+  
+  /// Keep track of used and enabled SSR streamers in this function. If
+  /// any are used, its register is reserved. one-hot coded
+  unsigned UsedSSR = 0;
 
 public:
   RISCVMachineFunctionInfo(const Function &F, const TargetSubtargetInfo *STI) {}
@@ -110,6 +114,9 @@ public:
 
   unsigned getLibCallStackSize() const { return LibCallStackSize; }
   void setLibCallStackSize(unsigned Size) { LibCallStackSize = Size; }
+
+  unsigned getUsedSSR() const { return UsedSSR; }
+  void setUsedSSR(unsigned SSR) { UsedSSR = SSR; }
 
   bool useSaveRestoreLibCalls(const MachineFunction &MF) const {
     // We cannot use fixed locations for the callee saved spill slots if the

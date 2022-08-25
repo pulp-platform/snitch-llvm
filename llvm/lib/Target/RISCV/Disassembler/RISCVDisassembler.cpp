@@ -276,6 +276,24 @@ static DecodeStatus decodeUImmOperand(MCInst &Inst, uint32_t Imm,
   return MCDisassembler::Success;
 }
 
+static DecodeStatus DecodePulpV2RegisterClass(MCInst &Inst, uint64_t RegNo,
+                                               uint64_t Address,
+                                               const void *Decoder) {
+  return DecodeGPRRegisterClass(Inst, RegNo, Address, Decoder);
+}
+
+static DecodeStatus DecodePulpV4RegisterClass(MCInst &Inst, uint64_t RegNo,
+                                               uint64_t Address,
+                                               const void *Decoder) {
+  return DecodeGPRRegisterClass(Inst, RegNo, Address, Decoder);
+}
+
+template <unsigned N>
+static DecodeStatus decodeUImmMinus1Operand(MCInst &Inst, uint64_t Imm,
+                                            int64_t Address, const void *Decoder) {
+  return decodeUImmOperand<N>(Inst, Imm + 1, Address, Decoder);
+}
+
 template <unsigned N>
 static DecodeStatus decodeUImmNonZeroOperand(MCInst &Inst, uint32_t Imm,
                                              int64_t Address,
@@ -610,6 +628,8 @@ DecodeStatus RISCVDisassembler::getInstruction(MCInst &MI, uint64_t &Size,
                           "CORE-V SIMD extensions custom opcode table");
     TRY_TO_DECODE_FEATURE(RISCV::FeatureVendorXCVbi, DecoderTableXCVbi32,
                           "CORE-V Immediate Branching custom opcode table");
+    TRY_TO_DECODE_FEATURE(RISCV::FeaturePULPExtV2, DecoderTableRV32Xpulp32,
+                          "RV32Xpulp custom opcode table (PULP extensions)");
     TRY_TO_DECODE(true, DecoderTable32, "RISCV32 table");
 
     return MCDisassembler::Fail;

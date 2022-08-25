@@ -78,6 +78,11 @@ enum Fixups {
   fixup_riscv_tlsdesc_add_lo12,
   fixup_riscv_tlsdesc_call,
 
+  // fixup_pulpv2_loop_setup(i) - Used to get the PC relative end of the
+  // hardware loop setup instructions.
+  fixup_pulpv2_loop_setup,
+  fixup_pulpv2_loop_setupi,
+
   // Used as a sentinel, must be the last
   fixup_riscv_invalid,
   NumTargetFixupKinds = fixup_riscv_invalid - FirstTargetFixupKind

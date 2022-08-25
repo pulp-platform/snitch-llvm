@@ -364,6 +364,9 @@ public:
   bool shouldFoldTerminatingConditionAfterLSR() const {
     return true;
   }
+
+  bool isLoweredToCall(const Function *F);
+  bool shouldFavorPostInc() const;
 };
 
 } // end namespace llvm

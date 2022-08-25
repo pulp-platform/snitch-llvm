@@ -140,6 +140,11 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
       addRegisterClass(MVT::f64, &RISCV::GPRPairRegClass);
   }
 
+  if (Subtarget.hasPULPExtV2()) {
+    addRegisterClass(MVT::v2i16, &RISCV::PulpV2RegClass);
+    addRegisterClass(MVT::v4i8, &RISCV::PulpV4RegClass);
+  }
+
   static const MVT::SimpleValueType BoolVecVTs[] = {
       MVT::nxv1i1,  MVT::nxv2i1,  MVT::nxv4i1, MVT::nxv8i1,
       MVT::nxv16i1, MVT::nxv32i1, MVT::nxv64i1};
@@ -626,6 +631,58 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   if (Subtarget.hasStdExtZicbop()) {
     setOperationAction(ISD::PREFETCH, MVT::Other, Legal);
   }
+  
+  if (Subtarget.hasPULPExtV2()) {
+    for (auto VT : {XLenVT.SimpleTy, MVT::v2i16, MVT::v4i8}){
+      setOperationAction(ISD::ABS, VT, Legal);
+      setOperationAction(ISD::SMIN, VT, Legal);
+      setOperationAction(ISD::UMIN, VT, Legal);
+      setOperationAction(ISD::SMAX, VT, Legal);
+      setOperationAction(ISD::UMAX, VT, Legal);
+
+    }
+    setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i8, Legal);
+    setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i16, Legal);
+    setOperationAction(ISD::CTLZ_ZERO_UNDEF, XLenVT, Legal);
+    setOperationAction(ISD::CTTZ, XLenVT, Legal);
+    setOperationAction(ISD::CTPOP, XLenVT, Legal);
+    setOperationAction(ISD::ROTR, XLenVT, Legal);
+    setOperationAction(ISD::INTRINSIC_W_CHAIN, MVT::i1, Custom);
+
+
+    for (auto VT : {MVT::v2i16, MVT::v4i8}){
+      setOperationAction(ISD::SPLAT_VECTOR, VT, Legal);
+      setOperationAction(ISD::VECREDUCE_ADD, VT, Legal);
+      setOperationPromotedToType(ISD::LOAD, VT, MVT::i32);
+      setOperationPromotedToType(ISD::STORE, VT, MVT::i32);
+      setOperationAction(ISD::VSELECT, VT, Expand);
+      setOperationAction(ISD::MUL, VT, Expand);
+      setOperationAction(ISD::SDIV, VT, Expand);
+      setOperationAction(ISD::UDIV, VT, Expand);
+      setOperationAction(ISD::SREM, VT, Expand);
+      setOperationAction(ISD::UREM, VT, Expand);
+      setOperationAction(ISD::ROTR, VT, Expand);
+      setOperationAction(ISD::ROTL, VT, Expand);
+      setOperationAction(ISD::BSWAP, VT, Expand);
+      setOperationAction(ISD::CTTZ, VT, Expand);
+      setOperationAction(ISD::CTLZ, VT, Expand);
+      setOperationAction(ISD::CTPOP, VT, Expand);
+      setOperationAction(ISD::SDIVREM, VT, Expand);
+      setOperationAction(ISD::UDIVREM, VT, Expand);
+      setOperationAction(ISD::SMUL_LOHI, VT, Expand);
+      setOperationAction(ISD::UMUL_LOHI, VT, Expand);
+    }
+
+    setLoadExtAction(ISD::EXTLOAD, MVT::v2i16, MVT::v2i8, Expand);
+    setLoadExtAction(ISD::SEXTLOAD, MVT::v2i16, MVT::v2i8, Expand);
+    setLoadExtAction(ISD::ZEXTLOAD, MVT::v2i16, MVT::v2i8, Expand);
+
+    setTruncStoreAction(MVT::v2i16, MVT::v2i8, Expand);
+
+    setTargetDAGCombine(ISD::BR);
+
+    setBooleanVectorContents(ZeroOrNegativeOneBooleanContent);
+  }
 
   if (Subtarget.hasStdExtA()) {
     setMaxAtomicSizeInBitsSupported(Subtarget.getXLen());
@@ -637,6 +694,21 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   }
 
   setOperationAction(ISD::ATOMIC_FENCE, MVT::Other, Custom);
+
+  // If this is PULP with PULPv2 extensions, then we support post-incrementing
+  // load/stores for 8-bit, 16-bit, and 32-bit values.
+  if (Subtarget.hasPULPExtV2()) {
+    setIndexedLoadAction(ISD::POST_INC, MVT::i8, Legal);
+    setIndexedLoadAction(ISD::POST_INC, MVT::i16, Legal);
+    setIndexedLoadAction(ISD::POST_INC, MVT::i32, Legal);
+    setIndexedLoadAction(ISD::POST_INC, MVT::v2i16, Legal);
+    setIndexedLoadAction(ISD::POST_INC, MVT::v4i8, Legal);
+    setIndexedStoreAction(ISD::POST_INC, MVT::i8, Legal);
+    setIndexedStoreAction(ISD::POST_INC, MVT::i16, Legal);
+    setIndexedStoreAction(ISD::POST_INC, MVT::i32, Legal);
+    setIndexedStoreAction(ISD::POST_INC, MVT::v2i16, Legal);
+    setIndexedStoreAction(ISD::POST_INC, MVT::v4i8, Legal);
+  }
 
   setBooleanContents(ZeroOrOneBooleanContent);
 
@@ -1365,6 +1437,10 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
         setIndexedStoreAction(im, MVT::i64, Legal);
       }
     }
+  }
+
+  if (Subtarget.hasExtXdma()) {
+    setOperationAction(ISD::INTRINSIC_W_CHAIN, MVT::i64, Custom);
   }
 
   // Function alignments.
@@ -8884,6 +8960,66 @@ SDValue RISCVTargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
       break;
 
     return NewNode;
+  }
+  case Intrinsic::riscv_sdma_start_twod:
+  case Intrinsic::riscv_sdma_start_oned: {
+    bool isTwod = IntNo == Intrinsic::riscv_sdma_start_twod;
+
+    SDLoc DL(Op);
+    EVT VT1 = Op.getOperand(2).getValueType();
+    EVT VT2 = Op.getOperand(3).getValueType();
+    assert(VT1 == MVT::i64 && VT2 == MVT::i64 && "Lower riscv_sdma_start_ expects an i64");
+
+    //HiLo split of src/dst address using the EXTRACT_ELEMENT node
+    EVT HalfVT = VT1.getHalfSizedIntegerVT(*DAG.getContext());
+    // first operand
+    SDValue LHS = Op.getOperand(2);
+    SDValue LHS_Lo = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, LHS, DAG.getConstant(0, DL, HalfVT));
+    SDValue LHS_Hi = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, LHS, DAG.getConstant(1, DL, HalfVT));
+    // second operand
+    SDValue RHS = Op.getOperand(3);
+    SDValue RHS_Lo = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, RHS, DAG.getConstant(0, DL, HalfVT));
+    SDValue RHS_Hi = DAG.getNode(ISD::EXTRACT_ELEMENT, DL, HalfVT, RHS, DAG.getConstant(1, DL, HalfVT));
+
+    // build new intrinsic: first create operand list
+    SmallVector<SDValue, 8> OpsV; 
+    // chain
+    OpsV.push_back(Op.getOperand(0));
+    // intrinsic ID
+    if(isTwod)
+      OpsV.push_back(DAG.getConstant(Intrinsic::riscv_sdma_start_twod_legal, DL, MVT::i32));
+    else
+      OpsV.push_back(DAG.getConstant(Intrinsic::riscv_sdma_start_oned_legal, DL, MVT::i32));
+      // unpacked src and dst addresses
+    OpsV.push_back(LHS_Hi);
+    OpsV.push_back(LHS_Lo);
+    OpsV.push_back(RHS_Hi);
+    OpsV.push_back(RHS_Lo);
+    // original size
+    OpsV.push_back(Op.getOperand(4));
+    if(isTwod) {
+      // source, destination stride and nreps
+      OpsV.push_back(Op.getOperand(5));
+      OpsV.push_back(Op.getOperand(6));
+      OpsV.push_back(Op.getOperand(7));
+    }
+    // original cfg 
+    OpsV.push_back(Op.getOperand(isTwod ? 8:5));
+    ArrayRef<SDValue> Ops(OpsV);
+    
+    // create new node
+    SDValue Result = DAG.getNode(ISD::INTRINSIC_W_CHAIN, DL, Op->getVTList(), Ops);
+
+    LLVM_DEBUG(LHS_Lo.dump());
+    LLVM_DEBUG(LHS_Hi.dump());
+    LLVM_DEBUG(RHS_Lo.dump());
+    LLVM_DEBUG(RHS_Hi.dump());
+    LLVM_DEBUG(dbgs() << "#operands: " << Op.getNumOperands() << '\n');
+    LLVM_DEBUG(dbgs() << "getValueType: " << (unsigned)Op.getValueType().getSimpleVT().SimpleTy << '\n');
+    LLVM_DEBUG(dbgs() << "# in  values: " << Op.getNode()->getNumValues() << '\n');
+    LLVM_DEBUG(dbgs() << "# res values: " << Result.getNode()->getNumValues() << '\n');
+
+    return Result;
   }
   }
 
@@ -19071,6 +19207,15 @@ RISCVTargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
         return std::make_pair(0U, &RISCV::FPR32RegClass);
       if (Subtarget.hasStdExtD() && VT == MVT::f64)
         return std::make_pair(0U, &RISCV::FPR64RegClass);
+      if (Subtarget.hasExtXsmallfloat()) {
+        if (VT == MVT::v2f32)
+          return std::make_pair(0U, &RISCV::FPR64RegClass);
+        if ((VT == MVT::v4f16) || (VT == MVT::v4bf16) ||
+            (VT == MVT::v4i16) /* __f16 is currently encoded as i16 */)
+          return std::make_pair(0U, &RISCV::FPR64RegClass);
+        if (VT == MVT::v8i8) /* __fp8 not supported, treat as i8 */
+          return std::make_pair(0U, &RISCV::FPR64RegClass);
+      }
       break;
     default:
       break;
@@ -19778,7 +19923,7 @@ bool RISCVTargetLowering::allowsMisalignedMemoryAccesses(
 
   // All vector implementations must support element alignment
   EVT ElemVT = VT.getVectorElementType();
-  if (Alignment >= ElemVT.getStoreSize()) {
+  if (Alignment >= ElemVT.getStoreSize() || Subtarget.hasPULPExtV2()) {
     if (Fast)
       *Fast = 1;
     return true;
@@ -20245,6 +20390,51 @@ RISCVTargetLowering::EmitKCFICheck(MachineBasicBlock &MBB,
       .addReg(Target.getReg())
       .addImm(MBBI->getCFIType())
       .getInstr();
+}
+
+bool RISCVTargetLowering::getPostIndexedAddressParts(SDNode *N, SDNode *Op,
+                                                     SDValue &Base,
+                                                     SDValue &Offset,
+                                                     ISD::MemIndexedMode &AM,
+                                                     SelectionDAG &DAG) const {
+  SDValue BaseFromLDST;
+  EVT VT;
+  if (LoadSDNode *LD = dyn_cast<LoadSDNode>(N)) {
+    BaseFromLDST = LD->getBasePtr();
+    VT = LD->getMemoryVT();
+  } else if (StoreSDNode *ST = dyn_cast<StoreSDNode>(N)) {
+    BaseFromLDST = ST->getBasePtr();
+    VT = ST->getMemoryVT();
+  } else {
+    return false;
+  }
+
+  if (Op->getOpcode() == ISD::ADD) {
+    // If this is an add, just take the numbers. Reverse operands to add if
+    // necessary.
+    AM = ISD::POST_INC;
+    Base = Op->getOperand(0);
+    Offset = Op->getOperand(1);
+    if (BaseFromLDST != Base && BaseFromLDST == Offset) {
+      std::swap(Base, Offset);
+    }
+
+    // PULPv2 supports i8, i16, and i32 post-increments only.
+    if (!(VT == MVT::i8 || VT == MVT::i16 || VT == MVT::i32)) {
+      return false;
+    }
+
+    // If this is an immediate (constant), it must fit within 12 bits signed.
+    if (ConstantSDNode *ConstOffset = dyn_cast<ConstantSDNode>(Offset)) {
+      uint64_t imm = ConstOffset->getZExtValue();
+      if (!isInt<12>(imm)) {
+        return false;
+      }
+    }
+
+    return BaseFromLDST == Base;
+  }
+  return false;
 }
 
 #define GET_REGISTER_MATCHER

@@ -1509,3 +1509,14 @@ bool RISCVTTIImpl::isLSRCostLess(const TargetTransformInfo::LSRCost &C1,
                   C2.NumIVMuls, C2.NumBaseAdds,
                   C2.ScaleCost, C2.ImmCost, C2.SetupCost);
 }
+
+bool RISCVTTIImpl::isLoweredToCall(const Function *F) {
+  if (F->getName().startswith("llvm.riscv.pulp"))
+    return false;
+
+  return BaseT::isLoweredToCall(F);
+}
+
+bool RISCVTTIImpl::shouldFavorPostInc() const {
+  return ST->hasPULPExtV2();
+}

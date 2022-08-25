@@ -188,6 +188,35 @@ static const RISCVSupportedExtension SupportedExtensions[] = {
     {"zvl64b", {1, 0}},
     {"zvl65536b", {1, 0}},
     {"zvl8192b", {1, 0}},
+    // Snitch extensions
+    {"xssr", {0, 1}},
+    {"xdma", {0, 1}},
+    {"xfrep", {0, 1}},
+    {"xmempool", {0, 1}},
+    // Smallfloat extensions
+    {"xfalthalf", {0, 1}},
+    {"xfquarter", {0, 1}},
+    {"xfaltquarter"  , {0, 1}},
+    {"xfvecsingle", {0, 1}},
+    {"xfvechalf", {0, 1}},
+    {"xfvecalthalf", {0, 1}},
+    {"xfvecquarter", {0, 1}},
+    {"xfvecaltquarter", {0, 1}},
+    {"xfauxhalf", {0, 1}},
+    {"xfauxalthalf", {0, 1}},
+    {"xfauxquarter", {0, 1}},
+    {"xfauxaltquarter", {0, 1}},
+    {"xfauxvecsingle", {0, 1}},
+    {"xfauxvechalf", {0, 1}},
+    {"xfauxvecalthalf", {0, 1}},
+    {"xfauxvecquarter", {0, 1}},
+    {"xfauxvecaltquarter", {0, 1}},
+    {"xfexpauxvechalf", {0, 1}},
+    {"xfexpauxvecalthalf", {0, 1}},
+    {"xfexpauxvecquarter", {0, 1}},
+    {"xfexpauxvecaltquarter", {0, 1}},
+    // PULP extensions
+    {"xpulpv", {2, 0}},
 };
 
 // NOTE: This table should be sorted alphabetically by extension name.

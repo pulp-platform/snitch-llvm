@@ -707,6 +707,15 @@ public:
            VK == RISCVMCExpr::VK_RISCV_None;
   }
 
+  bool isUImm12() const {
+    int64_t Imm;
+    RISCVMCExpr::VariantKind VK = RISCVMCExpr::VK_RISCV_None;
+    if (!isImm())
+      return false;
+    bool IsConstantImm = evaluateConstantImm(getImm(), Imm, VK);
+    return IsConstantImm && isUInt<12>(Imm) && VK == RISCVMCExpr::VK_RISCV_None;
+  }
+
   bool isRnumArg() const {
     int64_t Imm;
     RISCVMCExpr::VariantKind VK = RISCVMCExpr::VK_RISCV_None;
@@ -767,6 +776,29 @@ public:
            VK == RISCVMCExpr::VK_RISCV_None;
   }
 
+  bool isUImm6() const {
+    int64_t Imm;
+    RISCVMCExpr::VariantKind VK = RISCVMCExpr::VK_RISCV_None;
+    if (!isImm())
+      return false;
+    bool IsConstantImm = evaluateConstantImm(getImm(), Imm, VK);
+    return IsConstantImm && isUInt<6>(Imm) && VK == RISCVMCExpr::VK_RISCV_None;
+  }
+
+  bool isUImm6Lsb0() const {
+    int64_t Imm;
+    RISCVMCExpr::VariantKind VK = RISCVMCExpr::VK_RISCV_None;
+    if (!isImm())
+      return false;
+    bool IsConstantImm = evaluateConstantImm(getImm(), Imm, VK);
+    bool IsValid;
+    if (!IsConstantImm)
+      IsValid = RISCVAsmParser::classifySymbolRef(getImm(), VK);
+    else
+      IsValid = isShiftedUInt<5, 1>(Imm);
+    return IsValid && VK == RISCVMCExpr::VK_RISCV_None;
+  }
+
   bool isSImm6NonZero() const {
     if (!isImm())
       return false;
@@ -776,6 +808,25 @@ public:
     return IsConstantImm && Imm != 0 &&
            isInt<6>(fixImmediateForRV32(Imm, isRV64Imm())) &&
            VK == RISCVMCExpr::VK_RISCV_None;
+  }
+
+  bool isUImm12M1() const {
+    if (!isImm())
+      return false;
+    RISCVMCExpr::VariantKind VK = RISCVMCExpr::VK_RISCV_None;
+    int64_t Imm;
+    bool IsConstantImm = evaluateConstantImm(getImm(), Imm, VK);
+    return IsConstantImm && isUInt<12>(Imm) && (Imm != 0) &&
+           VK == RISCVMCExpr::VK_RISCV_None;
+  }
+
+  bool isUImm4() const {
+    int64_t Imm;
+    RISCVMCExpr::VariantKind VK = RISCVMCExpr::VK_RISCV_None;
+    if (!isImm())
+      return false;
+    bool IsConstantImm = evaluateConstantImm(getImm(), Imm, VK);
+    return IsConstantImm && isUInt<4>(Imm) && VK == RISCVMCExpr::VK_RISCV_None;
   }
 
   bool isCLUIImm() const {
@@ -891,6 +942,16 @@ public:
   }
 
   bool isSImm13Lsb0() const { return isBareSimmNLsb0<13>(); }
+
+  bool isUImm13Lsb0() const {
+    if (!isImm())
+      return false;
+    int64_t Imm;
+    RISCVMCExpr::VariantKind VK = RISCVMCExpr::VK_RISCV_None;
+    bool IsConstantImm = evaluateConstantImm(getImm(), Imm, VK);
+    return IsConstantImm && isShiftedUInt<12, 1>(Imm) &&
+           VK == RISCVMCExpr::VK_RISCV_None;
+  }
 
   bool isSImm10Lsb0000NonZero() const {
     if (!isImm())
@@ -1484,6 +1545,8 @@ bool RISCVAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
   case Match_InvalidSImm6:
     return generateImmOutOfRangeError(Operands, ErrorInfo, -(1 << 5),
                                       (1 << 5) - 1);
+  case Match_InvalidUImm6:
+    return generateImmOutOfRangeError(Operands, ErrorInfo, 0, (1 << 6) - 1);
   case Match_InvalidSImm6NonZero:
     return generateImmOutOfRangeError(
         Operands, ErrorInfo, -(1 << 5), (1 << 5) - 1,
@@ -1525,6 +1588,8 @@ bool RISCVAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
         Operands, ErrorInfo, -(1 << 11), (1 << 11) - 1,
         "operand must be a symbol with %lo/%pcrel_lo/%tprel_lo modifier or an "
         "integer in the range");
+  case Match_InvalidUImm12:
+    return generateImmOutOfRangeError(Operands, ErrorInfo, 0, (1 << 12) - 1);
   case Match_InvalidSImm12Lsb0:
     return generateImmOutOfRangeError(
         Operands, ErrorInfo, -(1 << 11), (1 << 11) - 2,
@@ -1536,6 +1601,10 @@ bool RISCVAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
   case Match_InvalidSImm13Lsb0:
     return generateImmOutOfRangeError(
         Operands, ErrorInfo, -(1 << 12), (1 << 12) - 2,
+        "immediate must be a multiple of 2 bytes in the range");
+  case Match_InvalidUImm13Lsb0:
+    return generateImmOutOfRangeError(
+        Operands, ErrorInfo, 0, (1 << 13) - 2,
         "immediate must be a multiple of 2 bytes in the range");
   case Match_InvalidUImm20LUI:
     return generateImmOutOfRangeError(Operands, ErrorInfo, 0, (1 << 20) - 1,
@@ -2389,6 +2458,13 @@ ParseStatus RISCVAsmParser::parseMemOpBaseReg(OperandVector &Operands) {
   if (!parseRegister(Operands).isSuccess())
     return Error(getLoc(), "expected register");
 
+  if (getSTI().getFeatureBits()[RISCV::FeaturePULPExtV2]) {
+    if (getLexer().is(AsmToken::Exclaim)){
+      getParser().Lex(); // Eat '!'
+      Operands.push_back(RISCVOperand::createToken("!", getLoc(), isRV64()));
+    }
+  }
+
   if (parseToken(AsmToken::RParen, "expected ')'"))
     return ParseStatus::Failure;
   Operands.push_back(RISCVOperand::createToken(")", getLoc()));
@@ -2614,6 +2690,15 @@ bool RISCVAsmParser::parseOperand(OperandVector &Operands, StringRef Mnemonic) {
   // Attempt to parse token as a register.
   if (parseRegister(Operands, true).isSuccess())
     return false;
+  }
+
+  if (parseRegister(Operands, true) == MatchOperand_Success) {
+    if (getSTI().getFeatureBits()[RISCV::FeaturePULPExtV2]) {
+      if (getLexer().is(AsmToken::LParen))
+        return parseMemOpBaseReg(Operands) != MatchOperand_Success;
+    }
+    return false;
+  }
 
   // Attempt to parse token as an immediate
   if (parseImmediate(Operands).isSuccess()) {

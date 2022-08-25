@@ -89,6 +89,10 @@ public:
                          SmallVectorImpl<MCFixup> &Fixups,
                          const MCSubtargetInfo &STI) const;
 
+  unsigned getImmOpValueMinus1(const MCInst &MI, unsigned OpNo,
+                               SmallVectorImpl<MCFixup> &Fixups,
+                               const MCSubtargetInfo &STI) const;
+
   unsigned getVMaskReg(const MCInst &MI, unsigned OpNo,
                        SmallVectorImpl<MCFixup> &Fixups,
                        const MCSubtargetInfo &STI) const;
@@ -362,6 +366,31 @@ RISCVMCCodeEmitter::getMachineOpValue(const MCInst &MI, const MCOperand &MO,
   if (MO.isImm())
     return static_cast<unsigned>(MO.getImm());
 
+  if (MO.isExpr() &&
+      (MI.getOpcode() == RISCV::LOOP0setup ||
+       MI.getOpcode() == RISCV::LOOP1setup ||
+       MI.getOpcode() == RISCV::LOOP0setupi ||
+       MI.getOpcode() == RISCV::LOOP1setupi ||
+       MI.getOpcode() == RISCV::LOOP0starti ||
+       MI.getOpcode() == RISCV::LOOP1starti ||
+       MI.getOpcode() == RISCV::LOOP0endi ||
+       MI.getOpcode() == RISCV::LOOP1endi ||
+       MI.getOpcode() == RISCV::LOOP0counti ||
+       MI.getOpcode() == RISCV::LOOP1counti)) {
+    if (MI.getOpcode() == RISCV::LOOP0setupi ||
+        MI.getOpcode() == RISCV::LOOP1setupi) {
+      RISCV::Fixups FixupKind = RISCV::fixup_pulpv2_loop_setupi;
+      Fixups.push_back(MCFixup::create(0, MO.getExpr(), MCFixupKind(FixupKind),
+                       MI.getLoc()));
+    } else {
+      RISCV::Fixups FixupKind = RISCV::fixup_pulpv2_loop_setup;
+      Fixups.push_back(MCFixup::create(0, MO.getExpr(), MCFixupKind(FixupKind),
+                       MI.getLoc()));
+    }
+    ++MCNumFixups;
+    return 0;
+  }
+
   llvm_unreachable("Unhandled expression!");
   return 0;
 }
@@ -522,6 +551,21 @@ unsigned RISCVMCCodeEmitter::getImmOpValue(const MCInst &MI, unsigned OpNo,
   }
 
   return 0;
+}
+
+unsigned
+RISCVMCCodeEmitter::getImmOpValueMinus1(const MCInst &MI, unsigned OpNo,
+                                        SmallVectorImpl<MCFixup> &Fixups,
+                                        const MCSubtargetInfo &STI) const {
+  const MCOperand &MO = MI.getOperand(OpNo);
+
+  if (MO.isImm()) {
+    unsigned Res = MO.getImm();
+    assert(Res > 0 && "Immediate is zero");
+    return Res - 1;
+  }
+
+  return getImmOpValue(MI, OpNo, Fixups, STI);
 }
 
 unsigned RISCVMCCodeEmitter::getVMaskReg(const MCInst &MI, unsigned OpNo,

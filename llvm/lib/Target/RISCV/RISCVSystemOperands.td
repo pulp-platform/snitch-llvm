@@ -217,7 +217,7 @@ def : SysReg<"vsatp", 0x280>;
 def : SysReg<"mvendorid", 0xF11>;
 def : SysReg<"marchid", 0xF12>;
 def : SysReg<"mimpid", 0xF13>;
-def : SysReg<"mhartid", 0xF14>;
+def MHARTID : SysReg<"mhartid", 0xF14>;
 def : SysReg<"mconfigptr", 0xF15>;
 
 //===----------------------------------------------------------------------===//
@@ -412,3 +412,10 @@ def : SysReg<"vsiph", 0x254>;
 //===-----------------------------------------------
 
 def : SysReg<"jvt", 0x017>;
+
+//===--------------------------
+// Machine Custom CSR
+//===--------------------------
+let FeaturesRequired = [{ {RISCV::FeatureExtXmempool} }] in {
+def TRACE : SysReg<"trace", 0x7D0>;
+}

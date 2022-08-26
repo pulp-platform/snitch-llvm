@@ -1,0 +1,252 @@
+//===--- HeroSnitch.cpp - Hero Snitch ToolChain Implementations -----*- C++ -*-===//
+//
+//                     The LLVM Compiler Infrastructure
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+
+#include "HeroSnitch.h"
+#include "CommonArgs.h"
+#include "clang/Driver/InputInfo.h"
+#include "clang/Driver/Compilation.h"
+#include "clang/Driver/DriverDiagnostic.h"
+#include "clang/Driver/Options.h"
+#include "llvm/Option/ArgList.h"
+#include "llvm/Support/Path.h"
+#include "llvm/Support/Process.h"
+#include "llvm/Support/Regex.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/FormatVariadic.h"
+
+using namespace clang::driver;
+using namespace clang::driver::toolchains;
+using namespace clang::driver::tools;
+using namespace clang;
+using namespace llvm::opt;
+
+/// Hero Toolchain
+// methods are adapted from RISCV.cpp
+HeroSnitchToolChain::HeroSnitchToolChain(const Driver &D, const llvm::Triple &Triple,
+                               const ArgList &Args)
+    : Generic_ELF(D, Triple, Args) {
+  this->Triple = Triple;
+  GCCInstallation.init(Triple, Args);
+
+  // Include directory of snRuntime
+  llvm::Optional<std::string> SnRtInstallDir =
+        llvm::sys::Process::GetEnv("SNRT_INSTALL");
+  if (SnRtInstallDir.hasValue()) {
+    this->SnRtInstallDir = SnRtInstallDir.getValue();
+  } else {
+    D.Diag(diag::err_missing_snitch_sdk);
+  }
+
+  auto SysRoot = computeSysRoot();
+  getFilePaths().push_back(SysRoot + "/lib");
+  if (GCCInstallation.isValid()) {
+    getFilePaths().push_back(GCCInstallation.getInstallPath().str());
+    getProgramPaths().push_back(
+        (GCCInstallation.getParentLibPath() + "/../bin").str());
+  }
+}
+
+Tool *HeroSnitchToolChain::buildLinker() const {
+  return new tools::HeroSnitch::Linker(*this);
+}
+
+void HeroSnitchToolChain::addClangTargetOptions(
+    const llvm::opt::ArgList &DriverArgs,
+    llvm::opt::ArgStringList &CC1Args,
+    Action::OffloadKind) const {
+  CC1Args.push_back("-D__HERO_DEV");
+  // FIXME: extra argument for target to allow dynamic datalayout
+  CC1Args.push_back("-D__host=__attribute((address_space(1)))");
+  CC1Args.push_back("-D__device=__attribute((address_space(0)))");
+
+  // Fix cross compilation when not specifying --sysroot. Search in
+  // <target-triple>/sysroot/usr/include for headers
+  const Driver &D = getDriver();
+  if (D.SysRoot.empty() && GCCInstallation.isValid()) {
+    SmallString<128> SrDir(D.Dir); // = [...]/instal/bin
+    llvm::sys::path::append(SrDir, "../" + GCCInstallation.getTriple().str() + "/sysroot/usr/include");
+    addSystemInclude(DriverArgs, CC1Args, SrDir.str());
+  }
+
+  // snitch runtime include directory
+  addSystemInclude(DriverArgs, CC1Args, this->SnRtInstallDir + "/include");
+}
+
+void HeroSnitchToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
+                                               ArgStringList &CC1Args) const {
+  SmallString<128> SysRootDir(computeSysRoot());
+  llvm::sys::path::append(SysRootDir, "include");
+  addSystemInclude(DriverArgs, CC1Args, SysRootDir.str());
+}
+
+llvm::opt::DerivedArgList *HeroSnitchToolChain::TranslateArgs(const llvm::opt::DerivedArgList &Args,
+    StringRef BoundArch, Action::OffloadKind DeviceOffloadKind) const {
+  DerivedArgList *DAL = new DerivedArgList(Args.getBaseArgs());
+
+  // Set default march
+  StringRef Value = "-march=";
+  const OptTable &Opts = getDriver().getOpts();
+  // TODO: Add Snitch custom extensions
+  Arg *march = new Arg(Opts.getOption(options::OPT_march_EQ), Value,
+                       Args.getBaseArgs().MakeIndex(Value), "rv32imafd");
+  DAL->append(march);
+
+  // Append all other args
+  for (auto& arg : Args) {
+    if(arg->getOption().getName() != "sysroot=") {
+      DAL->append(arg);
+    }
+  }
+  return DAL;
+}
+
+std::string HeroSnitchToolChain::computeSysRoot() const {
+  SmallString<128> SysRootDir;
+  llvm::sys::path::append(SysRootDir, getDriver().Dir, "../", Triple.str());
+  return std::string(SysRootDir);
+}
+
+HeroSnitch::Linker::Linker(const ToolChain &TC) : Tool("HeroSnitch::Linker", "ld.lld", TC) {
+  // Include directory of snRuntime
+  llvm::Optional<std::string> SnRtInstallDir =
+        llvm::sys::Process::GetEnv("SNRT_INSTALL");
+  if (SnRtInstallDir.hasValue()) {
+    this->SnRtInstallDir = SnRtInstallDir.getValue();
+  } else {
+    TC.getDriver().Diag(diag::err_missing_snitch_sdk);
+  }
+}
+
+static void Add64BitLinkerMode(Compilation &C, const InputInfo &Output,
+                               ArgStringList& CmdArgs) {
+  // Create temporary linker script. Keep it if save-temps is enabled.
+  const char *LKS;
+  SmallString<256> Name = llvm::sys::path::filename(Output.getFilename());
+  if (C.getDriver().isSaveTempsEnabled()) {
+    llvm::sys::path::replace_extension(Name, "lh");
+    LKS = C.getArgs().MakeArgString(Name.c_str());
+  } else {
+    llvm::sys::path::replace_extension(Name, "");
+    Name = C.getDriver().GetTemporaryPath(Name, "lh");
+    LKS = C.addTempFile(C.getArgs().MakeArgString(Name.c_str()));
+  }
+
+  // Add linker script option to the command.
+  CmdArgs.push_back("-T");
+  CmdArgs.push_back(LKS);
+
+  // Create a buffer to write the contents of the linker script.
+  std::string LksBuffer;
+  llvm::raw_string_ostream LksStream(LksBuffer);
+  // XXX Write to the LksStream to add stuff to the linker script.
+
+  // Open script file and write the contents.
+  std::error_code EC;
+  llvm::raw_fd_ostream Lksf(LKS, EC);
+
+  if (EC) {
+    C.getDriver().Diag(clang::diag::err_unable_to_make_temp) << EC.message();
+    return;
+  }
+
+  Lksf << LksBuffer;
+}
+
+void HeroSnitch::Linker::ConstructJob(Compilation &C, const JobAction &JA,
+                                 const InputInfo &Output,
+                                 const InputInfoList &Inputs,
+                                 const ArgList &Args,
+                                 const char *LinkingOutput) const {
+  const ToolChain &TC = getToolChain();
+  const Driver &D = C.getDriver();
+  ArgStringList CmdArgs;
+  SmallString<128> ArgStr;
+
+  // Force using lld
+  SmallString<128> Linker(D.Dir);
+  llvm::sys::path::append(Linker, "ld.lld");
+
+  CmdArgs.push_back("-melf32lriscv");
+
+  // from snRuntime
+  CmdArgs.push_back("-plugin-opt=mcpu=snitch");
+  CmdArgs.push_back("-plugin-opt=thinlto");
+  // CmdArgs.push_back("-z norelro");
+
+  SmallString<128> InstallDir(this->SnRtInstallDir);
+  SmallString<128> LibDir(this->SnRtInstallDir);
+  LibDir.append("/lib/static");
+
+  Args.AddAllArgs(CmdArgs, options::OPT_L);
+  TC.AddFilePathLibArgs(Args, CmdArgs);
+  Args.AddAllArgs(CmdArgs,
+                  {options::OPT_T_Group, options::OPT_e, options::OPT_s,
+                   options::OPT_t, options::OPT_Z_Flag, options::OPT_r});
+
+  // Add linker script
+  ArgStr.clear();
+  ArgStr.append("-T");
+  ArgStr.append(InstallDir);
+  llvm::sys::path::append(ArgStr, "/lib/common.ld");
+  CmdArgs.push_back(Args.MakeArgString(ArgStr));
+
+  // don't gc-sections. This discards the offload function
+  // CmdArgs.push_back("--gc-sections");
+
+  CmdArgs.push_back("--no-relax");
+
+  ArgStr.clear();
+  ArgStr.append("-L");
+  ArgStr.append(LibDir);
+  CmdArgs.push_back(Args.MakeArgString(ArgStr));
+  CmdArgs.push_back("-lsnRuntime-hero");
+
+  // Clean inputs to linker
+  InputInfoList FinalInputs;
+  for(auto& Input : Inputs) {
+    if(Input.isInputArg()) {
+      const llvm::opt::Arg& Arg = Input.getInputArg();
+      if(Arg.getSpelling() == "-l" && Arg.getNumValues() > 0) {
+        // Libraries might be host-only
+        // FIXME: use host suffix for now to detect host-only libraries
+        StringRef ArgVal = Arg.getValue();
+        if(!ArgVal.endswith("-host")) {
+          FinalInputs.push_back(Input);
+        }
+        continue;
+      }
+    }
+    FinalInputs.push_back(Input);
+  }
+  AddLinkerInputs(TC, FinalInputs, Args, CmdArgs, JA);
+
+  Add64BitLinkerMode(C, Output, CmdArgs);
+
+  // Currently no support for C++, otherwise add C++ includes and libs if compiling C++.
+
+  // standard libraries
+  CmdArgs.push_back("-lm");
+  CmdArgs.push_back("--start-group");
+  CmdArgs.push_back("-lc");
+  CmdArgs.push_back("-lgloss");
+  CmdArgs.push_back("--end-group");
+  // clang runtime (compiler-rt)
+  CmdArgs.push_back(Args.MakeArgString(
+    D.ResourceDir + "/lib/libclang_rt.builtins-" + TC.getTriple().getArchName() + ".a"));
+
+  CmdArgs.push_back("-o");
+  CmdArgs.push_back(Output.getFilename());
+
+  C.addCommand(std::make_unique<Command>(JA, *this,
+               ResponseFileSupport{ResponseFileSupport::RF_Full,
+                 llvm::sys::WEM_UTF8, "--options-file"},
+               Args.MakeArgString(Linker), CmdArgs, Inputs));
+}
+// Hero tools end.

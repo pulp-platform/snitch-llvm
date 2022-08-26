@@ -1,0 +1,268 @@
+# Copyright 2020 ETH Zurich and University of Bologna.
+# Licensed under the Apache License, Version 2.0, see LICENSE for details.
+# SPDX-License-Identifier: Apache-2.0
+
+# Build toolchain and run regression checks
+name: CI
+on:
+  push:
+    paths:
+      - '.github/workflows/ci.yml'
+      - 'llvm/**'
+      - 'clang/**'
+      - 'lld/**'
+  pull_request:
+    paths:
+      - '.github/workflows/ci.yml'
+      - 'llvm/**'
+      - 'clang/**'
+      - 'lld/**'
+
+jobs:
+  build_llvm:
+    name: Build and Test LLVM
+    runs-on: ubuntu-20.04
+    env:
+      BUILDPREFIX: build
+      INSTALLPREFIX: install
+      LLVMSRC: llvm-project
+      NEWLIBSRC: newlib
+    steps:
+      ########################################
+      ## Checkout
+      ########################################
+      # This
+      - name: Checkout LLVM
+        uses: actions/checkout@v2
+        with:
+          path: ${{ env.LLVMSRC }}
+      # NEWLIB
+      - name: Checkout newlib
+        run: |
+          git clone --depth 1 -b newlib-3.3.0 https://sourceware.org/git/newlib-cygwin.git ${NEWLIBSRC}
+          echo BUILDPREFIX=${BUILDPREFIX}
+          echo INSTALLPREFIX=${GITHUB_WORKSPACE}/${INSTALLPREFIX}
+          echo LLVMSRC=${LLVMSRC}
+          echo NEWLIBSRC=${NEWLIBSRC}
+          echo $(pwd)
+          ls -al
+      ########################################
+      ## Prep OS
+      ########################################
+      # apt
+      - name: Install Packages
+        run: |
+          sudo apt-get -y update && sudo apt-get install -y git flex bison build-essential \
+            git python python3 python3-distutils texinfo wget libexpat-dev \
+            ninja-build
+      # cmake
+      - name: Install cmake
+        run: |
+          mkdir -p /tmp/cmake && cd /tmp/cmake
+          wget https://github.com/Kitware/CMake/releases/download/v3.18.4/cmake-3.18.4.tar.gz
+          tar xf cmake-3.18.4.tar.gz && cd cmake-3.18.4
+          ./bootstrap -- -DCMAKE_USE_OPENSSL=OFF
+          make -j$(nproc) && sudo make install
+          cd /tmp && rm -rf cmake
+      ########################################
+      ## Build
+      ########################################
+      # LLVM
+      - name: Build LLVM
+        run: |
+          mkdir -p ${BUILDPREFIX}/llvm
+          cd ${BUILDPREFIX}/llvm
+          cmake \
+            -DCMAKE_BUILD_TYPE="Release" \
+            -DCMAKE_INSTALL_PREFIX=${GITHUB_WORKSPACE}/${INSTALLPREFIX} \
+            -DLLVM_ENABLE_PROJECTS="clang;lld" \
+            -DLLVM_TARGETS_TO_BUILD="RISCV" \
+            -DLLVM_DEFAULT_TARGET_TRIPLE="riscv32-unknown-elf" \
+            -G Ninja ${GITHUB_WORKSPACE}/${LLVMSRC}/llvm
+          ninja
+          ninja install
+      # newlib
+      - name: Build Newlib
+        run: |
+          mkdir -p ${BUILDPREFIX}/newlib32
+          cd ${BUILDPREFIX}/newlib32
+          ${GITHUB_WORKSPACE}/${NEWLIBSRC}/configure         \
+          --target=riscv32-unknown-elf                       \
+          --prefix=${GITHUB_WORKSPACE}/${INSTALLPREFIX}                          \
+          AR_FOR_TARGET=${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin/llvm-ar         \
+          AS_FOR_TARGET=${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin/llvm-as         \
+          LD_FOR_TARGET=${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin/llvm-ld         \
+          RANLIB_FOR_TARGET=${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin/llvm-ranlib \
+          CC_FOR_TARGET="${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin/clang -march=rv32imafd"
+          make -j$(nproc)
+          make install
+      # compiler-rt
+      - name: Build compier-rt
+        run: |
+          mkdir -p ${BUILDPREFIX}/compiler-rt32
+          cd ${BUILDPREFIX}/compiler-rt32
+          cmake -G"Unix Makefiles"                                                 \
+          -DCMAKE_SYSTEM_NAME=Linux                                                \
+          -DCMAKE_INSTALL_PREFIX=$(${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin/clang -print-resource-dir) \
+          -DCMAKE_C_COMPILER=${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin/clang                            \
+          -DCMAKE_CXX_COMPILER=${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin/clang                          \
+          -DCMAKE_AR=${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin/llvm-ar                                  \
+          -DCMAKE_NM=${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin/llvm-nm                                  \
+          -DCMAKE_RANLIB=${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin/llvm-ranlib                          \
+          -DCMAKE_C_COMPILER_TARGET="riscv32-unknown-elf"                          \
+          -DCMAKE_CXX_COMPILER_TARGET="riscv32-unknown-elf"                        \
+          -DCMAKE_ASM_COMPILER_TARGET="riscv32-unknown-elf"                        \
+          -DCMAKE_C_FLAGS="-march=rv32imafd -mabi=ilp32d"                          \
+          -DCMAKE_CXX_FLAGS="-march=rv32imafd -mabi=ilp32d"                        \
+          -DCMAKE_ASM_FLAGS="-march=rv32imafd -mabi=ilp32d"                        \
+          -DCMAKE_EXE_LINKER_FLAGS="-nostartfiles -nostdlib -fuse-ld=lld"          \
+          -DCOMPILER_RT_BAREMETAL_BUILD=ON                                         \
+          -DCOMPILER_RT_BUILD_BUILTINS=ON                                          \
+          -DCOMPILER_RT_BUILD_MEMPROF=OFF                                          \
+          -DCOMPILER_RT_BUILD_LIBFUZZER=OFF                                        \
+          -DCOMPILER_RT_BUILD_PROFILE=OFF                                          \
+          -DCOMPILER_RT_BUILD_SANITIZERS=OFF                                       \
+          -DCOMPILER_RT_BUILD_XRAY=OFF                                             \
+          -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON                                     \
+          -DCOMPILER_RT_OS_DIR=""                                                  \
+          -DLLVM_CONFIG_PATH=${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin/llvm-config  \
+          ${GITHUB_WORKSPACE}/${LLVMSRC}/compiler-rt
+          make -j$(nproc)
+          make install
+      # symlinks
+      - name: Symlinks
+        run: |
+          cd ${GITHUB_WORKSPACE}/${INSTALLPREFIX}/bin
+          for TRIPLE in riscv32-unknown-elf; do
+            for TOOL in clang clang++ cc c++; do
+              ln -sv clang ${TRIPLE}-${TOOL}
+            done
+          done
+      ########################################
+      ## Test
+      ########################################
+      #- name: Test LLVM
+      #  run: |
+      #    cd ${BUILDPREFIX}/llvm
+      #    ninja check-all 2>&1 | tee ${GITHUB_WORKSPACE}/llvm-check-all.log
+      #    echo "**[BOT]** \`ninja check-all\` failed tests\n\`\`\`" > ${GITHUB_WORKSPACE}/llvm-check-all-summary.log
+      #    cat check-all.log | awk '/Failed Tests/,0' >> ${GITHUB_WORKSPACE}/llvm-check-all-summary.log
+      #    echo "\`\`\`" >> ${GITHUB_WORKSPACE}/llvm-check-all-summary.log
+      #    cat ${GITHUB_WORKSPACE}/llvm-check-all-summary.log
+      #- name: Report Test LLVM
+      #  uses: marocchino/sticky-pull-request-comment@v2
+      #  with:
+      #    append: false
+      #    header: llvm-check-all
+      #    GITHUB_TOKEN: ${{ secrets.PAT }}
+      #    path: ${GITHUB_WORKSPACE}/llvm-check-all-summary.log
+      - name: Test Snitch LLVM
+        run: |
+          cd ${GITHUB_WORKSPACE}
+          wget -O test-snitch-llvm.sh https://raw.githubusercontent.com/pulp-platform/snitch-toolchain-cd/main/stages/test-snitch-llvm.sh
+          chmod +x test-snitch-llvm.sh
+          LLVM_BIN=${GITHUB_WORKSPACE}/${BUILDPREFIX}/llvm/bin \
+          LLVM_SRC=${GITHUB_WORKSPACE}/${LLVMSRC} \
+          ./test-snitch-llvm.sh
+      - name: Upload Snitch Test Info
+        uses: actions/upload-artifact@v2
+        with:
+          name: Test Info
+          path: ${GITHUB_WORKSPACE}/snitch-tests.log
+
+  ########################################
+  ########################################
+  ## NIGHLY RELEASE
+  ########################################
+  ########################################
+  nightly_release:
+    name: Build nightly Release
+    strategy:
+      matrix:
+        os:
+        - ubuntu2004
+        - centos7
+    runs-on: ubuntu-20.04
+    env:
+      PKGVERS: riscv32-pulp-llvm-${{ matrix.os }}-${{ github.run_number }}
+      BUGURL: https://github.com/pulp-platform/llvm-project/issues
+      BUILDNO: ${{ github.run_number }}
+      SOURCEFORGE_SSH_PRIVATE_KEY: ${{secrets.SOURCEFORGE_SSH_PRIVATE_KEY}}
+      SOURCEFORGE_HOST_SIGNATURE: ${{secrets.SOURCEFORGE_HOST_SIGNATURE}}
+      SOURCEFORGE_KEY: ${{ github.workspace }}/../private.key
+    steps:
+      ########################################
+      ## Checkout
+      ########################################
+      
+      ## This
+      -
+        name: Checkout LLVM
+        uses: actions/checkout@v2
+        with:
+          path: llvm-project
+      
+      ## NEWLIB
+      -
+        name: Checkout newlib
+        run: |
+          git clone --depth 1 -b newlib-3.3.0 https://sourceware.org/git/newlib-cygwin.git newlib
+      
+      ########################################
+      ## Build docker container
+      ########################################
+      -
+        name: Prepare Docker
+        uses: docker/build-push-action@v2
+        with:
+          push: false
+          load: true
+          context: llvm-project/.github/docker
+          file: llvm-project/.github/docker/linux-${{ matrix.os }}.Dockerfile
+          tags: linux-${{ matrix.os }}:latest
+      
+      ########################################
+      ## Build Info
+      ########################################
+      -
+        name: Build Info
+        run: |
+         docker run -v $PWD:/home/builder -w/home/builder linux-${{ matrix.os }}:latest llvm-project/.github/scripts/builder-info.sh
+         cat build-info.txt
+      
+      ########################################
+      ## Build
+      ########################################
+      -
+        name: Build
+        run: |
+          docker run -v $PWD:/home/builder -w/home/builder \
+            -e BUGURL=${BUGURL} \
+            -e PKGVERS=${PKGVERS} \
+            -e BUILDNO=${BUILDNO} \
+            linux-${{ matrix.os }}:latest \
+            llvm-project/.github/scripts/build-riscv32-llvm.sh
+
+      ########################################
+      ## Package
+      ########################################
+      -
+        name: Package
+        run: |
+          tar -czf ${PKGVERS}.tar.gz --transform s/^install/${PKGVERS}/ install
+
+      ########################################
+      ## Deploy
+      ########################################
+      -
+        name: deploy-prepare
+        run: |
+          mkdir -p ~/.ssh/
+          echo "${SOURCEFORGE_SSH_PRIVATE_KEY}" > ${SOURCEFORGE_KEY}
+          sudo chmod 600 ${SOURCEFORGE_KEY}
+          echo "${SOURCEFORGE_HOST_SIGNATURE}" >> ~/.ssh/known_hosts
+      -
+        name: deploy-sourceforge
+        run: |
+          dstname=`echo ${PKGVERS} | rev | cut -d'-' -f 2- | rev`
+          scp -i ${SOURCEFORGE_KEY} ${PKGVERS}.tar.gz beeble42brox@frs.sourceforge.net:/home/frs/project/pulp-llvm-project/nightly/${dstname}.tar.gz

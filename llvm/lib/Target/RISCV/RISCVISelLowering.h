@@ -373,6 +373,11 @@ public:
   shouldExpandBuildVectorWithShuffles(EVT VT,
                                       unsigned DefinedValues) const override;
 
+  // Override default pointer type
+  MVT getPointerTy(const DataLayout &DL, uint32_t AS = UINT32_MAX) const override;
+  MVT getPointerMemTy(const DataLayout &DL, uint32_t AS = UINT32_MAX) const override;
+  MVT getScalarShiftAmountTy(const DataLayout &DL, EVT) const override;
+
   // Provide custom lowering hooks for some operations.
   SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
   void ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue> &Results,

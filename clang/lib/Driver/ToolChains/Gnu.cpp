@@ -1971,15 +1971,19 @@ void Generic_GCC::GCCInstallationDetector::init(
         ScanLibDirForGCCTriple(TargetTriple, Args, LibDir, Candidate, false,
                                GCCDirExists, GCCCrossDirExists);
     }
-    for (StringRef Suffix : CandidateBiarchLibDirs) {
-      const std::string LibDir = Prefix + Suffix.str();
-      if (!VFS.exists(LibDir))
-        continue;
-      bool GCCDirExists = VFS.exists(LibDir + "/gcc");
-      bool GCCCrossDirExists = VFS.exists(LibDir + "/gcc-cross");
-      for (StringRef Candidate : CandidateBiarchTripleAliases)
-        ScanLibDirForGCCTriple(TargetTriple, Args, LibDir, Candidate, true,
-                               GCCDirExists, GCCCrossDirExists);
+
+    // Only search biarch when no match is found in standard candidates
+    if(!IsValid) {
+      for (StringRef Suffix : CandidateBiarchLibDirs) {
+        const std::string LibDir = Prefix + Suffix.str();
+        if (!VFS.exists(LibDir))
+          continue;
+        bool GCCDirExists = VFS.exists(LibDir + "/gcc");
+        bool GCCCrossDirExists = VFS.exists(LibDir + "/gcc-cross");
+        for (StringRef Candidate : CandidateBiarchTripleAliases)
+          ScanLibDirForGCCTriple(TargetTriple, Args, LibDir, Candidate, true,
+                                GCCDirExists, GCCCrossDirExists);
+      }
     }
 
     // Skip other prefixes once a GCC installation is found.

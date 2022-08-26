@@ -57,6 +57,7 @@ int test_omp_parallel_sections_lastprivate()
   return ((known_sum==sum) && (i0==999) );
 }
 
+#ifndef NO_MAIN
 int main()
 {
   int i;
@@ -69,3 +70,4 @@ int main()
   }
   return num_failed;
 }
+#endif

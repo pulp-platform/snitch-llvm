@@ -77,6 +77,7 @@ int test_omp_atomic()
   }
 
   // sum of doubles test
+  #ifndef NO_DOUBLE
   dsum = 0;
   dpt = 1;
   for (j = 0; j < DOUBLE_DIGITS; ++j) {
@@ -120,6 +121,7 @@ int test_omp_atomic()
       ddiff);
     result++;
   }
+  #endif
 
   // product of integers test
   #pragma omp parallel
@@ -159,6 +161,7 @@ int test_omp_atomic()
   }
 
   // division of doubles test
+  #ifndef NO_DOUBLE
   div = 5.0E+5;
   #pragma omp parallel
   {
@@ -174,6 +177,7 @@ int test_omp_atomic()
     fprintf (stderr, "Error in division with double: Result was %f"
       " instead of 0.137787\n", div);
   }
+  #endif
 
   // ++ test
   x = 0;
@@ -352,6 +356,7 @@ int test_omp_atomic()
   return (result == 0);
 } // test_omp_atomic()
 
+#ifndef NO_MAIN
 int main()
 {
   int i;
@@ -364,3 +369,4 @@ int main()
   }
   return num_failed;
 }
+#endif

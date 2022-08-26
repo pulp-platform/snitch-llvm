@@ -17,6 +17,7 @@
 #include "clang/AST/ExprOpenMP.h"
 #include "clang/AST/TypeLoc.h"
 #include "clang/Basic/CharInfo.h"
+#include "clang/Basic/HEROHeterogeneous.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Sema/Designator.h"
@@ -8602,6 +8603,35 @@ ExprResult InitializationSequence::Perform(Sema &S,
       if (Result.isInvalid())
         return ExprError();
       CurInit = Result;
+
+      if (hero::isHERODevice(S.Context)) {
+
+        LangAS DefaultAS;
+        if (S.isInOpenMPDeclareTargetContext() ||
+            S.isInOpenMPTargetExecutionDirective() ||
+            hero::isHERODeviceOnly(S.Context)) {
+          DefaultAS = hero::getHERODeviceAS(S.Context);
+        } else {
+          DefaultAS = hero::getHEROHostAS(S.Context);
+        }
+
+        // Decays only happen from within device functions, so we are safe if
+        // this is casted to device AS.
+        if (SourceType->isArrayType()
+            && Result.get()->getType()->isPointerType()
+            && Result.get()->getType()->getPointeeType().getAddressSpace()
+              == DefaultAS) {
+          // OK
+          ConvTy = Sema::Compatible;
+          if (hero::getHERODbgLevel() >= hero::NOTICE) {
+            llvm::errs().changeColor(llvm::raw_fd_ostream::Colors::CYAN, true);
+            llvm::errs() << "POINTER CAST: ";
+            llvm::errs().resetColor();
+            llvm::errs() << "Accepting Address Space Cast for Array To "
+                         << "Pointer Decay for HERO\n";
+          }
+        }
+      }
 
       // If this is a call, allow conversion to a transparent union.
       ExprResult CurInitExprRes = CurInit;

@@ -3968,9 +3968,11 @@ bool CompilerInvocation::ParseLangArgs(LangOptions &Opts, ArgList &Args,
             TT.getArch() == llvm::Triple::nvptx64 ||
             TT.getArch() == llvm::Triple::amdgcn ||
             TT.getArch() == llvm::Triple::x86 ||
-            TT.getArch() == llvm::Triple::x86_64))
+            TT.getArch() == llvm::Triple::x86_64 ||
+            TT.getArch() == llvm::Triple::riscv32))
         Diags.Report(diag::err_drv_invalid_omp_target) << A->getValue(i);
-      else if (getArchPtrSize(T) != getArchPtrSize(TT))
+      else if (getArchPtrSize(T) != getArchPtrSize(TT) &&
+               TT.getVendor() != llvm::Triple::HERO && TT.getVendor() != llvm::Triple::Snitch)
         Diags.Report(diag::err_drv_incompatible_omp_arch)
             << A->getValue(i) << T.str();
       else

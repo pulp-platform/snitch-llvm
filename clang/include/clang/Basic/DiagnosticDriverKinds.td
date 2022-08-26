@@ -573,6 +573,15 @@ def warn_drv_moutline_atomics_unsupported_opt : Warning<
   "'%0' does not support '-%1'; flag ignored">,
   InGroup<OptionIgnored>;
 
+def err_missing_pulp_sdk : Error<
+  "PULP SDK directory not found! Please set the environment variable PULP_SDK_INSTALL by sourcing the PULP environment.">;
+
+def err_missing_pulp_config : Error<
+  "PULP config not found! Please set the environment variable PULP_CURRENT_CONFIG by sourcing the PULP environment.">;
+
+def err_missing_snitch_sdk : Error<
+  "Snitch Runtime install directory not found! Please set the environment variable SNRT_INSTALL.">;
+
 def warn_drv_darwin_sdk_invalid_settings : Warning<
   "SDK settings were ignored as 'SDKSettings.json' could not be parsed">,
   InGroup<DiagGroup<"darwin-sdk-settings">>;

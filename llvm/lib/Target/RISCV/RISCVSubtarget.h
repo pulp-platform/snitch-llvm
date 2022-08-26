@@ -60,6 +60,7 @@ private:
 
   RISCVProcFamilyEnum RISCVProcFamily = Others;
 
+  bool IsPULP = false;
   bool HasPULPExtV2 = false;
   bool HasStdExtM = false;
   bool HasStdExtA = false;
@@ -223,6 +224,7 @@ public:
   bool hasExtXdma() const { return HasExtXdma; }
   bool hasExtXssr() const { return HasExtXssr; }
   bool hasExtXmempool() const { return HasExtXmempool; }
+  bool isPULP() const { return IsPULP; }
   bool hasPULPExtV2() const { return HasPULPExtV2; }
   bool hasExtXsmallfloat() const {
     return HasExtXfalthalf || HasExtXfquarter || HasExtXfaltquarter ||

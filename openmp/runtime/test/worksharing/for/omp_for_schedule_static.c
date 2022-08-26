@@ -140,6 +140,7 @@ int test_omp_for_schedule_static()
   return result;
 }
 
+#ifndef NO_MAIN
 int main()
 {
   int i;
@@ -152,3 +153,4 @@ int main()
   }
   return num_failed;
 }
+#endif

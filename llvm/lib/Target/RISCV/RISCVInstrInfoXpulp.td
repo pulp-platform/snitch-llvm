@@ -1870,10 +1870,11 @@ def : Pat<(int_riscv_pulp_read_base_off_v GPR:$rs1, GPR:$rs2), (P_LW_rr GPR:$rs1
 def : Pat<(int_riscv_pulp_write_base_off_v GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SW_rr GPR:$rs2, GPR:$rs1, GPR:$rs3)>;
 
 def : Pat<(int_riscv_pulp_CoreId), (ANDI (CSRRS MHARTID.Encoding, X0), 0b1111)>;
+def : Pat<(int_riscv_pulp_CoreCount), (ANDI (LW (LUI 0x1A103), 0), 0x12)>;
 def : Pat<(int_riscv_pulp_ClusterId), (SRLI (ANDI (CSRRS MHARTID.Encoding, X0), 0b11111100000), 5)>;
 def : Pat<(int_riscv_pulp_IsFc), (SRLI (ANDI (CSRRS MHARTID.Encoding, X0), 0b10000000000), 10)>;
 // Symbols below must be provided by the platform, no CSR involved
-// Note: HERO has not fabric controller
+// Note: GCC lowers HasFc to zero immediate
 def : Pat<(int_riscv_pulp_HasFc), (ANDI X0, 0)>;
 
 } // Predicates = [IsRV32, HasPULPExtV2]

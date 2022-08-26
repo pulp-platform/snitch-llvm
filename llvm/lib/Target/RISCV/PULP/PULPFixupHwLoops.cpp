@@ -15,6 +15,7 @@
 #include "llvm/CodeGen/MachineLoopInfo.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
+#include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Pass.h"
 
@@ -366,8 +367,8 @@ bool PULPFixupHwLoops::fixupLoopLatch(MachineFunction &MF) {
             if (current == L->getBottomBlock()) {
               LastMBB = L->getBottomBlock();
               MachineOperand countMO = MI.getOperand(1);
-              MI.RemoveOperand(1);
-              MI.RemoveOperand(0);
+              MI.removeOperand(1);
+              MI.removeOperand(0);
               MI.addOperand(MachineOperand::CreateMBB(LastMBB));
               MI.addOperand(countMO);
             }

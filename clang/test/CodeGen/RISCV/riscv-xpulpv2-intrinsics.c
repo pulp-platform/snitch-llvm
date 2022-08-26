@@ -7,9 +7,6 @@
 // 2. clang with versioned extension
 // RUN: %clang --target=riscv32 -march=rv32imafcxpulpv2 -c -S -emit-llvm %s -o - \
 // RUN:     | FileCheck %s
-// 3. clang with a platform triple that is expected to provide PULP extensions
-// RUN: %clang --target=riscv32-hero-unknown-elf -c -S -emit-llvm %s -o - \
-// RUN:     | FileCheck %s
 
 #include <stdint.h>
 
@@ -32,7 +29,8 @@ int32_t test_builtin_pulp_CoreId(void) {
 // No actual intrinsic emitted.
 // CHECK-LABEL: @test_builtin_pulp_CoreCount(
 // CHECK-NEXT:  entry:
-// CHECK-NEXT:    ret i32 ptrtoint (i8* @__rt_nb_pe to i32)
+// CHECK-NEXT:    [[RES:%.*]] = call i32 @llvm.riscv.pulp.CoreCount()
+// CHECK-NEXT:    ret i32 [[RES]]
 //
 int32_t test_builtin_pulp_CoreCount(void) {
   return __builtin_pulp_CoreCount();

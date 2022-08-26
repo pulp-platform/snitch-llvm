@@ -21,7 +21,7 @@ def MempoolModel : SchedMachineModel {
   let UnsupportedFeatures = [HasStdExtZbkb, HasStdExtZbkc, HasStdExtZbkx,
                              HasStdExtZknd, HasStdExtZkne, HasStdExtZknh,
                              HasStdExtZksed, HasStdExtZksh, HasStdExtZkr,
-                             HasVInstructionsAnyF];
+                             HasStdExtZbe, HasVInstructionsAnyF];
 }
 
 //===----------------------------------------------------------------------===//
@@ -197,7 +197,13 @@ defm : UnsupportedSchedZba;
 defm : UnsupportedSchedZbb;
 defm : UnsupportedSchedZbc;
 defm : UnsupportedSchedZbs;
+defm : UnsupportedSchedZbe;
 defm : UnsupportedSchedZbf;
 defm : UnsupportedSchedZfh;
+defm : UnsupportedSchedZbm;
+
+defm : UnsupportedSchedZbp;
+defm : UnsupportedSchedZbr;
+defm : UnsupportedSchedZbt;
 
 }

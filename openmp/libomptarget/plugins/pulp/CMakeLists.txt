@@ -22,7 +22,7 @@ if(NOT EXISTS $ENV{HERO_PULP_INC_DIR}/pulp.h)
   libomptarget_say("Not building PULP offloading plugin: PULP SDK not found (HERO_PULP_INC_DIR to the correct path)")
   return()
 endif()
-libomptarget_say("Building PULP offloading plugin.")
+libomptarget_say("Building PULP offloading plugin. ($ENV{HERO_PULP_INC_DIR})")
 
 # Define the suffix for the runtime messaging dumps.
 add_definitions(-DTARGET_NAME=PULP)

@@ -56,6 +56,7 @@
 extern "C" {
 
 #include "libpulp.h"
+#include "archi/mailbox/mailbox_v0.h"
 
 #define PULP_HERO_DEFAULT_CLUSTER_ID (0x0U)
 #define PULP_HERO_DEFAULT_FREQ (PULP_DEFAULT_FREQ_MHZ)
@@ -123,11 +124,8 @@ static void init_hero_device() {
   uint32_t cluster_idx, nr_dev;
 
   pulp = &pulp_dev;
-  TRACE("1");
   pulp->cluster_sel = PULP_HERO_DEFAULT_CLUSTER_ID;
-  TRACE("2");
-  // pulp_set_log_level(LOG_WARN);
-  printf("Set log level\n");
+  pulp_set_log_level(LOG_DEBUG);
   cluster_idx = 0;
 
   // reserve virtual addresses overlapping with PULP's internal physical address
@@ -150,7 +148,6 @@ static void init_hero_device() {
 
   //  pulp_rab_free(pulp, 0x0);
   // pulp_reset(pulp);
-  TRACE("4");
 
   // Reset the TLB
   tlb_entry.flags = 0;
@@ -183,63 +180,83 @@ static void init_hero_device() {
 
   // De-isolate quadrant
   int status;
-  for (uint32_t i = 0; i < nr_dev; ++i) {
-    status = pulp_isolate(clusters[i], 0);
-    if (status != 0) {
-      printf("Deisolation failed for cluster %d: %s\n", i, strerror(ret));
-      ret -= 1;
-    }
+  int i = 0;
+  status = pulp_isolate(clusters[0], 1); // Isolate quadrant
+  if (status != 0) {
+    printf("Isolation failed for cluster %d: %s\n", i, strerror(ret));
+    ret -= 1;
   }
 
-  for (uint32_t i = 0; i < nr_dev; ++i) {
-    status = pulp_isolate(clusters[i], 1);
-    if (status != 0) {
-      printf("Isolation failed for cluster %d: %s\n", i, strerror(ret));
-      ret -= 1;
-    }
+  status = pulp_isolate(clusters[0], 0); // De-isolate quadrant
+  if (status != 0) {
+    printf("De-isolation failed for cluster %d: %s\n", i, strerror(ret));
+    ret -= 1;
   }
-  
+
+  // If isolation or de-isolation fail, we isolate the quadrant and exit.
   if (ret) {
-    for (uint32_t i = 0; i < nr_dev; ++i) {
-    status = pulp_isolate(clusters[i], 1);
+    status = pulp_isolate(clusters[0], 1);
     if (status != 0) {
       printf("Isolation failed for cluster %d: %s\n", i, strerror(ret));
       ret -= 1;
     }
-  }
     exit(-1);
   }
 
   // fill memory with known pattern
-  // if (memtest(pulp->l1.v_addr, pulp->l1.size, "TCDM", 'T'))
-  //   return -1;
-  // 
-  printf("Skipping memtest l1 \n");
-
-  for (uint32_t i = 0; i < nr_dev; ++i) {
-    status = pulp_wakeup(clusters[i]);
-    if (status != 0) {
-      printf("Wakeup failed for cluster %d: %s\n", i, strerror(ret));
-      ret -= 1;
+  // int memtest(void *mem, size_t size, const char *cmt, uint8_t fillPat) {
+  #define SHELL_RED "\033[0;31m"
+  #define SHELL_GRN "\033[0;32m"
+  #define SHELL_RST "\033[0m"
+  unsigned char rb;
+  int err_cnt = 0;
+  int test_cnt = 0;
+  size_t size = pulp->l1.size;
+  unsigned char *pmem = (unsigned char *)pulp->l1.v_addr;
+  const char *cmt = "TCDM";
+  uint8_t fillPat = 'T';
+  
+  printf("[memtest] %s size %ldKiB\n", cmt, size / 1024);
+  
+  size_t byte_off;
+  for (byte_off = 0; byte_off < size; byte_off++) {
+    if ((byte_off > 0) && ((byte_off % (64 * 1024)) == 0)) {
+      printf(".");
+      // fflush(stdout);
+    }
+  
+    pmem[byte_off] = byte_off % 0xff;
+    rb = pmem[byte_off];
+    if (rb != (byte_off % 0xff)) {
+      printf("[memtest] error at off 0x%08lx, write 0x%02lx, read %02x\n", byte_off,
+             byte_off % 0xff, rb);
+      err_cnt++;
+    }
+    test_cnt++;
+  
+    pmem[byte_off] = fillPat;
+    rb = pmem[byte_off];
+    if (rb != fillPat) {
+      printf("[memtest] error at off 0x%08lx, write 0x%02x, read %02x\n", byte_off, fillPat, rb);
+      err_cnt++;
+    }
+    test_cnt++;
+    if (err_cnt > 8) {
+      printf("aborting due to too many errors\n");
+      break;
     }
   }
-  printf("Chopped the Suey!\n");
-
-  // initialization of PULP, static RAB rules (mbox, L2, ...)
-  // pulp_init(pulp);
-
-  // set up accelerator for RAB miss-handling
-  // FIXME: reenable after fixing
-  // pulp_rab_soc_mh_enable(pulp, 0);
+  printf("\r[memtest] %s %s - size: %ld (%ldk), writes performed: %d, errors: %d (%.2f%%)\n",
+         err_cnt ? SHELL_RED "FAIL" SHELL_RST : SHELL_GRN "PASS" SHELL_RST, cmt, size, size / 1024,
+         test_cnt, err_cnt, 100.0 / test_cnt * err_cnt);
+  // return err_cnt;
+  // }
+  printf("Memtest errors: %d\n", err_cnt);
 
   address_table = new ImgDevAddrMap;
-  TRACE("5");
   address_map = new AddrVectMap;
-  TRACE("6");
   num_devices = 1;
-  TRACE("7");
   num_images = 0;
-  TRACE("8");
 }
 
 extern "C" bool GOMP_OFFLOAD_init_device(int n __attribute__((unused))) {

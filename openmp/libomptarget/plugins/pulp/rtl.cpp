@@ -218,6 +218,7 @@ bool map_to_mem(__tgt_device_image *image, void **target, size_t *size) {
 
   size_t phdrnum;
   int err = elf_getphdrnum(e, &phdrnum);
+  DP("phdrnum: %d\n", phdrnum);
   if (err) {
     DP("Failed to read number of physical section headers\n");
     elf_end(e);
@@ -261,7 +262,7 @@ bool map_to_mem(__tgt_device_image *image, void **target, size_t *size) {
     }
 
     if (sc_lo == 0x80000000) {
-      DP("skipping ELF segment [" DPxMOD ", " DPxMOD "] because it is L3", DPxPTR(sc_lo),
+      DP("skipping ELF segment [" DPxMOD ", " DPxMOD "] because it is L3\n", DPxPTR(sc_lo),
          DPxPTR(sc_hi));
       continue;
     }
@@ -310,7 +311,9 @@ bool map_to_mem(__tgt_device_image *image, void **target, size_t *size) {
         DP("*** wrote %d bytes, zeroed %d bytes\n", hdr->p_filesz,
            hdr->p_memsz - hdr->p_filesz);
         found = true;
+        printf("found[%d]: %d\n", j, found);
         wrote_segment = true;
+        printf("wrote_segment[%d]: %d\n", j, wrote_segment);
       }
     }
 
@@ -337,8 +340,6 @@ bool load_and_execute_image(__tgt_device_image *image) {
   if (!success) {
     return false;
   }
-
-  pulp_exe_start(pulp, 0x1C000000);
   return true;
 }
 
@@ -362,7 +363,9 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
   }
 
   // init argument buffers
+  DP("Init argument buffers\n");
   host_arg_buf.reserve(ARG_BUF_SIZE); // memory leak
+  DP("ARG_BUF_SIZE: %d\n", ARG_BUF_SIZE);
   if (device_id == BIGPULP_MEMCPY) {
     dev_arg_buf = __tgt_rtl_data_alloc(
         device_id, ARG_BUF_SIZE * sizeof(uint64_t), host_arg_buf.data());
@@ -499,12 +502,15 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
 
   // instruct PULP to run the offload function
   DP("Start offloading...\n");
-  // pulp_mbox_write(pulp, PULP_START);
-  pulp_mbox_write(pulp, 0x02U);
+  pulp_mbox_write(pulp, PULP_START);
   pulp_mbox_write(pulp, (uint32_t)tgt_entry_ptr);
+  DP("tgt_entry_ptr: "DPxMOD"\n", DPxPTR((uint32_t)tgt_entry_ptr));
   pulp_mbox_write(pulp, (uint32_t)dev_arg_buf);
+  DP("dev_arg_buf: "DPxMOD"\n", DPxPTR((uint32_t)dev_arg_buf));
   const uint32_t num_miss_handler_threads = (device_id == BIGPULP_SVM) ? 1 : 0;
   pulp_mbox_write(pulp, num_miss_handler_threads);
+  DP("num_miss_handler_threads: "DPxMOD"\n", DPxPTR(num_miss_handler_threads));
+  pulp_exe_start(pulp, 0x1c000080);
 
 #ifdef PREM_MODE
   // synchronize with CMUX
@@ -513,12 +519,15 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
   host_sync(&voteopts);
   DP("Done PREM sync\n");
 #endif
-
-  uint32_t ret[2];
+  uint32_t buffer[2], ret[2];
+  DP("Reading ret[0] from mbox\n");
+  // int ret;
   while (pulp_mbox_read(pulp, (unsigned int *)&ret[0], 1));
-  assert(ret[0] == 4 /* PULP_DONE */ &&
-         "Software mailbox protocol failure: Expected PULP_DONE.");
+  printf("Received from CL : 0x%08x\n", ret[0]);
+  DP("Reading ret[1] from mbox\n");
   while (pulp_mbox_read(pulp, (unsigned int *)&ret[1], 1));
+  printf("Received from CL : 0x%08x\n", ret[1]);
+  DP("PULP L3 V-Addr: "DPxMOD"\n", DPxPTR(pulp->l3.v_addr));
 
   // for (unsigned i = 0; i < ARCHI_CLUSTER_NB_PE; ++i) {
   for (unsigned i = 0; i < 8; ++i) {
@@ -539,7 +548,8 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     printf("<<< END OF BUFFER\n");
   }
 
-  printf("Done offloading, cycles to execute kernel: %d!\n", (int)ret[1]);
+  // printf("Done offloading, cycles to execute kernel: %d!\n", (int)ret[1]);
+  printf("Done offloading!\n");
 
   return OFFLOAD_SUCCESS;
 }

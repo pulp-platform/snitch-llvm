@@ -471,7 +471,7 @@ extern "C" bool GOMP_OFFLOAD_free(int n __attribute__((unused)),
   uintptr_t phy_ptr = (uintptr_t)tgt_ptr;
   address_map->erase(phy_ptr);
 
-  pulp_l3_free(pulp, vir_ptr, phy_ptr);
+  pulp_l3_free(pulp, vir_ptr);
 
   return 1;
 }

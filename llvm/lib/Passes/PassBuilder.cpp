@@ -16,6 +16,7 @@
 
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/Analysis/AffineAccessAnalysis.h"
 #include "llvm/Analysis/AliasAnalysisEvaluator.h"
 #include "llvm/Analysis/AliasSetTracker.h"
 #include "llvm/Analysis/AssumptionCache.h"
@@ -88,6 +89,8 @@
 #include "llvm/Transforms/Coroutines/CoroEarly.h"
 #include "llvm/Transforms/Coroutines/CoroElide.h"
 #include "llvm/Transforms/Coroutines/CoroSplit.h"
+#include "llvm/Transforms/SSR/SSRInference.h"
+#include "llvm/Transforms/SSR/SSRGeneration.h"
 #include "llvm/Transforms/IPO/AlwaysInliner.h"
 #include "llvm/Transforms/IPO/Annotation2Metadata.h"
 #include "llvm/Transforms/IPO/ArgumentPromotion.h"
@@ -247,6 +250,9 @@
 #include "llvm/Transforms/Vectorize/LoopVectorize.h"
 #include "llvm/Transforms/Vectorize/SLPVectorizer.h"
 #include "llvm/Transforms/Vectorize/VectorCombine.h"
+
+// FIXME: Where do I add this??
+//   FPM.addPass(SSRInferencePass());
 
 using namespace llvm;
 

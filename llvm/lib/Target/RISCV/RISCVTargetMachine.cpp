@@ -30,6 +30,8 @@
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/FormattedStream.h"
 #include "llvm/Target/TargetOptions.h"
+#include "llvm/Transforms/Scalar/Reassociate.h"
+#include "llvm/Transforms/Scalar.h"
 using namespace llvm;
 
 static cl::opt<bool> EnableRedundantCopyElimination(
@@ -49,6 +51,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   initializeSNITCHFrepLoopsPass(*PR);
   initializeRISCVExpandSDMAPass(*PR);
   initializeRISCVExpandPseudoPass(*PR);
+  initializeRISCVExpandSSRPostRegAllocPass(*PR);
   initializeRISCVInsertVSETVLIPass(*PR);
   initializePULPHardwareLoopsPass(*PR);
 }
@@ -161,6 +164,9 @@ TargetPassConfig *RISCVTargetMachine::createPassConfig(PassManagerBase &PM) {
 }
 
 void RISCVPassConfig::addIRPasses() {
+  //addPass(createSSRReassociatePass()); //slow & incorrect, see top of file for more info
+  //addPass(createReassociatePass()); does not reassociate fast FP-ops ???
+  //addPass(createSSRStatisticsPass()); //counts number of load/store as well as number of streams
   addPass(createAtomicExpandPass());
 
   addPass(createRISCVGatherScatterLoweringPass());
@@ -201,6 +207,12 @@ void RISCVPassConfig::addPreEmitPass() { addPass(&BranchRelaxationPassID); }
 void RISCVPassConfig::addPreEmitPass2() {
   addPass(createRISCVExpandPseudoPass());
   addPass(createPULPFixupHwLoops());
+  addPass(createRISCVExpandSSRPostRegAllocPass());
+  //FIXME: scheduling the post ra scheduler after ssr expand gives better results but is unsafe 
+  //because it might move insts with ssr regs after ssr-disable (or before enable) or reorder them internally (change in order of stream!)
+  // addPass(&PostRASchedulerID); 
+  //addPass(createSNITCHAutoFrepPass()); //alternative to scheduling and anti-dep-breaking
+  
   // Schedule the expansion of AMOs at the last possible moment, avoiding the
   // possibility for other passes to break the requirements for forward
   // progress in the LR/SC block.

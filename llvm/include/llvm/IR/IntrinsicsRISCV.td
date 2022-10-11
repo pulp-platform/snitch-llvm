@@ -1937,20 +1937,18 @@ let TargetPrefix = "riscv" in {
                   [IntrHasSideEffects, ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<1>>]>,
         RISCVSSRIntrinsic;
 
-  // The `Throws` attribute ensures that the push/pop don't get removed from loops
-  // by the LICM pass
-  // TODO: Is there another way to do this?
   def int_riscv_ssr_push
       : GCCBuiltin<"__builtin_ssr_push">,
         Intrinsic<[],
                   [llvm_i32_ty, llvm_double_ty],
-                  [IntrWriteMem, IntrHasSideEffects, Throws, ImmArg<ArgIndex<0>>]>,
+                  [IntrWriteMem, ImmArg<ArgIndex<0>>]>,
         RISCVSSRIntrinsic;
+  // Use IntrWriteMem here to avoid LICM
   def int_riscv_ssr_pop
       : GCCBuiltin<"__builtin_ssr_pop">,
         Intrinsic<[llvm_double_ty],
                   [llvm_i32_ty],
-                  [IntrReadMem, IntrHasSideEffects, Throws, ImmArg<ArgIndex<0>>]>,
+                  [ImmArg<ArgIndex<0>>, IntrWriteMem]>,
         RISCVSSRIntrinsic;
 
   def int_riscv_ssr_enable

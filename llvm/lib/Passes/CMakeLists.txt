@@ -18,6 +18,7 @@ add_llvm_component_library(LLVMPasses
   Analysis
   Core
   Coroutines
+  SSR
   IPO
   InstCombine
   ObjCARC

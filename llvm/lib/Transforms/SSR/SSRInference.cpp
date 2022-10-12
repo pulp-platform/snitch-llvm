@@ -58,7 +58,7 @@ using namespace llvm;
 
 PreservedAnalyses SSRInferencePass::run(Function &F, FunctionAnalysisManager &FAM){
   LLVM_DEBUG(dbgs()<<"SSR Inference Pass on function: "<<F.getNameOrAsOperand()<<"====================================================\n");
-  FunctionPassManager FPM(false);
+  FunctionPassManager FPM;
   FPM.addPass(FixIrreduciblePass());//turn some non-loops into loops
   FPM.addPass(LoopSimplifyPass());  //canonicalize loops
   FPM.addPass(LCSSAPass());         //put loops into LCSSA-form
@@ -68,7 +68,8 @@ PreservedAnalyses SSRInferencePass::run(Function &F, FunctionAnalysisManager &FA
   FPM.addPass(LoopSimplifyPass());  //canonicalize loops again
   FPM.addPass(InstCombinePass());   //removes phi nodes from LCSSA
   FPM.addPass(ADCEPass());          //remove potential dead instructions that result from SSR replacement
-  FPM.addPass(createFunctionToLoopPassAdaptor(LICMPass())); //LICM of run-time checks if possible
+  auto opts = LICMOptions();
+  FPM.addPass(createFunctionToLoopPassAdaptor(LICMPass(opts), /*UseMemorySSA=*/true, /*UseBlockFrequencyInfo=*/true)); //LICM of run-time checks if possible
   FPM.addPass(SimplifyCFGPass());   //simplifies CFG again
   FPM.addPass(LoopSimplifyPass());  //canonicalize loops again
   auto pa = FPM.run(F, FAM);

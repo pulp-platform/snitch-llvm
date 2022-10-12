@@ -251,9 +251,6 @@
 #include "llvm/Transforms/Vectorize/SLPVectorizer.h"
 #include "llvm/Transforms/Vectorize/VectorCombine.h"
 
-// FIXME: Where do I add this??
-//   FPM.addPass(SSRInferencePass());
-
 using namespace llvm;
 
 static const Regex DefaultAliasRegex(

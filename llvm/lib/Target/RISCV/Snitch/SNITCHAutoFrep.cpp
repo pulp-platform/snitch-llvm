@@ -491,7 +491,7 @@ bool SNITCHAutoFrep::process(MachineBasicBlock &MBB) {
                         
                         for (auto di = delete_begin; di != delete_end;) {
                             auto din = std::next(di);
-                            di->eraseFromParentAndMarkDBGValuesForRemoval(); //delete repeated parts
+                            di->eraseFromParent(); //delete repeated parts
                             di = din;
                         }
                         for (unsigned s = 1; s <= best_stagger; s++) {

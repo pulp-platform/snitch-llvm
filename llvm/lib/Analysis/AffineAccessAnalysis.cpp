@@ -139,14 +139,14 @@ Optional<std::pair<const SCEV *, const SCEV *>> toSameType(const SCEV *LHS, cons
   if (LT->isPointerTy() && RT->isPointerTy()) //if we have pointers to different types
     //PointerType *LTP = cast<PointerType>(LT); PointerType *RTP = cast<PointerType>(RT);
     return Optional<PT>(std::make_pair(
-      SE.getPtrToIntExpr(LHS, Type::getIntNTy(ctxt, DL.getMaxPointerSizeInBits())), 
-      SE.getPtrToIntExpr(RHS, Type::getIntNTy(ctxt, DL.getMaxPointerSizeInBits()))
+      SE.getPtrToIntExpr(LHS, Type::getIntNTy(ctxt, DL.getPointerSizeInBits())),
+      SE.getPtrToIntExpr(RHS, Type::getIntNTy(ctxt, DL.getPointerSizeInBits()))
     ));
 
   if (!LT->isSized() || !RT->isSized()) return None;
   if (DL.getTypeSizeInBits(LT).isScalable() || DL.getTypeSizeInBits(RT).isScalable()) return None;
 
-  uint64_t ls = DL.getTypeSizeInBits(LT).getValue(), rs = DL.getTypeSizeInBits(RT).getValue();
+  uint64_t ls = DL.getTypeSizeInBits(LT).getFixedValue(), rs = DL.getTypeSizeInBits(RT).getFixedValue();
 
   if (ls > rs) {
     if (auto LHSx = dyn_cast<SCEVConstant>(LHS)){
@@ -1058,7 +1058,7 @@ AffAccConflict AffineAccess::calcRWConflict(AffAcc *Read, AffAcc *Write, const L
   Value *Addr = getAddress(r);
   Value *DAddr = getAddress(w);
   bool dominates = MSSA.dominates(r, w);
-  if (Addr && DAddr && AA.alias(Addr, DAddr) == NoAlias) return AffAccConflict::NoConflict;
+  if (Addr && DAddr && AA.alias(Addr, DAddr) == AliasResult::NoAlias) return AffAccConflict::NoConflict;
   AffAccConflict kind = AffAccConflict::Bad;
   if (!dominates) { //read does not dominate write ==> R maybe after W
     kind = AffAccConflict::MustNotIntersect;
@@ -1072,7 +1072,7 @@ AffAccConflict AffineAccess::calcRWConflict(AffAcc *Read, AffAcc *Write, const L
     while (Read->isWellFormed(dr) && Write->isWellFormed(dw)) {
       nonzeroSteps &= SE.isKnownNonZero(Read->getStep(dr++)) && SE.isKnownNonZero(Write->getStep(dw++));
     }
-    if ((Addr && DAddr && AA.alias(Addr, DAddr) == MustAlias && nonzeroSteps)
+    if ((Addr && DAddr && AA.alias(Addr, DAddr) == AliasResult::MustAlias && nonzeroSteps)
       || (accessPatternsAndAddressesMatch(Read, Write, L) && nonzeroSteps)) 
     {
       kind = AffAccConflict::NoConflict;

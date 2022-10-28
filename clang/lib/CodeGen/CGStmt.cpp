@@ -615,8 +615,6 @@ void CodeGenFunction::addFrepMetadata(llvm::BasicBlock *block, ArrayRef<const At
   assert(FrepAttrs[0]->getKind() == attr::Frep && "Expected attribute attr::Frep");
 
   const FrepAttr *attr = (const FrepAttr*)FrepAttrs[0];
-  ASTContext& AC = CGM.getContext();
-  BasicBlock::iterator it_start = block->getFirstInsertionPt();
 
   // build the metadata string
   std::string metadata_string;
@@ -628,6 +626,8 @@ void CodeGenFunction::addFrepMetadata(llvm::BasicBlock *block, ArrayRef<const At
   Builder.CreateIntrinsic(Intrinsic::riscv_frep_infer, {}, {});
 
   // create metadata node and attach it to the insert point
+  // ASTContext& AC = CGM.getContext();
+  // BasicBlock::iterator it_start = block->getFirstInsertionPt();
   // LLVMContext& C = it_start->getContext();
   // std::string result = metadata_string;
   // MDNode* N = MDNode::get(C, MDString::get(C, result));

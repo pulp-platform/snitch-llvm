@@ -24,9 +24,9 @@ def SnitchModel : SchedMachineModel {
   // Choose as 5/8 of L0 cache: 5*8 insts (avoid thrashing, but do not evict important loop-adjacent blocks)
   let LoopMicroOpBufferSize = 40;
 
-  // Ideally, TCDM accesses take 2 cycles. We assume 4 here to account for
+  // Ideally, TCDM accesses take 2 cycles. We assume 6 here to account for
   // multi-core and heavy SSR contention and not exceed our FP L/S queue (important)
-  let LoadLatency = 4;
+  let LoadLatency = 6;
 
   // Approximation of cycles for "high latency" ops.
   // The default of 10 is not bad here, but we can observe worse in  practice
@@ -97,7 +97,7 @@ def : WriteRes<WriteSTW, [SnitchUnitICore, SnitchUnitILSQ]>;
 }
 
 // Memory loads and atomics: latency as for memory above
-let Latency = 4, ResourceCycles = [1,4,4] in {
+let Latency = 6, ResourceCycles = [1,4,4] in {
 def : WriteRes<WriteLDB, [SnitchUnitICore, SnitchUnitILSQ, SnitchUnitILQ]>;
 def : WriteRes<WriteLDH, [SnitchUnitICore, SnitchUnitILSQ, SnitchUnitILQ]>;
 def : WriteRes<WriteLDW, [SnitchUnitICore, SnitchUnitILSQ, SnitchUnitILQ]>;
@@ -116,21 +116,21 @@ def : WriteRes<WriteIDiv, [SnitchUnitICore, SnitchUnitMulDiv]>;
 }
 
 // FPU: ADDMUL opgroup (FP32)
-let Latency = 2 in {
+let Latency = 4 in {
 def : WriteRes<WriteFALU32, [SnitchUnitFPSS]>;
 def : WriteRes<WriteFMul32, [SnitchUnitFPSS]>;
 def : WriteRes<WriteFMA32, [SnitchUnitFPSS]>;
 }
 
 // FPU: ADDMUL opgroup (FP64)
-let Latency = 3 in {
+let Latency = 5 in {
 def : WriteRes<WriteFALU64, [SnitchUnitFPSS]>;
 def : WriteRes<WriteFMul64, [SnitchUnitFPSS]>;
 def : WriteRes<WriteFMA64, [SnitchUnitFPSS]>;
 }
 
 // FPU: CONV opgroup
-let Latency = 2 in {
+let Latency = 4 in {
 def : WriteRes<WriteFCvtI32ToF32, [SnitchUnitFPSS]>;
 def : WriteRes<WriteFCvtI32ToF64, [SnitchUnitFPSS]>;
 def : WriteRes<WriteFCvtI64ToF32, [SnitchUnitFPSS]>;
@@ -144,7 +144,7 @@ def : WriteRes<WriteFCvtF64ToF32, [SnitchUnitFPSS]>;
 }
 
 // FPU: NOCOMP opgroup
-let Latency = 1 in {
+let Latency = 3 in {
 def : WriteRes<WriteFClass32, [SnitchUnitFPSS]>;
 def : WriteRes<WriteFClass64, [SnitchUnitFPSS]>;
 def : WriteRes<WriteFCmp32, [SnitchUnitFPSS]>;
@@ -178,7 +178,7 @@ def : WriteRes<WriteFST64, [SnitchUnitFPSS, SnitchUnitFLSQ]>;
 }
 
 // Memory loads and atomics: latency as for memory above
-let Latency = 4, ResourceCycles = [1,4,4] in {
+let Latency = 6, ResourceCycles = [1,4,4] in {
 def : WriteRes<WriteFLD32, [SnitchUnitFPSS, SnitchUnitFLSQ, SnitchUnitFLQ]>;
 def : WriteRes<WriteFLD64, [SnitchUnitFPSS, SnitchUnitFLSQ, SnitchUnitFLQ]>;
 }

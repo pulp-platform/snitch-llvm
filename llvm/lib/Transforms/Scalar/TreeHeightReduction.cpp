@@ -80,6 +80,38 @@ static cl::opt<unsigned> MinLeaves(
              "(default = 4)"),
     cl::init(4));
 
+// Whether to weight side-effected leaves by their position in a block.
+// This scales up costs significantly and adds a limitation on block size.
+static cl::opt<bool> SeLeaves(
+    "thr-se-leaves",
+    cl::desc("Assign a tie-breaking positional cost to side-effected leaves in "
+             "tree height reduction"),
+    cl::init(false));
+
+// Factor by which latency is multiplied over positional cost to determine
+// its precedence in cost calculation.
+static cl::opt<unsigned> SeFactor(
+    "thr-se-factor",
+    cl::desc("Factor by which to scale down the positional cost of side-"
+             "effected leaves in tree height reduction (default = 3)"),
+    cl::init(2), cl::Hidden);
+
+// Factor by which positional cost is multiplied over latency to determine
+// its precedence in cost calculation.
+static cl::opt<unsigned> ReFactor(
+    "thr-re-factor",
+    cl::desc("Factor by which to scale down the positional cost of side-"
+             "effected leaves in tree height reduction (default = 1)"),
+    cl::init(1), cl::Hidden);
+
+// Whether to bias leaf selection on fusable instruction pairs using instruction
+// latencies for better performance (fewer stalls) on pipelined in-order cores
+static cl::opt<bool> FuseBias(
+    "thr-fuse-bias",
+    cl::desc("Bias leaf selection to improve fused operation performance in "
+             "tree height reduction"),
+    cl::init(false));
+
 namespace {
 class Node {
 public:
@@ -316,8 +348,22 @@ void Node::updateNodeLatency(TargetTransformInfo *TTI) {
   setLatency(0);
   setTotalCost(0);
 
-  if (isLeaf())
+  if (isLeaf()) {
+    if (!Inst || !SeLeaves) return;
+    // Treat instructions with side effects differently: they *cannot* move
+    // w.r.t others, so their "leaf latency" is effectively their BB position.
+    if ((Inst->mayHaveSideEffects() || Inst->mayReadOrWriteMemory())) {
+      size_t BBCost = 0;
+      for (auto &BBInst : *Inst->getParent()) {
+        if (BBInst.mayHaveSideEffects() || BBInst.mayReadOrWriteMemory()) {
+          if (&BBInst == Inst) break;
+          BBCost += ReFactor;
+        }
+      }
+      setTotalCost(InstructionCost(BBCost));
+    }
     return;
+  }
 
   // Tree height reduction minimizes the weighted sum of heights.
   // The latency of each instruction is used as the height of each node.
@@ -335,7 +381,8 @@ void Node::updateNodeLatency(TargetTransformInfo *TTI) {
   if (!InstLatency.isValid())
     InstLatency = InstructionCost(1);
   setLatency(getLatency() + InstLatency);
-  setTotalCost(getTotalCost() + InstLatency);
+  // We offset the tie-break cost of side-effected instructions with a factor.
+  setTotalCost(getTotalCost() + (SeLeaves ? SeFactor : 1) * InstLatency);
 }
 
 void Node::updateLeftOrRightNodeLatency(TargetTransformInfo *TTI,
@@ -553,7 +600,7 @@ Node *TreeHeightReduction::constructOptimizedSubtree(
     std::vector<Node *> &Leaves, std::vector<Node *> &ReusableBranches) {
   while (Leaves.size() > 1) {
     llvm::stable_sort(Leaves, [](Node *LHS, Node *RHS) -> bool {
-      if (LHS->getLatency() != RHS->getLatency())
+      if (!FuseBias && LHS->getLatency() != RHS->getLatency())
         return LHS->getLatency() < RHS->getLatency();
       if (LHS->getTotalCost() != RHS->getTotalCost())
         return LHS->getTotalCost() < RHS->getTotalCost();
@@ -561,8 +608,30 @@ Node *TreeHeightReduction::constructOptimizedSubtree(
     });
     LLVM_DEBUG(printLeaves(dbgs(), Leaves, true));
 
-    Node *Op1 = Leaves[0], *Op2 = Leaves[1];
-    Leaves.erase(Leaves.begin(), Leaves.begin() + 2);
+    // First node is always the costliest; fuse this one if possible
+    Node *Op1 = Leaves[0];
+
+    auto FuseOpIter = Leaves.begin() + 1;
+    if (FuseBias) {
+      // For fused ops, try to find a second (non-fused) operator of lower cost
+      // which hides its own latency. Otherwise, we risk unnecessary RAW stalls.
+      Node *N = ReusableBranches.back();
+      for (auto I = FuseOpIter; I != Leaves.end(); ++I) {
+        // More fusion incidence cases may be added here
+        if ((*I)->getOrgInst()->getOpcode() == Instruction::FMul &&
+            N->getOrgInst()->getOpcode() == Instruction::FAdd) {
+          // Upgrade leaf until it no longer "bumps into" the fused branch
+          FuseOpIter = I;
+          if (I - Leaves.begin() >= (*I)->getLatency().getValue()) {
+            break;
+          }
+        }
+      }
+    }
+    Node *Op2 = *FuseOpIter;
+
+    Leaves.erase(FuseOpIter);
+    Leaves.erase(Leaves.begin());
     combineLeaves(Leaves, Op1, Op2, ReusableBranches);
 
     LLVM_DEBUG(printLeaves(dbgs(), Leaves, false));

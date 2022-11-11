@@ -3,3 +3,6 @@
 
 # CHECK: :[[@LINE+1]]:13: error: system register use requires an option to be enabled
 csrr    t0, trace
+
+# CHECK: :[[@LINE+1]]:13: error: system register use requires an option to be enabled
+csrr    t0, stacklimit

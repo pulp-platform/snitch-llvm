@@ -78,7 +78,8 @@ FunctionPass *createPULPFixupHwLoops();
 FunctionPass *createRISCVExpandSSRPass();
 void initializeRISCVExpandSSRPass(PassRegistry &);
 
-//TODO : reference function pass for auto SSR inference here (+ add to CMakeLists.txt)
+FunctionPass *createRISCVSSRSchedulerPass();
+void initializeRISCVSSRSchedulerPass(PassRegistry &);
 
 FunctionPass *createRISCVExpandSDMAPass();
 void initializeRISCVExpandSDMAPass(PassRegistry &);

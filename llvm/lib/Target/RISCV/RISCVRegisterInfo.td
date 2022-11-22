@@ -610,6 +610,10 @@ foreach m = LMULList.m in {
 // Special registers
 def FFLAGS : RISCVReg<0, "fflags">;
 def FRM    : RISCVReg<0, "frm">;
+// Global FP SSR register; represents full state (config, redirect CSR, data)
+// All SSR-related instructions should have implicit def and use on this;
+// this ensures stream correctness in the face of optimization.
+def FGSSR  : RISCVReg<0, "frm">;
 
 // Any type register. Used for .insn directives when we don't know what the
 // register types could be.

@@ -227,6 +227,7 @@ void RISCVPassConfig::addMachineSSAOptimization() {
 }
 
 void RISCVPassConfig::addPreRegAlloc() {
+  addPass(createRISCVSSRSchedulerPass());
   addPass(createRISCVExpandSDMAPass());
   addPass(createRISCVExpandSSRPass());
   addPass(createSNITCHFrepLoopsPass());

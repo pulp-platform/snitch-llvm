@@ -48,6 +48,7 @@ add_llvm_target(RISCVCodeGen
   RISCVTargetTransformInfo.cpp
   RISCVSSRReassociate.cpp
   RISCVSSRStatistics.cpp
+  RISCVSSRScheduler.cpp
   Snitch/SNITCHFrepLoops.cpp
   Snitch/SNITCHAutoFrep.cpp
 

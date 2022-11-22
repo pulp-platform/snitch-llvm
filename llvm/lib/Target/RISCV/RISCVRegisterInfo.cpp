@@ -107,10 +107,13 @@ BitVector RISCVRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   // Floating point environment registers.
   markSuperRegs(Reserved, RISCV::FRM);
   markSuperRegs(Reserved, RISCV::FFLAGS);
+  markSuperRegs(Reserved, RISCV::FGSSR);
   
-  // Mark SSR floating point registers as reserved.
-  for (unsigned n = 0; n != 8; ++n) {
-    if(RVFI->getUsedSSR() & (1<<n))
+  // Mark SSR  registers as reserved if redirection is enabled.
+  // Redirection is global, so if any SSR is used, *all* are unallocatable.
+  // TODO: do not hardcode SSR count
+  if (RVFI->getUsesSSRs())
+  for (unsigned n = 0; n != 3; ++n) {
       markSuperRegs(Reserved, RISCV::F0_D + n);
   }
 

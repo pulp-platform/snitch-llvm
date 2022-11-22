@@ -108,10 +108,17 @@ private:
   bool expandSSR_Barrier(MachineBasicBlock &MBB,
                          MachineBasicBlock::iterator MBBI,
                          MachineBasicBlock::iterator &NextMBBI);
-  void handlePushPops();
+  bool expandSSR_Bundle(MachineBasicBlock &MBB,
+                        MachineBasicBlock::iterator MBBI);
 };
 
 char RISCVExpandSSR::ID = 0;
+
+static const MachineInstrBuilder& addSSRDefUse(
+    const MachineInstrBuilder& Builder) {
+  return Builder.addDef(RISCV::FGSSR, RegState::Implicit)
+                .addUse(RISCV::FGSSR, RegState::Implicit);
+}
 
 static Register getSSRFtReg(unsigned streamer) {
   unsigned AssignedReg = RISCV::F0_D + streamer;
@@ -134,8 +141,6 @@ bool RISCVExpandSSR::runOnMachineFunction(MachineFunction &MF) {
   bool Modified = false;
   for (auto &MBB : MF)
     Modified |= expandMBB(MBB);
-
-  handlePushPops();
 
   /// "Forcefully" add all SSR registers as live-in to all MBB in this MF
   if(Modified) {
@@ -194,6 +199,8 @@ bool RISCVExpandSSR::expandMI(MachineBasicBlock &MBB,
     return expandSSR_SetupRep(MBB, MBBI);
   case RISCV::PseudoSSRBarrier:
     return expandSSR_Barrier(MBB, MBBI, NextMBBI);
+  case llvm::TargetOpcode::BUNDLE:
+    return expandSSR_Bundle(MBB, MBBI);
   }
 
   return false;
@@ -210,24 +217,24 @@ bool RISCVExpandSSR::expandSSR_Setup(MachineBasicBlock &MBB,
 
   // set repeat
   Register RepReg = MBBI->getOperand(1).getReg();
-  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(RepReg).addImm(dm_off+(0x1<<5));
+  addSSRDefUse(BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(RepReg).addImm(dm_off+(0x1<<5)));
   // set bound 0
   Register BoundReg = MBBI->getOperand(2).getReg();
-  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(BoundReg).addImm(dm_off+(0x2<<5));
+  addSSRDefUse(BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(BoundReg).addImm(dm_off+(0x2<<5)));
   // set stride 0
   Register StrideReg = MBBI->getOperand(3).getReg();
-  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(StrideReg).addImm(dm_off+(0x6<<5));
+  addSSRDefUse(BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(StrideReg).addImm(dm_off+(0x6<<5)));
   // set read/write pointer
   Register PtrReg = MBBI->getOperand(4).getReg();
   if(MBBI->getOpcode() == RISCV::PseudoSSRSetup_1D_R)
-    BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(PtrReg).addImm(dm_off+(0x18<<5));
+    addSSRDefUse(BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(PtrReg).addImm(dm_off+(0x18<<5)));
   if(MBBI->getOpcode() == RISCV::PseudoSSRSetup_1D_W)
-    BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(PtrReg).addImm(dm_off+(0x1c<<5));
+    addSSRDefUse(BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(PtrReg).addImm(dm_off+(0x1c<<5)));
 
   MBBI->eraseFromParent(); // The pseudo instruction is gone now.
   return true;
 }
-
+// TODO: remove these pseudos, obviating backend pass
 bool RISCVExpandSSR::expandSSR_PushPop(MachineBasicBlock &MBB,
                                           MachineBasicBlock::iterator MBBI) {
   DebugLoc DL = MBBI->getDebugLoc();
@@ -249,7 +256,7 @@ bool RISCVExpandSSR::expandSSR_PushPop(MachineBasicBlock &MBB,
   if(isPop) {
     // Insert a "loading move" this is like a normal move but has side effects
     Register valR = MBBI->getOperand(ssrValIdx).getReg();
-    MachineInstr *MI = BuildMI(MBB, MBBI, DL, TII->get(RISCV::PseudoLoadMove), valR).addReg(R, 0).getInstr();
+    MachineInstr *MI = addSSRDefUse(BuildMI(MBB, MBBI, DL, TII->get(RISCV::PseudoLoadMove), valR).addReg(R, 0)).getInstr();
     MBBI->eraseFromParent(); // The pseudo instruction is gone now.
     MI->getOperand(0).setIsDef();
     this->MoveLoads.push_back(MI);
@@ -257,8 +264,8 @@ bool RISCVExpandSSR::expandSSR_PushPop(MachineBasicBlock &MBB,
   else {
     Register valR = MBBI->getOperand(ssrValIdx).getReg();
     // Insert a "storing move" this is like a normal move but has side effects
-    MachineInstr *MI = BuildMI(MBB, MBBI, DL, TII->get(RISCV::PseudoStoreMove), R)
-      .addReg(valR, getRegState(MBBI->getOperand(ssrValIdx)))
+    MachineInstr *MI = addSSRDefUse(BuildMI(MBB, MBBI, DL, TII->get(RISCV::PseudoStoreMove), R)
+      .addReg(valR, getRegState(MBBI->getOperand(ssrValIdx))))
       .getInstr();
     MBBI->eraseFromParent(); // The pseudo instruction is gone now.
     this->MoveStores.push_back(MI);
@@ -293,7 +300,7 @@ bool RISCVExpandSSR::expandSSR_ReadWrite(MachineBasicBlock &MBB,
 
   // emit scfgwi at proper location
   Register PtrReg = MBBI->getOperand(2).getReg();
-  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGW)).addReg(PtrReg).addReg(dim_off2);
+  addSSRDefUse(BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGW)).addReg(PtrReg).addReg(dim_off2));
 
   MBBI->eraseFromParent(); // The pseudo instruction is gone now.
   return true;
@@ -312,7 +319,7 @@ bool RISCVExpandSSR::expandSSR_ReadWriteImm(MachineBasicBlock &MBB,
   Register PtrReg = MBBI->getOperand(2).getReg();
 
   // set read/write pointer
-  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(PtrReg).addImm(ssr_reg);
+  addSSRDefUse(BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGWI)).addReg(PtrReg).addImm(ssr_reg));
 
   MBBI->eraseFromParent(); // The pseudo instruction is gone now.
   return true;
@@ -330,7 +337,7 @@ bool RISCVExpandSSR::expandSSR_SetupRep(MachineBasicBlock &MBB,
 
   // emit scfgwi at proper location
   Register PtrReg = MBBI->getOperand(1).getReg();
-  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGW)).addReg(PtrReg).addReg(dm_off, RegState::Kill);
+  addSSRDefUse(BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGW)).addReg(PtrReg).addReg(dm_off, RegState::Kill));
 
   MBBI->eraseFromParent(); // The pseudo instruction is gone now.
   return true;
@@ -364,10 +371,10 @@ bool RISCVExpandSSR::expandSSR_BoundStride(MachineBasicBlock &MBB,
 
   // set bound
   Register BoundReg = MBBI->getOperand(1).getReg();
-  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGW)).addReg(BoundReg).addReg(addr_bound, RegState::Kill);
+  addSSRDefUse(BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGW)).addReg(BoundReg).addReg(addr_bound, RegState::Kill));
   // set stride
   Register StrideReg = MBBI->getOperand(2).getReg();
-  BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGW)).addReg(StrideReg).addReg(addr_stride, RegState::Kill);
+  addSSRDefUse(BuildMI(MBB, MBBI, DL, TII->get(RISCV::SCFGW)).addReg(StrideReg).addReg(addr_stride, RegState::Kill));
   
   MBBI->eraseFromParent(); // The pseudo instruction is gone now.
   return true;
@@ -383,21 +390,21 @@ bool RISCVExpandSSR::expandSSR_EnDis(MachineBasicBlock &MBB,
 
   // emit a csrsi/csrci call to the SSR location
   if(isEnable) {
-    BuildMI(MBB, MBBI, DL, TII->get(RISCV::CSRRSI))
+    addSSRDefUse(BuildMI(MBB, MBBI, DL, TII->get(RISCV::CSRRSI))
       .addDef(MRI.createVirtualRegister(&RISCV::GPRRegClass), RegState::Dead)
-      .addImm(0x7C0).addImm(1);
+      .addImm(0x7C0).addImm(1));
 
     // mark the SSR registers reserved in this machine function
     unsigned ssrEnabledMask = 0;
     for (unsigned n = 0; n != 3; ++n) {
       ssrEnabledMask |= 1 << n;
     }
-    RVFI->setUsedSSR(ssrEnabledMask);
+    RVFI->setUsesSSRs(ssrEnabledMask);
   }
   else {
-    BuildMI(MBB, MBBI, DL, TII->get(RISCV::CSRRCI))
+    addSSRDefUse(BuildMI(MBB, MBBI, DL, TII->get(RISCV::CSRRCI))
       .addDef(MRI.createVirtualRegister(&RISCV::GPRRegClass), RegState::Dead)
-      .addImm(0x7C0).addImm(1);
+      .addImm(0x7C0).addImm(1));
   }
 
   MBBI->eraseFromParent(); // The pseudo instruction is gone now.
@@ -432,7 +439,7 @@ bool RISCVExpandSSR::expandSSR_Barrier(MachineBasicBlock &MBB,
   
   // build loop: %0 = scfgri 0 | DM; srli %0, %0, 31; beq %0, zero, loop
   Register R = MRI.createVirtualRegister(&RISCV::GPRRegClass);
-  BuildMI(LoopMBB, DL, TII->get(RISCV::SCFGRI), R).addImm(streamer);
+  addSSRDefUse(BuildMI(LoopMBB, DL, TII->get(RISCV::SCFGRI), R).addImm(streamer));
   Register Rs = MRI.createVirtualRegister(&RISCV::GPRRegClass);
   BuildMI(LoopMBB, DL, TII->get(RISCV::SRLI), Rs).addReg(R, RegState::Kill).addImm(31);
   BuildMI(LoopMBB, DL, TII->get(RISCV::BEQ)).addReg(Rs, RegState::Kill).addReg(RISCV::X0).addMBB(LoopMBB);
@@ -447,9 +454,70 @@ bool RISCVExpandSSR::expandSSR_Barrier(MachineBasicBlock &MBB,
   return true;
 }
 
-//additional optimisations for MoveLoad or MoveStore
-void RISCVExpandSSR::handlePushPops() {
-  return;
+bool RISCVExpandSSR::expandSSR_Bundle(MachineBasicBlock &MBB,
+                                      MachineBasicBlock::iterator MBBI) {
+  // We only care about SSR bundles
+  if (MBBI->getOperand(MBBI->getNumOperands()-1).getReg() != RISCV::FGSSR)
+    return false;
+  // Parse instructions in bundle (-1 indicates SSR is unused)
+  MachineInstr *WrappedInst = nullptr;
+  int SSRPushIdx = -1;
+  int SSRPushVirt = -1;
+  int SSRPopVirts[NUM_SSR];
+  std::fill_n(SSRPopVirts, NUM_SSR, -1);
+  auto BInst = MBBI.getInstrIterator();
+  ++BInst;
+  for (; BInst->isInsideBundle(); ++BInst) {
+    switch (BInst->getOpcode()) {
+      case RISCV::PseudoSSRPop: {
+        auto PopDstRegIdx = BInst->getOperand(0).getReg().virtRegIndex();
+        auto PopSSRIdx = BInst->getOperand(1).getImm();
+        assert(SSRPopVirts[PopSSRIdx] == -1 && "SSR popped twice in bundle.");
+        SSRPopVirts[PopSSRIdx] = PopDstRegIdx;
+        break;
+      }
+      case RISCV::PseudoSSRPush: {
+        assert(SSRPushIdx == -1 && "multiple SSR pushes in bundle!");
+        SSRPushIdx = BInst->getOperand(0).getImm();
+        SSRPushVirt = BInst->getOperand(1).getReg().virtRegIndex();
+        break;
+      }
+      default: {
+        assert(!WrappedInst && "multiple instructions in SSR bundle.");
+        WrappedInst = &*BInst;
+        break;
+      }
+    }
+  }
+  assert(WrappedInst &&  "no instruction in SSR bundle.");
+  // Replace instruction destination if there is a push
+  if (SSRPushIdx != -1) {
+    assert(WrappedInst->getOperand(0).isReg() &&
+           SSRPushVirt == int(WrappedInst->getOperand(0).getReg().virtRegIndex()) &&
+           "Instruction bundled with SSR push does not write to push.");
+    WrappedInst->getOperand(0).setReg(RISCV::F0_D + SSRPushIdx);
+  }
+  // Replace instruction push for every pop
+  for (auto &Use : WrappedInst->operands()) {
+    if (!Use.isReg() || !Use.isUse() || Use.isImplicit()) continue;
+    // Check if this reg use is an SSR pop
+    for (int S = 0; S < NUM_SSR; ++S) {
+      if (SSRPopVirts[S] == int(Use.getReg().virtRegIndex())) {
+        Use.setReg(RISCV::F0_D + S);
+        break;
+      }
+    }
+  }
+  // Add Implicit def and use
+  auto FGSSRUse = MachineOperand::CreateReg(RISCV::FGSSR, false, true);
+  auto FGSSRDef = MachineOperand::CreateReg(RISCV::FGSSR, true, true);
+  WrappedInst->addOperand(FGSSRUse);
+  WrappedInst->addOperand(FGSSRDef);
+  // Move instruction before bundle, then delete bundle
+  WrappedInst = WrappedInst->removeFromBundle();
+  MBB.insert(MBBI, WrappedInst);
+  MBBI->eraseFromParent();
+  return true;
 }
 
 } // end of anonymous namespace
@@ -461,35 +529,3 @@ namespace llvm {
 FunctionPass *createRISCVExpandSSRPass() { return new RISCVExpandSSR(); }
 
 } // end of namespace llvm
-
-/*
-  //TODO: bundle what is regmerged after reg-alloc to make sure that the FADD/FMUL/FMUL/etc.. do not slip past ssr_disable
-  /*
-  DenseMap<MachineInstr *, std::pair<MachineInstr *, MachineInstr *>> bundles;
-  //pops:
-  for (MachineInstr *MI : this->MoveLoads) {
-    if (!MI) continue;
-    MachineInstr *SingleUser = getUniqueUser(MI, MI->getOperand(0).getReg());
-    if (SingleUser && SingleUser->getParent() == MI->getParent()) {
-      MI->moveBefore(SingleUser); //we pray that there was no reordering until now that moved SingleUser after the SSRDisable
-      auto b = bundles.find(SingleUser);
-      if (b == bundles.end()) {
-        b = bundles.insert(std::make_pair(SingleUser, std::make_pair(SingleUser, SingleUser))).first;
-      }
-      if (b->getSecond().first == SingleUser) b->getSecond().first = MI; //if begin of bundle was SingleUser, set to MI
-    }
-  }
-  //pushs: FIXME: currently only works if the defining instruction is pred of MoveStore (how to get def from MachineOperand ???)
-  for (MachineInstr *MI : this->MoveStores) {
-    Register valR = MI->getOperand(1).getReg();
-    MachineInstr *Pred = MI->getPrevNode();
-    bool doesDefvalR = false;
-    for (auto &MOP : Pred->defs()) doesDefvalR |= MOP.isReg() && MOP.getReg() == valR;
-    if (doesDefvalR && MI == getUniqueUser(Pred, valR)) {
-      auto b = bundles.find(Pred);
-      if (b == bundles.end()) {
-        b = bundles.insert(std::make_pair(Pred, std::make_pair(Pred, Pred))).first;
-      }
-      if (b->getSecond().second == Pred) b->getSecond().second = MI;
-    }
-  }*/

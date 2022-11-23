@@ -113,8 +113,8 @@ BitVector RISCVRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   // Redirection is global, so if any SSR is used, *all* are unallocatable.
   // TODO: do not hardcode SSR count
   if (RVFI->getUsesSSRs())
-  for (unsigned n = 0; n != 3; ++n) {
-      markSuperRegs(Reserved, RISCV::F0_D + n);
+  for (unsigned S = 0; S != NumFSSRs; ++S) {
+      markSuperRegs(Reserved, getFSSR(S));
   }
 
   assert(checkAllSuperRegsMarked(Reserved));
@@ -363,4 +363,8 @@ void RISCVRegisterInfo::getOffsetOpcodes(const StackOffset &Offset,
 unsigned
 RISCVRegisterInfo::getRegisterCostTableIndex(const MachineFunction &MF) const {
   return MF.getSubtarget<RISCVSubtarget>().hasStdExtC() ? 1 : 0;
+}
+
+unsigned RISCVRegisterInfo::getFSSR(unsigned Streamer) {
+  return RISCV::F0_D + Streamer;
 }

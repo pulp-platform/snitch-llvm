@@ -29,8 +29,6 @@ using namespace llvm;
 
 #define DEBUG_TYPE "riscv-ssr-scheduler"
 #define RISCV_SSR_SCHEDULER_NAME "RISCV SSR machine block rescheduler pass"
-// TODO: centralize this, share among SSR passes
-#define NUM_SSR 3
 
 namespace {
 
@@ -255,7 +253,7 @@ void RISCVSSRScheduler::bundleSSRUsers(MachineBasicBlock &MBB) {
   std::vector<std::pair<MachineBasicBlock::iterator,
                         MachineBasicBlock::iterator>> RangesToBundle;
   // Insert unfused instructions
-  bool BundleSSRs [NUM_SSR] = {0};
+  bool BundleSSRs [RISCVRegisterInfo::NumFSSRs] = {0};
   auto BundleOngoing = false;
   auto BundleStart = MBB.begin();
   for (auto MBBI = MBB.begin(); MBBI != MBB.end(); ++MBBI) {
@@ -324,7 +322,7 @@ void RISCVSSRScheduler::bundleSSRUsers(MachineBasicBlock &MBB) {
     }
     // Commit a bundle and reset our state
     if (BundleCommit) {
-      std::fill_n(BundleSSRs, NUM_SSR, false);
+      std::fill_n(BundleSSRs, RISCVRegisterInfo::NumFSSRs, false);
       BundleOngoing = false;
       BundleCommit = false;
       RangesToBundle.emplace_back(BundleStart, std::next(MBBI));

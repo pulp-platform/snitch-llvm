@@ -68,6 +68,12 @@ struct RISCVRegisterInfo : public RISCVGenRegisterInfo {
                         SmallVectorImpl<uint64_t> &Ops) const override;
 
   unsigned getRegisterCostTableIndex(const MachineFunction &MF) const override;
+
+  // Floating-point stream semantic registers (SSRs)
+  static constexpr unsigned NumFSSRs = 3;
+
+  static unsigned getFSSR(unsigned Streamer);
+
 };
 }
 

@@ -19,7 +19,6 @@ Note that flags that are passed to LLVM through `clang` need to be prefaced with
 | `--debug-only=riscv-sdma` | Enable the debug output of the DMA pseudo instruction expansion pass |
 | `--debug-only=riscv-ssr` | Enable the debug output of the SSR pseudo instruction expansion pass |
 | `--debug-only=snitch-freploops` | Enable the debug output of the FREP loop inference pass |
-| `--ssr-no-regmerge` | Disable the SSR register merging in the SSR pseudo instruction expansion pass. Register merging is enabled by default and can be disabled with this flag. |
 | `--snitch-frep-inference` | Globally enable the FREP inference on all loops in the compiled module. |
 | `-infer-ssr` | Enable automatic inference of SSR streams. |
 | `-ssr-no-intersect-check` | Do not generate intersection checks (unsafe). Use `restrict` key-word instead if possible. |

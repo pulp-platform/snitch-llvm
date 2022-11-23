@@ -271,8 +271,6 @@ bool PostRAScheduler::enablePostRAScheduler(
   if (EnablePostRAScheduler.getPosition() > 0)
     return EnablePostRAScheduler;
 
-  // return true; //FIXME: Snitch does not enable this by default (and should probably)
-
   return ST.enablePostRAScheduler() &&
          OptLevel >= ST.getOptLevelToEnablePostRAScheduler();
 }
@@ -306,8 +304,6 @@ bool PostRAScheduler::runOnMachineFunction(MachineFunction &Fn) {
          ? TargetSubtargetInfo::ANTIDEP_CRITICAL
          : TargetSubtargetInfo::ANTIDEP_NONE);
   }
-
-  // AntiDepMode = TargetSubtargetInfo::ANTIDEP_ALL; //FIXME: Snitch does not enable this by default (and probably should)
 
   LLVM_DEBUG(dbgs() << "PostRAScheduler\n");
 

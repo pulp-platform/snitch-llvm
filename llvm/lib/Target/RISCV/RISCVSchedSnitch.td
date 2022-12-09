@@ -16,9 +16,9 @@ def SnitchModel : SchedMachineModel {
   // TODO: can we somehow reflect pseudo-dual-issue?
   let IssueWidth = 1;
 
-   // Max micro-ops that can be buffered.
-   // TODO: can we somehow reflect pseudo-dual-issue?
-   let MicroOpBufferSize = 0;
+  // Max micro-ops that can be buffered.
+  // TODO: can we somehow reflect pseudo-dual-issue?
+  let MicroOpBufferSize = 0;
 
   // Max micro-ops that can be buffered for optimized loop dispatch/execution.
   // Choose as 5/8 of L0 cache: 5*8 insts (avoid thrashing, but do not evict important loop-adjacent blocks)
@@ -120,6 +120,8 @@ let Latency = 4 in {
 def : WriteRes<WriteFALU32, [SnitchUnitFPSS]>;
 def : WriteRes<WriteFMul32, [SnitchUnitFPSS]>;
 def : WriteRes<WriteFMA32, [SnitchUnitFPSS]>;
+def : WriteRes<WriteFCmp32, [SnitchUnitFPSS]>;
+def : WriteRes<WriteFMinMax32, [SnitchUnitFPSS]>;
 }
 
 // FPU: ADDMUL opgroup (FP64)
@@ -127,9 +129,11 @@ let Latency = 5 in {
 def : WriteRes<WriteFALU64, [SnitchUnitFPSS]>;
 def : WriteRes<WriteFMul64, [SnitchUnitFPSS]>;
 def : WriteRes<WriteFMA64, [SnitchUnitFPSS]>;
+def : WriteRes<WriteFCmp64, [SnitchUnitFPSS]>;
+def : WriteRes<WriteFMinMax64, [SnitchUnitFPSS]>;
 }
 
-// FPU: CONV opgroup
+// FPU: CONV opgroup (INT-FP transfer)
 let Latency = 4 in {
 def : WriteRes<WriteFCvtI32ToF32, [SnitchUnitFPSS]>;
 def : WriteRes<WriteFCvtI32ToF64, [SnitchUnitFPSS]>;
@@ -139,24 +143,28 @@ def : WriteRes<WriteFCvtF32ToI32, [SnitchUnitFPSS]>;
 def : WriteRes<WriteFCvtF32ToI64, [SnitchUnitFPSS]>;
 def : WriteRes<WriteFCvtF64ToI32, [SnitchUnitFPSS]>;
 def : WriteRes<WriteFCvtF64ToI64, [SnitchUnitFPSS]>;
+}
+
+// FPU: CONV opgroup (FP internal)
+let Latency = 3 in {
 def : WriteRes<WriteFCvtF32ToF64, [SnitchUnitFPSS]>;
 def : WriteRes<WriteFCvtF64ToF32, [SnitchUnitFPSS]>;
 }
 
-// FPU: NOCOMP opgroup
-let Latency = 3 in {
-def : WriteRes<WriteFClass32, [SnitchUnitFPSS]>;
-def : WriteRes<WriteFClass64, [SnitchUnitFPSS]>;
-def : WriteRes<WriteFCmp32, [SnitchUnitFPSS]>;
-def : WriteRes<WriteFCmp64, [SnitchUnitFPSS]>;
-def : WriteRes<WriteFSGNJ32, [SnitchUnitFPSS]>;
-def : WriteRes<WriteFSGNJ64, [SnitchUnitFPSS]>;
-def : WriteRes<WriteFMinMax32, [SnitchUnitFPSS]>;
-def : WriteRes<WriteFMinMax64, [SnitchUnitFPSS]>;
+// FPU: NOCOMP opgroup (INT-FP transfer)
+let Latency = 2 in {
 def : WriteRes<WriteFMovF32ToI32, [SnitchUnitFPSS]>;
 def : WriteRes<WriteFMovI32ToF32, [SnitchUnitFPSS]>;
 def : WriteRes<WriteFMovF64ToI64, [SnitchUnitFPSS]>;
 def : WriteRes<WriteFMovI64ToF64, [SnitchUnitFPSS]>;
+}
+
+// FPU: NOCOMP opgroup (FP internal)
+let Latency = 1 in {
+def : WriteRes<WriteFClass32, [SnitchUnitFPSS]>;
+def : WriteRes<WriteFClass64, [SnitchUnitFPSS]>;
+def : WriteRes<WriteFSGNJ32, [SnitchUnitFPSS]>;
+def : WriteRes<WriteFSGNJ64, [SnitchUnitFPSS]>;
 }
 
 // FDIVSQRT group (FP32)

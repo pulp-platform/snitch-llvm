@@ -360,6 +360,7 @@ void Node::updateNodeLatency(TargetTransformInfo *TTI) {
           BBCost += ReFactor;
         }
       }
+      setLatency(InstructionCost(BBCost));
       setTotalCost(InstructionCost(BBCost));
     }
     return;
@@ -380,7 +381,7 @@ void Node::updateNodeLatency(TargetTransformInfo *TTI) {
   // latency is unknown, set a valid latency.
   if (!InstLatency.isValid())
     InstLatency = InstructionCost(1);
-  setLatency(getLatency() + InstLatency);
+  setLatency(getLatency() + (SeLeaves ? SeFactor : 1) * InstLatency);
   // We offset the tie-break cost of side-effected instructions with a factor.
   setTotalCost(getTotalCost() + (SeLeaves ? SeFactor : 1) * InstLatency);
 }
@@ -600,7 +601,7 @@ Node *TreeHeightReduction::constructOptimizedSubtree(
     std::vector<Node *> &Leaves, std::vector<Node *> &ReusableBranches) {
   while (Leaves.size() > 1) {
     llvm::stable_sort(Leaves, [](Node *LHS, Node *RHS) -> bool {
-      if (!FuseBias && LHS->getLatency() != RHS->getLatency())
+      if (LHS->getLatency() != RHS->getLatency())
         return LHS->getLatency() < RHS->getLatency();
       if (LHS->getTotalCost() != RHS->getTotalCost())
         return LHS->getTotalCost() < RHS->getTotalCost();
@@ -608,27 +609,33 @@ Node *TreeHeightReduction::constructOptimizedSubtree(
     });
     LLVM_DEBUG(printLeaves(dbgs(), Leaves, true));
 
-    // First node is always the costliest; fuse this one if possible
-    Node *Op1 = Leaves[0];
+    // Second node is always the cheapest; keep this one unfused if possible
+    Node *Op2 = Leaves[0];
 
     auto FuseOpIter = Leaves.begin() + 1;
     if (FuseBias) {
       // For fused ops, try to find a second (non-fused) operator of lower cost
       // which hides its own latency. Otherwise, we risk unnecessary RAW stalls.
       Node *N = ReusableBranches.back();
+      unsigned InstDist = 1;
       for (auto I = FuseOpIter; I != Leaves.end(); ++I) {
         // More fusion incidence cases may be added here
         if ((*I)->getOrgInst()->getOpcode() == Instruction::FMul &&
             N->getOrgInst()->getOpcode() == Instruction::FAdd) {
           // Upgrade leaf until it no longer "bumps into" the fused branch
           FuseOpIter = I;
-          if (I - Leaves.begin() >= (*I)->getLatency().getValue()) {
+          auto Lat = TTI->getInstructionCost(
+              (*I)->getOrgInst(),TargetTransformInfo::TCK_Latency).getValue();
+          if (Lat.hasValue() && InstDist > Lat.getValue()) {
             break;
           }
         }
+        // Debug- or pseudo-instructions do not occupy a real issue cycle.
+        // Fusable leafs do not either, as they are fused into branches.
+        InstDist += !(*I)->getOrgInst()->isDebugOrPseudoInst();
       }
     }
-    Node *Op2 = *FuseOpIter;
+    Node *Op1 = *FuseOpIter;
 
     Leaves.erase(FuseOpIter);
     Leaves.erase(Leaves.begin());

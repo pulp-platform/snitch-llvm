@@ -138,6 +138,9 @@ public:
   /// Set the total cost of this node.
   void setTotalCost(InstructionCost C) { TotalCost = C; }
 
+  /// Check if there is an instruction associated with this node.
+  bool hasOrgInst() const { return Inst != nullptr; }
+
   /// Get the original instruction of this node.
   Instruction *getOrgInst() const {
     assert(Inst && "Inst should not be nullptr.");
@@ -619,6 +622,8 @@ Node *TreeHeightReduction::constructOptimizedSubtree(
       Node *N = ReusableBranches.back();
       unsigned InstDist = 1;
       for (auto I = FuseOpIter; I != Leaves.end(); ++I) {
+        if (!N->hasOrgInst()) break;
+        if (!(*I)->hasOrgInst()) continue;
         // More fusion incidence cases may be added here
         if ((*I)->getOrgInst()->getOpcode() == Instruction::FMul &&
             N->getOrgInst()->getOpcode() == Instruction::FAdd) {

@@ -620,6 +620,8 @@ def : ProcessorModel<"generic-rv64", NoSchedModel, [Feature64Bit]>;
 
 def : ProcessorModel<"mempool-rv32", MempoolModel, [FeatureStdExtM,
                                                     FeatureStdExtA,
+                                                    FeatureStdExtZhinx,
+                                                    FeatureExtZquarterinx,
                                                     FeatureExtXmempool]>;
 
 def : ProcessorModel<"rocket-rv32", RocketModel, []>;

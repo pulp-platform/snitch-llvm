@@ -123,6 +123,7 @@ private:
   bool HasStdExtZks = false;
   bool HasStdExtZkt = false;
   bool HasStdExtZk = false;
+  bool HasExtZquarterinx = false;
   bool HasExtXfrep = false;
   bool HasExtXdma = false;
   bool HasExtXssr = false;
@@ -236,6 +237,7 @@ public:
   bool hasStdExtZksed() const { return HasStdExtZksed; }
   bool hasStdExtZksh() const { return HasStdExtZksh; }
   bool hasStdExtZkr() const { return HasStdExtZkr; }
+  bool hasExtZquarterinx() const { return HasExtZquarterinx; }
   bool hasExtXfrep() const { return HasExtXfrep; }
   bool hasExtXdma() const { return HasExtXdma; }
   bool hasExtXssr() const { return HasExtXssr; }

@@ -92,7 +92,66 @@ def FeatureExtXfquarter : SubtargetFeature<
   "xfquarter", "HasExtXfquarter", "true", "'Xfquarter' (quarter-precision floats)">;
 def HasExtXfquarter : Predicate<
   "Subtarget->hasExtXfquarter()">, AssemblerPredicate<(all_of FeatureExtXfquarter), "'Xfquarter' (quarter-precision floats)">;
-let Predicates = [HasExtXfquarter] in {
+
+def FeatureExtZquarterinx : SubtargetFeature<
+  "zquarterinx", "HasExtZquarterinx", "true", "'Zquarterinx' (Quarter Float in Integer)", [FeatureStdExtZfinx]>;
+def HasExtZquarterinx : Predicate<
+  "Subtarget->hasExtZquarterinx()">, AssemblerPredicate<(all_of FeatureExtZquarterinx), "'Zquarterinx' (quarter-precision floats in integer registers)">;
+
+def HasExtZquarterinxOrXfquarter
+      : Predicate<"Subtarget->hasExtZquarterinx() || Subtarget->hasExtXfquarter()">,
+                  AssemblerPredicate<(any_of FeatureExtZquarterinx, FeatureExtXfquarter),
+                                   "'Zquarterinx' (quarter-precision floats in integer registers) or "
+                                   "'Xfquarter' (quarter-precision floats)">;
+
+def XfquarterExt       : ExtInfo<0, [HasExtXfquarter]>;
+def Xfquarter64Ext     : ExtInfo<0, [HasExtXfquarter, IsRV64]>;
+def ZquarterinxExt     : ExtInfo<1, [HasExtZquarterinx]>;
+def Zquarterinx64Ext   : ExtInfo<1, [HasExtZquarterinx, IsRV64]>;
+
+def ZquarterDExt       : ExtInfo<0, [HasExtXfquarter,     HasStdExtD]>;
+def ZquarterinxZdinxExt   : ExtInfo<1, [HasExtZquarterinx, HasStdExtZdinx]>;
+
+def B      : ExtInfo_r<XfquarterExt,      FPR16>;
+def B_INX  : ExtInfo_r<ZquarterinxExt,    FPR16INX>;
+def BB     : ExtInfo_rr<XfquarterExt,     FPR16,    FPR16>;
+def BB_INX : ExtInfo_rr<ZquarterinxExt,   FPR16INX, FPR16INX>;
+
+def XB     : ExtInfo_rr<XfquarterExt,     GPR,      FPR16>;
+def XB_INX : ExtInfo_rr<ZquarterinxExt,   GPR,      FPR16INX>;
+def BX     : ExtInfo_rr<XfquarterExt,     FPR16,    GPR>;
+def BX_INX : ExtInfo_rr<ZquarterinxExt,   FPR16INX, GPR>;
+
+def HB     : ExtInfo_rr<XfquarterExt,     FPR16,    FPR16>;
+def HB_INX : ExtInfo_rr<ZquarterinxExt,   FPR16INX, FPR16INX>;
+def BF     : ExtInfo_rr<XfquarterExt,     FPR16,    FPR32>;
+def BF_INX : ExtInfo_rr<ZquarterinxExt,   FPR16INX, FPR32INX>;
+def FB     : ExtInfo_rr<XfquarterExt,     FPR32,    FPR16>;
+def FB_INX : ExtInfo_rr<ZquarterinxExt,   FPR32INX, FPR16INX>;
+def DB     : ExtInfo_rr<ZquarterDExt,        FPR64,    FPR16>;
+def DB_INX : ExtInfo_rr<ZquarterinxZdinxExt, FPR64INX, FPR16INX>;
+def BD     : ExtInfo_rr<ZquarterDExt,        FPR16,    FPR64>;
+def BD_INX : ExtInfo_rr<ZquarterinxZdinxExt, FPR16INX, FPR64INX>;
+
+def XB_64     : ExtInfo_rr<Xfquarter64Ext,   GPR,      FPR16>;
+def BX_64     : ExtInfo_rr<Xfquarter64Ext,   FPR16,    GPR>;
+def XB_INX_64 : ExtInfo_rr<Zquarterinx64Ext, GPR,      FPR16INX>;
+def BX_INX_64 : ExtInfo_rr<Zquarterinx64Ext, FPR16INX, GPR>;
+
+defvar BINX     = [B,  B_INX];
+defvar BBINX    = [BB, BB_INX];
+defvar XBINX    = [XB, XB_INX];
+defvar BXINX    = [BX, BX_INX];
+defvar DBINX    = [DB, DB_INX];
+defvar BDINX    = [BD, BD_INX];
+defvar BFINX    = [BF, BF_INX];
+defvar FBINX    = [FB, FB_INX];
+defvar BHINX    = [HB, HB_INX];
+defvar HBINX    = [HB, HB_INX];
+defvar XBIN64X  = [XB_64, XB_INX_64];
+defvar BXIN64X  = [BX_64, BX_INX_64];
+
+let Predicates = [HasExtZquarterinxOrXfquarter] in {
 
 // Instructions
 let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
@@ -101,171 +160,116 @@ def FLB : RVInstI<0b000, RISCVOpcode<"FLB", 0b0000111>, (outs FPR16:$rd),
 let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
 def FSB : RVInstS<0b000, RISCVOpcode<"FSB", 0b0100111>, (outs ),
              (ins FPR16:$rs2, GPR:$rs1, simm12:$imm12), "fsb", "$rs2, ${imm12}(${rs1})">, Sched<[]>;
+
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FMADD_B : RVInstR4Frm<0b11, RISCVOpcode<"FMADD_B", 0b1000011>,
-             (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2, FPR16:$rs3, frmarg:$funct3), "fmadd.b", "$rd, $rs1, $rs2, $rs3, $funct3">, Sched<[]>;
-def      : InstAlias<"fmadd.b $rd, $rs1, $rs2, $rs3", (FMADD_B FPR16:$rd, FPR16:$rs1, FPR16:$rs2, FPR16:$rs3, 0b111)>;
+defm FMADD_B  : FPFMA_rrr_frm_m<RISCVOpcode<"FMADD_B", 0b1000011>,  0b11, "fmadd.b",  BINX>;
+defm : FPFMADynFrmAlias_m<FMADD_B,  "fmadd.b",  BINX>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FMSUB_B : RVInstR4Frm<0b11, RISCVOpcode<"FMSUB_B", 0b1000111>,
-             (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2, FPR16:$rs3, frmarg:$funct3), "fmsub.b", "$rd, $rs1, $rs2, $rs3, $funct3">, Sched<[]>;
-def      : InstAlias<"fmsub.b $rd, $rs1, $rs2, $rs3", (FMSUB_B FPR16:$rd, FPR16:$rs1, FPR16:$rs2, FPR16:$rs3, 0b111)>;
+defm FMSUB_B  : FPFMA_rrr_frm_m<RISCVOpcode<"FMSUB_B", 0b1000111>,  0b11, "fmsub.b",  BINX>;
+defm : FPFMADynFrmAlias_m<FMSUB_B,  "fmsub.b",  BINX>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FNMSUB_B : RVInstR4Frm<0b11, RISCVOpcode<"FNMSUB_B", 0b1001011>,
-             (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2, FPR16:$rs3, frmarg:$funct3), "fnmsub.b", "$rd, $rs1, $rs2, $rs3, $funct3">, Sched<[]>;
-def      : InstAlias<"fnmsub.b $rd, $rs1, $rs2, $rs3", (FNMSUB_B FPR16:$rd, FPR16:$rs1, FPR16:$rs2, FPR16:$rs3, 0b111)>;
+defm FNMSUB_B : FPFMA_rrr_frm_m<RISCVOpcode<"FNMSUB_B", 0b1001011>, 0b11, "fnmsub.b", BINX>;
+defm : FPFMADynFrmAlias_m<FNMSUB_B, "fnmsub.b", BINX>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FNMADD_B : RVInstR4Frm<0b11, RISCVOpcode<"FNMADD_B", 0b1001111>,
-             (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2, FPR16:$rs3, frmarg:$funct3), "fnmadd.b", "$rd, $rs1, $rs2, $rs3, $funct3">, Sched<[]>;
-def      : InstAlias<"fnmadd.b $rd, $rs1, $rs2, $rs3", (FNMADD_B FPR16:$rd, FPR16:$rs1, FPR16:$rs2, FPR16:$rs3, 0b111)>;
+defm FNMADD_B : FPFMA_rrr_frm_m<RISCVOpcode<"FNMADD_B", 0b1001111>, 0b11, "fnmadd.b", BINX>;
+defm : FPFMADynFrmAlias_m<FNMSUB_B, "fnmadd.b", BINX>;
+
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FADD_B : RVInstRFrm<0b0000011, RISCVOpcode<"FADD_B", 0b1010011>,
-             (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2, frmarg:$funct3), "fadd.b", "$rd, $rs1, $rs2, $funct3">, Sched<[]> ;
-def      : InstAlias<"fadd.b $rd, $rs1, $rs2", (FADD_B FPR16:$rd, FPR16:$rs1, FPR16:$rs2, 0b111)>;
+defm FADD_B : FPALU_rr_frm_m<0b0000011, "fadd.b", HINX>;
+defm : FPALUDynFrmAlias_m<FADD_B, "fadd.b", BINX>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+defm FSUB_B : FPALU_rr_frm_m<0b0000111, "fsub.b", HINX>;
+defm : FPALUDynFrmAlias_m<FSUB_B, "fsub.b", BINX>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+defm FMUL_B : FPALU_rr_frm_m<0b0001011, "fmul.b", BINX>;
+defm : FPALUDynFrmAlias_m<FMUL_B, "fmul.b", BINX>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+defm FDIV_B : FPALU_rr_frm_m<0b0001111, "fdiv.b", BINX>;
+defm : FPALUDynFrmAlias_m<FDIV_B, "fdiv.b", BINX>;
+
+defm FSQRT_B : FPUnaryOp_r_frm_m<0b0101111, 0b00000, BBINX, "fsqrt.b">, Sched<[]>;
+defm         : FPUnaryOpDynFrmAlias_m<FSQRT_B, "fsqrt.b", BBINX>;
+
 let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
-def FSUB_B : RVInstRFrm<0b0000111, RISCVOpcode<"FSUB_B", 0b1010011>,
-             (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2, frmarg:$funct3), "fsub.b", "$rd, $rs1, $rs2, $funct3">, Sched<[]> ;
-def      : InstAlias<"fsub.b $rd, $rs1, $rs2", (FSUB_B FPR16:$rd, FPR16:$rs1, FPR16:$rs2, 0b111)>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FMUL_B : RVInstRFrm<0b0001011, RISCVOpcode<"FMUL_B", 0b1010011>,
-             (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2, frmarg:$funct3), "fmul.b", "$rd, $rs1, $rs2, $funct3">, Sched<[]> ;
-def      : InstAlias<"fmul.b $rd, $rs1, $rs2", (FMUL_B FPR16:$rd, FPR16:$rs1, FPR16:$rs2, 0b111)>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FDIV_B : RVInstRFrm<0b0001111, RISCVOpcode<"FDIV_B", 0b1010011>,
-             (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2, frmarg:$funct3), "fdiv.b", "$rd, $rs1, $rs2, $funct3">, Sched<[]> ;
-def      : InstAlias<"fdiv.b $rd, $rs1, $rs2", (FDIV_B FPR16:$rd, FPR16:$rs1, FPR16:$rs2, 0b111)>;
+defm FSGNJ_B  : FPALU_rr_m<0b0010011, 0b000, "fsgnj.b",  BINX>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
-def FSQRT_B : RVInstRFrm<0b0101111, RISCVOpcode<"FSQRT_B", 0b1010011>,
-             (outs FPR16:$rd), (ins FPR16:$rs1, frmarg:$funct3), "fsqrt.b", "$rd, $rs1, $funct3">, Sched<[]> {
-    let rs2 = 0b00000;
-  }
-def      : InstAlias<"fsqrt.b $rd, $rs1", (FSQRT_B FPR16:$rd, FPR16:$rs1, 0b111)>;
+defm FSGNJN_B : FPALU_rr_m<0b0010011, 0b001, "fsgnjn.b", BINX>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
-def FSGNJ_B : RVInstR<0b0010011, 0b000, RISCVOpcode<"FSGNJ_B", 0b1010011>,
-             (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "fsgnj.b", "$rd, $rs1, $rs2">, Sched<[]>;
+defm FSGNJX_B : FPALU_rr_m<0b0010011, 0b010, "fsgnjx.b", BINX>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
-def FSGNJN_B : RVInstR<0b0010011, 0b001, RISCVOpcode<"FSGNJN_B", 0b1010011>,
-             (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "fsgnjn.b", "$rd, $rs1, $rs2">, Sched<[]>;
+defm FMIN_B   : FPALU_rr_m<0b0010111, 0b000, "fmin.b", BINX>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
-def FSGNJX_B : RVInstR<0b0010011, 0b010, RISCVOpcode<"FSGNJX_B", 0b1010011>,
-             (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "fsgnjx.b", "$rd, $rs1, $rs2">, Sched<[]>;
+defm FMAX_B   : FPALU_rr_m<0b0010111, 0b001, "fmax.b", BINX>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
+defm FEQ_B : FPCmp_rr_m<0b1010011, 0b010, "feq.b", BINX>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
+defm FLT_B : FPCmp_rr_m<0b1010011, 0b001, "flt.b", BINX>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 1 in
+defm FLE_B : FPCmp_rr_m<0b1010011, 0b000, "fle.b", BINX>;
+
+let mayRaiseFPException = 0 in
+def FMV_X_B : FPUnaryOp_r<0b1110011, 0b00000, 0b000, GPR, FPR16, "fmv.x.b">, Sched<[]>;
+let mayRaiseFPException = 0 in
+def FMV_B_X : FPUnaryOp_r<0b1111011, 0b00000, 0b000, FPR16, GPR, "fmv.b.x">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, mayRaiseFPException = 0 in
+defm FCLASS_B : FPUnaryOp_r_m<0b1110011, 0b00000, 0b001, XBINX, "fclass.b">,
+                Sched<[WriteFClass16, ReadFClass16]>;
+
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FMIN_B : RVInstR<0b0010111, 0b000, RISCVOpcode<"FMIN_B", 0b1010011>,
-             (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "fmin.b", "$rd, $rs1, $rs2">, Sched<[]>;
+defm FCVT_W_B : FPUnaryOp_r_frm_m<0b1100011, 0b00000, XBINX, "fcvt.w.b">, Sched<[]>;
+defm          : FPUnaryOpDynFrmAlias_m<FCVT_W_B, "fcvt.w.b", XBINX>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FMAX_B : RVInstR<0b0010111, 0b001, RISCVOpcode<"FMAX_B", 0b1010011>,
-             (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "fmax.b", "$rd, $rs1, $rs2">, Sched<[]>;
+defm FCVT_WU_B : FPUnaryOp_r_frm_m<0b1100011, 0b00001, XBINX, "fcvt.wu.b">, Sched<[]>;
+defm           : FPUnaryOpDynFrmAlias_m<FCVT_WU_B, "fcvt.wu.b", XBINX>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FEQ_B : RVInstR<0b1010011, 0b010, RISCVOpcode<"FEQ_B", 0b1010011>,
-             (outs GPR:$rd), (ins FPR16:$rs1, FPR16:$rs2), "feq.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
-def FLT_B : RVInstR<0b1010011, 0b001, RISCVOpcode<"FLT_B", 0b1010011>,
-             (outs GPR:$rd), (ins FPR16:$rs1, FPR16:$rs2), "flt.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 1, mayStore = 0 in
-def FLE_B : RVInstR<0b1010011, 0b000, RISCVOpcode<"FLE_B", 0b1010011>,
-             (outs GPR:$rd), (ins FPR16:$rs1, FPR16:$rs2), "fle.b", "$rd, $rs1, $rs2">, Sched<[]>;
+defm FCVT_B_W : FPUnaryOp_r_frm_m<0b1101011, 0b00000, BXINX, "fcvt.b.w">, Sched<[]>;
+defm          : FPUnaryOpDynFrmAlias_m<FCVT_B_W, "fcvt.b.w", BXINX>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FCVT_W_B : RVInstRFrm<0b1100011, RISCVOpcode<"FCVT_W_B", 0b1010011>,
-             (outs GPR:$rd), (ins FPR16:$rs1, frmarg:$funct3), "fcvt.w.b", "$rd, $rs1, $funct3">, Sched<[]> {
-    let rs2 = 0b00000;
-  }
-def      : InstAlias<"fcvt.w.b $rd, $rs1", (FCVT_W_B GPR:$rd, FPR16:$rs1, 0b111)>;
+defm FCVT_B_WU : FPUnaryOp_r_frm_m<0b1101011, 0b00001, BXINX, "fcvt.b.wu">, Sched<[]>;
+defm           : FPUnaryOpDynFrmAlias_m<FCVT_B_WU, "fcvt.b.wu", BXINX>;
+
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FCVT_WU_B : RVInstRFrm<0b1100011, RISCVOpcode<"FCVT_WU_B", 0b1010011>,
-             (outs GPR:$rd), (ins FPR16:$rs1, frmarg:$funct3), "fcvt.wu.b", "$rd, $rs1, $funct3">, Sched<[]> {
-    let rs2 = 0b00001;
-  }
-def      : InstAlias<"fcvt.wu.b $rd, $rs1", (FCVT_WU_B GPR:$rd, FPR16:$rs1, 0b111)>;
+defm FCVT_S_B : FPUnaryOp_r_m<0b0100000, 0b00011, 0b000, FBINX, "fcvt.s.b">, Sched<[]>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FCVT_B_W : RVInstRFrm<0b1101011, RISCVOpcode<"FCVT_B_W", 0b1010011>,
-             (outs FPR16:$rd), (ins GPR:$rs1, frmarg:$funct3), "fcvt.b.w", "$rd, $rs1, $funct3">, Sched<[]> {
-    let rs2 = 0b00000;
-  }
-def      : InstAlias<"fcvt.b.w $rd, $rs1", (FCVT_B_W FPR16:$rd, GPR:$rs1, 0b111)>;
+defm FCVT_B_S : FPUnaryOp_r_frm_m<0b0100011, 0b00000, BFINX, "fcvt.b.s">, Sched<[]>;
+defm          : FPUnaryOpDynFrmAlias_m<FCVT_B_S, "fcvt.b.s", BFINX>;
+
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FCVT_B_WU : RVInstRFrm<0b1101011, RISCVOpcode<"FCVT_B_WU", 0b1010011>,
-             (outs FPR16:$rd), (ins GPR:$rs1, frmarg:$funct3), "fcvt.b.wu", "$rd, $rs1, $funct3">, Sched<[]> {
-    let rs2 = 0b00001;
-  }
-def      : InstAlias<"fcvt.b.wu $rd, $rs1", (FCVT_B_WU FPR16:$rd, GPR:$rs1, 0b111)>;
+defm FCVT_H_B : FPUnaryOp_r_frm_m<0b0100010, 0b00011, HBINX, "fcvt.h.b">, Sched<[]>;
+defm          : FPUnaryOpDynFrmAlias_m<FCVT_H_B, "fcvt.h.b", HBINX>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FMV_X_B : RVInstR<0b1110011, 0b000, RISCVOpcode<"FMV_X_B", 0b1010011>,
-             (outs GPR:$rd), (ins FPR16:$rs1), "fmv.x.b", "$rd, $rs1">, Sched<[]> {
-    let rs2 = 0b00000;
-  }
+defm FCVT_B_H : FPUnaryOp_r_frm_m<0b0100011, 0b00010, BHINX, "fcvt.b.h">, Sched<[]>;
+defm          : FPUnaryOpDynFrmAlias_m<FCVT_B_H, "fcvt.b.h", BHINX>;
+
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FCLASS_B : RVInstR<0b1110011, 0b001, RISCVOpcode<"FCLASS_B", 0b1010011>,
-             (outs GPR:$rd), (ins FPR16:$rs1), "fclass.b", "$rd, $rs1">, Sched<[]> {
-    let rs2 = 0b00000;
-  }
+defm FCVT_L_B  : FPUnaryOp_r_frm_m<0b1100011, 0b00010, XBIN64X, "fcvt.l.b">,
+                 Sched<[WriteFCvtF16ToI64, ReadFCvtF16ToI64]>;
+defm           : FPUnaryOpDynFrmAlias_m<FCVT_L_B, "fcvt.l.b", XBIN64X>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FMV_B_X : RVInstR<0b1111011, 0b000, RISCVOpcode<"FMV_B_X", 0b1010011>,
-             (outs FPR16:$rd), (ins GPR:$rs1), "fmv.b.x", "$rd, $rs1">, Sched<[]> {
-    let rs2 = 0b00000;
-  }
+defm FCVT_LU_B  : FPUnaryOp_r_frm_m<0b1100011, 0b00011, XBIN64X, "fcvt.lu.b">,
+                  Sched<[WriteFCvtF16ToI64, ReadFCvtF16ToI64]>;
+defm            : FPUnaryOpDynFrmAlias_m<FCVT_LU_B, "fcvt.lu.b", XBIN64X>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FCVT_L_B : RVInstRFrm<0b1100011, RISCVOpcode<"FCVT_L_B", 0b1010011>,
-             (outs GPR:$rd), (ins FPR16:$rs1, frmarg:$funct3), "fcvt.l.b", "$rd, $rs1, $funct3">, Sched<[]> {
-    let rs2 = 0b00010;
-  }
-def      : InstAlias<"fcvt.l.b $rd, $rs1", (FCVT_L_B GPR:$rd, FPR16:$rs1, 0b111)>;
+defm FCVT_B_L : FPUnaryOp_r_frm_m<0b1101011, 0b00010, BXIN64X, "fcvt.b.l">,
+                Sched<[WriteFCvtI64ToF16, ReadFCvtI64ToF16]>;
+defm          : FPUnaryOpDynFrmAlias_m<FCVT_B_L, "fcvt.b.l", BXIN64X>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FCVT_LU_B : RVInstRFrm<0b1100011, RISCVOpcode<"FCVT_LU_B", 0b1010011>,
-             (outs GPR:$rd), (ins FPR16:$rs1, frmarg:$funct3), "fcvt.lu.b", "$rd, $rs1, $funct3">, Sched<[]> {
-    let rs2 = 0b00011;
-  }
-def      : InstAlias<"fcvt.lu.b $rd, $rs1", (FCVT_LU_B GPR:$rd, FPR16:$rs1, 0b111)>;
+defm FCVT_B_LU : FPUnaryOp_r_frm_m<0b1101011, 0b00011, BXIN64X, "fcvt.b.lu">,
+                 Sched<[WriteFCvtI64ToF16, ReadFCvtI64ToF16]>;
+defm           : FPUnaryOpDynFrmAlias_m<FCVT_B_LU, "fcvt.b.lu", BXIN64X>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FCVT_B_L : RVInstRFrm<0b1101011, RISCVOpcode<"FCVT_B_L", 0b1010011>,
-             (outs FPR16:$rd), (ins GPR:$rs1, frmarg:$funct3), "fcvt.b.l", "$rd, $rs1, $funct3">, Sched<[]> {
-    let rs2 = 0b00010;
-  }
-def      : InstAlias<"fcvt.b.l $rd, $rs1", (FCVT_B_L FPR16:$rd, GPR:$rs1, 0b111)>;
+defm FCVT_B_D : FPUnaryOp_r_frm_m<0b0100011, 0b00001, BDINX, "fcvt.b.d">,
+                Sched<[WriteFCvtF64ToF16, ReadFCvtF64ToF16]>;
+defm          : FPUnaryOpDynFrmAlias_m<FCVT_B_D, "fcvt.b.d", BDINX>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FCVT_B_LU : RVInstRFrm<0b1101011, RISCVOpcode<"FCVT_B_LU", 0b1010011>,
-             (outs FPR16:$rd), (ins GPR:$rs1, frmarg:$funct3), "fcvt.b.lu", "$rd, $rs1, $funct3">, Sched<[]> {
-    let rs2 = 0b00011;
-  }
-def      : InstAlias<"fcvt.b.lu $rd, $rs1", (FCVT_B_LU FPR16:$rd, GPR:$rs1, 0b111)>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FCVT_S_B : RVInstR<0b0100000, 0b000, RISCVOpcode<"FCVT_S_B", 0b1010011>,
-             (outs FPR32:$rd), (ins FPR16:$rs1), "fcvt.s.b", "$rd, $rs1">, Sched<[]> {
-    let rs2 = 0b00011;
-  }
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FCVT_B_S : RVInstRFrm<0b0100011, RISCVOpcode<"FCVT_B_S", 0b1010011>,
-             (outs FPR16:$rd), (ins FPR32:$rs1, frmarg:$funct3), "fcvt.b.s", "$rd, $rs1, $funct3">, Sched<[]> {
-    let rs2 = 0b00000;
-  }
-def      : InstAlias<"fcvt.b.s $rd, $rs1", (FCVT_B_S FPR16:$rd, FPR32:$rs1, 0b111)>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FCVT_D_B : RVInstR<0b0100001, 0b000, RISCVOpcode<"FCVT_D_B", 0b1010011>,
-             (outs FPR64:$rd), (ins FPR16:$rs1), "fcvt.d.b", "$rd, $rs1">, Sched<[]> {
-    let rs2 = 0b00011;
-  }
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FCVT_B_D : RVInstRFrm<0b0100011, RISCVOpcode<"FCVT_B_D", 0b1010011>,
-             (outs FPR16:$rd), (ins FPR64:$rs1, frmarg:$funct3), "fcvt.b.d", "$rd, $rs1, $funct3">, Sched<[]> {
-    let rs2 = 0b00001;
-  }
-def      : InstAlias<"fcvt.b.d $rd, $rs1", (FCVT_B_D FPR16:$rd, FPR64:$rs1, 0b111)>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FCVT_H_B : RVInstR<0b0100010, 0b000, RISCVOpcode<"FCVT_H_B", 0b1010011>,
-             (outs FPR16:$rd), (ins FPR16:$rs1), "fcvt.h.b", "$rd, $rs1">, Sched<[]> {
-    let rs2 = 0b00011;
-  }
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
-def FCVT_B_H : RVInstRFrm<0b0100011, RISCVOpcode<"FCVT_B_H", 0b1010011>,
-             (outs FPR16:$rd), (ins FPR16:$rs1, frmarg:$funct3), "fcvt.b.h", "$rd, $rs1, $funct3">, Sched<[]> {
-    let rs2 = 0b00010;
-  }
-def      : InstAlias<"fcvt.b.h $rd, $rs1", (FCVT_B_H FPR16:$rd, FPR16:$rs1, 0b111)>;
+defm FCVT_D_B : FPUnaryOp_r_m<0b0100001, 0b00011, 0b000, DBINX, "fcvt.d.b">,
+                Sched<[WriteFCvtF16ToF64, ReadFCvtF16ToF64]>;
 
 // Pseudo instructions
-def : InstAlias<"fcvt.ah.b $rd, $rs1",   (FCVT_H_B FPR16:$rd, FPR16:$rs1), 0>;
-def : InstAlias<"fcvt.b.ah $rd, $rs1, $rm",   (FCVT_B_H FPR16:$rd, FPR16:$rs1, frmarg:$rm), 0>;
-def : InstAlias<"fcvt.b.ah $rd, $rs1",   (FCVT_B_H FPR16:$rd, FPR16:$rs1, 0b111), 0>;
-} // let Predicates = [HasExtXfquarter]
-
+// def : InstAlias<"fcvt.ah.b $rd, $rs1",   (FCVT_H_B FPR16:$rd, FPR16:$rs1), 0>;
+// def : InstAlias<"fcvt.b.ah $rd, $rs1, $rm",   (FCVT_B_H FPR16:$rd, FPR16:$rs1, frmarg:$rm), 0>;
+// def : InstAlias<"fcvt.b.ah $rd, $rs1",   (FCVT_B_H FPR16:$rd, FPR16:$rs1, 0b111), 0>;
+} // let Predicates = [HasExtZquarterinxOrXfquarter]
 
 //===----------------------------------------------------------------------===//
 // GROUP: Xfaltquarter (pred: HasExtXfaltquarter)
@@ -340,12 +344,14 @@ def : InstAlias<"fcvt.ab.s $rd, $rs1",   (FCVT_B_S FPR16:$rd, FPR32:$rs1, 0b111)
 def : InstAlias<"fcvt.d.ab $rd, $rs1",   (FCVT_D_B FPR64:$rd, FPR16:$rs1), 0>;
 def : InstAlias<"fcvt.ab.d $rd, $rs1, $rm",   (FCVT_B_D FPR16:$rd, FPR64:$rs1, frmarg:$rm), 0>;
 def : InstAlias<"fcvt.ab.d $rd, $rs1",   (FCVT_B_D FPR16:$rd, FPR64:$rs1, 0b111), 0>;
-def : InstAlias<"fcvt.h.ab $rd, $rs1",   (FCVT_H_B FPR16:$rd, FPR16:$rs1), 0>;
-def : InstAlias<"fcvt.ab.h $rd, $rs1, $rm",   (FCVT_B_H FPR16:$rd, FPR16:$rs1, frmarg:$rm), 0>;
-def : InstAlias<"fcvt.ab.h $rd, $rs1",   (FCVT_B_H FPR16:$rd, FPR16:$rs1, 0b111), 0>;
-def : InstAlias<"fcvt.ah.ab $rd, $rs1",   (FCVT_H_B FPR16:$rd, FPR16:$rs1), 0>;
-def : InstAlias<"fcvt.ab.ah $rd, $rs1, $rm",   (FCVT_B_H FPR16:$rd, FPR16:$rs1, frmarg:$rm), 0>;
-def : InstAlias<"fcvt.ab.ah $rd, $rs1",   (FCVT_B_H FPR16:$rd, FPR16:$rs1, 0b111), 0>;
+
+// def : InstAlias<"fcvt.h.ab $rd, $rs1",   (FCVT_H_B FPR16:$rd, FPR16:$rs1), 0>;
+// def : InstAlias<"fcvt.ab.h $rd, $rs1, $rm",   (FCVT_B_H FPR16:$rd, FPR16:$rs1, frmarg:$rm), 0>;
+// def : InstAlias<"fcvt.ab.h $rd, $rs1",   (FCVT_B_H FPR16:$rd, FPR16:$rs1, 0b111), 0>;
+// def : InstAlias<"fcvt.ah.ab $rd, $rs1",   (FCVT_H_B FPR16:$rd, FPR16:$rs1), 0>;
+// def : InstAlias<"fcvt.ab.ah $rd, $rs1, $rm",   (FCVT_B_H FPR16:$rd, FPR16:$rs1, frmarg:$rm), 0>;
+// def : InstAlias<"fcvt.ab.ah $rd, $rs1",   (FCVT_B_H FPR16:$rd, FPR16:$rs1, 0b111), 0>;
+
 def : InstAlias<"fcvt.ab.b $rd, $rs1",   (FCVT_B_B FPR16:$rd, FPR16:$rs1), 0>;
 def : InstAlias<"fcvt.b.ab $rd, $rs1",   (FCVT_B_B FPR16:$rd, FPR16:$rs1), 0>;
 def : InstAlias<"fcvt.ab.ab $rd, $rs1",   (FCVT_B_B FPR16:$rd, FPR16:$rs1), 0>;

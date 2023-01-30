@@ -19,6 +19,8 @@ def VFMT_FP32     : RISCVVFFormat<0b00>;
 def VFMT_FP16     : RISCVVFFormat<0b10>;
 def VFMT_FP8      : RISCVVFFormat<0b11>;
 
+def VFMT_FP16INX  : RISCVVFFormat<0b10>;
+
 //===----------------------------------------------------------------------===//
 // Instruction formats
 //===----------------------------------------------------------------------===//

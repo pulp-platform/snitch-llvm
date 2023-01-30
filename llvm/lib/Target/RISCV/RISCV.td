@@ -622,6 +622,7 @@ def : ProcessorModel<"mempool-rv32", MempoolModel, [FeatureStdExtM,
                                                     FeatureStdExtA,
                                                     FeatureStdExtZhinx,
                                                     FeatureExtZquarterinx,
+                                                    FeatureExtZvechalfinx,
                                                     FeatureExtXmempool]>;
 
 def : ProcessorModel<"rocket-rv32", RocketModel, []>;

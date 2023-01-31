@@ -137,6 +137,9 @@
 .attribute arch, "rv32izfinx_zhinx1p0"
 # CHECK: attribute      5, "rv32i2p0_zfinx1p0_zhinx1p0"
 
+.attribute arch, "rv32izfinx_zexpauxvechalfinx1p0"
+# CHECK: attribute      5, "rv32i2p0_zfinx1p0_zexpauxvechalfinx1p0"
+
 .attribute arch, "rv32izfinx_zquarterinx1p0"
 # CHECK: attribute      5, "rv32i2p0_zfinx1p0_zquarterinx1p0"
 

@@ -55,6 +55,7 @@ static const RISCVSupportedExtension SupportedExtensions[] = {
     {"zdinx", RISCVExtensionVersion{1, 0}},
     {"zhinxmin", RISCVExtensionVersion{1, 0}},
     {"zhinx", RISCVExtensionVersion{1, 0}},
+    {"zexpauxvechalfinx", RISCVExtensionVersion{1, 0}},
     {"zquarterinx", RISCVExtensionVersion{1, 0}},
     {"zvechalfinx", RISCVExtensionVersion{1, 0}},
 
@@ -793,6 +794,7 @@ static const char *ImpliedExtsZfh[] = {"f"};
 static const char *ImpliedExtsZdinx[] = {"zfinx"};
 static const char *ImpliedExtsZhinxmin[] = {"zfinx"};
 static const char *ImpliedExtsZhinx[] = {"zfinx"};
+static const char *ImpliedExtsZexpauxvechalfinx[] = {"zfinx"};
 static const char *ImpliedExtsZquarterinx[] = {"zfinx"};
 static const char *ImpliedExtsZvechalfinx[] = {"zfinx"};
 static const char *ImpliedExtsZve64d[] = {"zve64f"};
@@ -830,6 +832,7 @@ struct ImpliedExtsEntry {
 static constexpr ImpliedExtsEntry ImpliedExts[] = {
     {{"v"}, {ImpliedExtsV}},
     {{"zdinx"}, {ImpliedExtsZdinx}},
+    {{"zexpauxvechalfinx"}, {ImpliedExtsZexpauxvechalfinx}},
     {{"zfh"}, {ImpliedExtsZfh}},
     {{"zfhmin"}, {ImpliedExtsZfhmin}},
     {{"zhinx"}, {ImpliedExtsZhinx}},

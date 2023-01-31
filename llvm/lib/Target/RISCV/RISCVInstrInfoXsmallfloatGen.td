@@ -1549,6 +1549,12 @@ def FeatureExtXfexpauxvechalf : SubtargetFeature<
   "xfexpauxvechalf", "HasExtXfexpauxvechalf", "true", "'Xfexpauxvechalf' (vectorial half-precision expanding auxiliary operations - requires Xfvechalf extension)">;
 def HasExtXfexpauxvechalf : Predicate<
   "Subtarget->hasExtXfexpauxvechalf()">, AssemblerPredicate<(all_of FeatureExtXfexpauxvechalf), "'Xfexpauxvechalf' (vectorial half-precision expanding auxiliary operations - requires Xfvechalf extension)">;
+
+def FeatureExtZexpauxvechalfinx : SubtargetFeature<
+  "zexpauxvechalfinx", "HasExtZexpauxvechalfinx", "true", "'Zexpauxvechalfinx' (vectorial half-precision expanding auxiliary operations - requires Zvechalfinx extension)">;
+def HasExtZexpauxvechalfinx : Predicate<
+  "Subtarget->hasExtZexpauxvechalfinx()">, AssemblerPredicate<(all_of FeatureExtZexpauxvechalfinx), "'Zexpauxvechalfinx' (vectorial half-precision expanding auxiliary operations - requires Zvechalfinx extension)">;
+
 let Predicates = [HasExtXfexpauxvechalf] in {
 
 // Instructions
@@ -1577,6 +1583,35 @@ def VFNDOTPEX_S_R_H : RVInstRVf<0b10, 0b11101, 0b1, VFMT_FP32, RISCVOpcode<"VFND
 
 // Pseudo instructions
 } // let Predicates = [HasExtXfexpauxvechalf]
+
+let Predicates = [HasExtZexpauxvechalfinx] in {
+
+// Instructions
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFSUMEX_S_H_INX : RVInstRVf<0b10, 0b00111, 0b0, VFMT_FP32INX, RISCVOpcode<"VFSUMEX_S_H_INX", 0b0110011>,
+             (outs FPR32INX:$rd), (ins FPR32INX:$rs1), "vfsumex.s.h", "$rd, $rs1">, Sched<[]> {
+    let rs2 = 0b10110;
+  }
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFNSUMEX_S_H_INX : RVInstRVf<0b10, 0b10111, 0b0, VFMT_FP32INX, RISCVOpcode<"VFNSUMEX_S_H_INX", 0b0110011>,
+             (outs FPR32INX:$rd), (ins FPR32INX:$rs1), "vfnsumex.s.h", "$rd, $rs1">, Sched<[]> {
+    let rs2 = 0b10110;
+  }
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFDOTPEX_S_H_INX : RVInstRVf<0b10, 0b01011, 0b0, VFMT_FP32INX, RISCVOpcode<"VFDOTPEX_S_H_INX", 0b0110011>,
+             (outs FPR32INX:$rd), (ins FPR32INX:$rs1, FPR32INX:$rs2), "vfdotpex.s.h", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFDOTPEX_S_R_H_INX : RVInstRVf<0b10, 0b01011, 0b1, VFMT_FP32INX, RISCVOpcode<"VFDOTPEX_S_R_H_INX", 0b0110011>,
+             (outs FPR32INX:$rd), (ins FPR32INX:$rs1, FPR32INX:$rs2), "vfdotpex.s.r.h", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFNDOTPEX_S_H_INX : RVInstRVf<0b10, 0b11101, 0b0, VFMT_FP32INX, RISCVOpcode<"VFNDOTPEX_S_H_INX", 0b0110011>,
+             (outs FPR32INX:$rd), (ins FPR32INX:$rs1, FPR32INX:$rs2), "vfndotpex.s.h", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFNDOTPEX_S_R_H_INX : RVInstRVf<0b10, 0b11101, 0b1, VFMT_FP32INX, RISCVOpcode<"VFNDOTPEX_S_R_H_INX", 0b0110011>,
+             (outs FPR32INX:$rd), (ins FPR32INX:$rs1, FPR32INX:$rs2), "vfndotpex.s.r.h", "$rd, $rs1, $rs2">, Sched<[]>;
+
+// Pseudo instructions
+} // let Predicates = [HasExtZexpauxvechalfinx]
 
 
 //===----------------------------------------------------------------------===//

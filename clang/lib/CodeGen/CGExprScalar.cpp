@@ -1360,7 +1360,7 @@ Value *ScalarExprEmitter::EmitScalarConversion(Value *Src, QualType SrcType,
         if (unsigned AS =
             dyn_cast<llvm::PointerType>(SrcTy)->getAddressSpace()) {
           DstTy = llvm::PointerType::get(
-              dyn_cast<llvm::PointerType>(SrcTy)->getElementType(), AS);
+              dyn_cast<llvm::PointerType>(SrcTy)->getPointerElementType(), AS);
           if (hero::getHERODbgLevel() >= hero::NOTICE) {
             llvm::errs().changeColor(llvm::raw_fd_ostream::Colors::CYAN, true);
             llvm::errs() << "POINTER CAST: ";

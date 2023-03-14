@@ -1144,6 +1144,25 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   setLibcallName(RTLIB::FPROUND_F32_F16, "__truncsfhf2");
 }
 
+MVT RISCVTargetLowering::getPointerTy(const DataLayout &DL, uint32_t AS) const {
+  if(AS == UINT32_MAX) {
+    AS = 0;
+  }
+  return MVT::getIntegerVT(DL.getPointerSizeInBits(AS));
+}
+
+MVT RISCVTargetLowering::getPointerMemTy(const DataLayout &DL, uint32_t AS) const {
+  if(AS == UINT32_MAX) {
+    AS = 0;
+  }
+  return MVT::getIntegerVT(DL.getPointerSizeInBits(AS));
+}
+
+MVT RISCVTargetLowering::getScalarShiftAmountTy(const DataLayout &DL,
+                                                EVT) const {
+  return Subtarget.getXLenVT();
+}
+
 EVT RISCVTargetLowering::getSetCCResultType(const DataLayout &DL,
                                             LLVMContext &Context,
                                             EVT VT) const {

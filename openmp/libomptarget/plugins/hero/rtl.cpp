@@ -347,7 +347,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
   host_arg_buf.reserve(ARG_BUF_SIZE); // memory leak
   if (device_id == HERODEV_MEMCPY) {
     dev_arg_buf = __tgt_rtl_data_alloc(
-        device_id, ARG_BUF_SIZE * sizeof(uint64_t), host_arg_buf.data());
+        device_id, ARG_BUF_SIZE * sizeof(uint64_t), host_arg_buf.data(), TARGET_ALLOC_DEFAULT);
   }
 
 #ifdef PREM_MODE
@@ -380,7 +380,14 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
   return table;
 }
 
-void *__tgt_rtl_data_alloc(int32_t device_id, int64_t size, void *hst_ptr) {
+void *__tgt_rtl_data_alloc(int32_t device_id, int64_t size, void *hst_ptr, int32_t kind) {
+
+  if (kind != TARGET_ALLOC_DEFAULT) {
+    REPORT("Invalid target data allocation kind or requested allocator not "
+           "implemented yet\n");
+    return NULL;
+  }
+
   DP("__tgt_rtl_data_alloc(device_id=%d, size=%lld, hst_ptr=" DPxMOD ")\n",
      device_id, size, DPxPTR(hst_ptr));
   void *ptr = nullptr;

@@ -53,6 +53,7 @@ install(TARGETS omptarget.rtl.herodev LIBRARY DESTINATION "${OPENMP_INSTALL_LIBD
 
 if(LIBOMPTARGET_ENABLE_PREM)
   target_link_libraries(omptarget.rtl.herodev
+    elf_common
     ${LIBOMPTARGET_DEP_LIBFFI_LIBRARIES}
     ${LIBOMPTARGET_DEP_LIBELF_LIBRARIES}
     "cmux-vote"
@@ -60,6 +61,7 @@ if(LIBOMPTARGET_ENABLE_PREM)
   )
 else()
   target_link_libraries(omptarget.rtl.herodev
+    elf_common
     ${LIBOMPTARGET_DEP_LIBFFI_LIBRARIES}
     ${LIBOMPTARGET_DEP_LIBELF_LIBRARIES}
   )

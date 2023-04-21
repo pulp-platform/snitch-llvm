@@ -10,6 +10,8 @@
 #
 ##===----------------------------------------------------------------------===##
 
+if (NOT OPENMP_STANDALONE_BUILD)
+
 libomptarget_say("Building the llvm-omp-device-info tool")
 
 add_llvm_tool(llvm-omp-device-info llvm-omp-device-info.cpp)
@@ -21,3 +23,5 @@ target_link_libraries(llvm-omp-device-info PRIVATE
   omptarget
   ${LIBOMPTARGET_TESTED_PLUGINS}
 )
+
+endif ()

@@ -80,6 +80,13 @@ static cl::opt<unsigned> MinLeaves(
              "(default = 4)"),
     cl::init(4));
 
+// Maximum depth of leaves to apply tree height reduction.
+// As a tree grows, THR usually becomes worse than regular unroll.
+static cl::opt<unsigned> MaxDepth(
+    "thr-max-depth",
+    cl::desc("Maximum depth when constructing trees (default = 5)"),
+    cl::init(5));
+
 // Whether to weight side-effected leaves by their position in a block.
 // This scales up costs significantly and adds a limitation on block size.
 static cl::opt<bool> SeLeaves(
@@ -117,7 +124,7 @@ class Node {
 public:
   explicit Node(Value *V)
       : Inst(nullptr), DefValue(V), Parent(nullptr), Left(nullptr),
-        Right(nullptr), Latency(0), TotalCost(0) {
+        Right(nullptr), Latency(0), TotalCost(0), Irreducible(false) {
     if (Instruction *I = dyn_cast<Instruction>(V)) {
       Inst = I;
     }
@@ -202,6 +209,13 @@ public:
   /// Update the latency of this node using the left or right node.
   void updateLeftOrRightNodeLatency(TargetTransformInfo *TTI, Node *SubNode);
 
+  /// Label this node as irreducible as it is too deep in another tree.
+  void setIrreducible() { Irreducible = true; }
+
+  /// Check whether this node is irreducible
+  bool isIrreducible() { return Irreducible; };
+
+
 private:
   /// Original instruction of this node.
   Instruction *Inst;
@@ -219,6 +233,10 @@ private:
   InstructionCost Latency;
   /// Total cost of nodes under this node.
   InstructionCost TotalCost;
+
+  /// Whether this node is blacklisted from reduction due to tree depth
+  bool Irreducible;
+
 };
 
 class TreeHeightReduction {
@@ -243,7 +261,7 @@ private:
   bool isTHRTargetInst(Instruction *I) const;
 
   /// Construct an operation tree from the value 'V'.
-  Node *constructTree(Value *V, BasicBlock *BB);
+  Node *constructTree(Value *V, BasicBlock *BB, unsigned Depth = 0);
 
   /// Destruct an operation tree constructed by constructTree.
   void destructTree(Node *N);
@@ -509,7 +527,8 @@ bool TreeHeightReduction::isTHRTargetInst(Instruction *I) const {
   }
 }
 
-Node *TreeHeightReduction::constructTree(Value *V, BasicBlock *BB) {
+Node *TreeHeightReduction::constructTree(Value *V, BasicBlock *BB,
+                                         unsigned Depth) {
   if (!isBranchCandidate(V))
     return new Node(V);
 
@@ -522,13 +541,18 @@ Node *TreeHeightReduction::constructTree(Value *V, BasicBlock *BB) {
 
   Node *Parent = new Node(V);
 
+  // If we exceed target depth, label as irreducible
+  if (Depth >= MaxDepth) {
+    Parent->setIrreducible();
+  }
+
   Value *LeftOp = I->getOperand(0);
-  Node *Left = constructTree(LeftOp, BB);
+  Node *Left = constructTree(LeftOp, BB, Depth+1);
   Parent->setLeft(Left);
   Left->setParent(Parent);
 
   Value *RightOp = I->getOperand(1);
-  Node *Right = constructTree(RightOp, BB);
+  Node *Right = constructTree(RightOp, BB, Depth+1);
   Parent->setRight(Right);
   Right->setParent(Parent);
 
@@ -552,7 +576,7 @@ void TreeHeightReduction::collectInstsToBeErasedFrom(
 
 Node *TreeHeightReduction::applyTreeHeightReduction(Node *N, bool isLeft) {
   // Postorder depth-first search.
-  if (!N->isBranch())
+  if (!N->isBranch() || N->isIrreducible())
     return N;
   applyTreeHeightReduction(N->getLeft(), true);
   applyTreeHeightReduction(N->getRight(), false);

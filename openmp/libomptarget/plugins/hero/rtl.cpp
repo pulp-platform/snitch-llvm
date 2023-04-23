@@ -62,7 +62,7 @@ static int initialized = 0;
 
 int32_t __tgt_rtl_is_valid_binary(__tgt_device_image *image) {
   DP("__tgt_rtl_is_valid_binary(" DPxMOD ") = 1\n", DPxPTR(image));
-  elf_check_machine(image, 243);
+  // elf_check_machine(image, 243);
   return 1;
 }
 

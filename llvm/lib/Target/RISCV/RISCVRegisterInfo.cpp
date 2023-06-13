@@ -114,7 +114,8 @@ BitVector RISCVRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   // TODO: do not hardcode SSR count
   if (RVFI->getUsesSSRs())
   for (unsigned S = 0; S != NumFSSRs; ++S) {
-      markSuperRegs(Reserved, getFSSR(S));
+      markSuperRegs(Reserved, getFSSRD(S));
+      markSuperRegs(Reserved, getFSSRF(S));
   }
 
   assert(checkAllSuperRegsMarked(Reserved));
@@ -365,6 +366,10 @@ RISCVRegisterInfo::getRegisterCostTableIndex(const MachineFunction &MF) const {
   return MF.getSubtarget<RISCVSubtarget>().hasStdExtC() ? 1 : 0;
 }
 
-unsigned RISCVRegisterInfo::getFSSR(unsigned Streamer) {
+unsigned RISCVRegisterInfo::getFSSRD(unsigned Streamer) {
   return RISCV::F0_D + Streamer;
+}
+
+unsigned RISCVRegisterInfo::getFSSRF(unsigned Streamer) {
+  return RISCV::F0_F + Streamer;
 }

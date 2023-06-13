@@ -72,7 +72,9 @@ struct RISCVRegisterInfo : public RISCVGenRegisterInfo {
   // Floating-point stream semantic registers (SSRs)
   static constexpr unsigned NumFSSRs = 3;
 
-  static unsigned getFSSR(unsigned Streamer);
+  static unsigned getFSSRD(unsigned Streamer);
+
+  static unsigned getFSSRF(unsigned Streamer);
 
 };
 }

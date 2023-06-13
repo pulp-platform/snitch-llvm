@@ -117,7 +117,7 @@ static const MachineInstrBuilder& addSSRDefUse(
 }
 
 static Register getFSSRReg(unsigned Streamer) {
-  unsigned AssignedReg = RISCVRegisterInfo::getFSSR(Streamer);
+  unsigned AssignedReg = RISCVRegisterInfo::getFSSRD(Streamer);
   // Advance the iterator to the assigned register until the valid
   // register is found
   const TargetRegisterClass *RC = &RISCV::FPR64RegClass;
@@ -511,7 +511,7 @@ bool RISCVExpandSSR::expandSSRBundle(MachineBasicBlock &MBB,
                int(WrappedInst->getOperand(0).getReg().virtRegIndex()) &&
            "Instruction bundled with SSR push does not write to push.");
 
-    WrappedInst->getOperand(0).setReg(RISCVRegisterInfo::getFSSR(SSRPushIdx));
+    WrappedInst->getOperand(0).setReg(RISCVRegisterInfo::getFSSRD(SSRPushIdx));
   }
   // Replace instruction push for every pop
   for (auto &Use : WrappedInst->operands()) {
@@ -519,7 +519,7 @@ bool RISCVExpandSSR::expandSSRBundle(MachineBasicBlock &MBB,
     // Check if this reg use is an SSR pop
     for (unsigned S = 0; S < RISCVRegisterInfo::NumFSSRs; ++S) {
       if (SSRPopVirts[S] == int(Use.getReg().virtRegIndex())) {
-        Use.setReg(RISCVRegisterInfo::getFSSR(S));
+        Use.setReg(RISCVRegisterInfo::getFSSRD(S));
         break;
       }
     }

@@ -182,7 +182,7 @@ void HeroSnitch::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   SmallString<128> InstallDir(this->SnRtInstallDir);
   SmallString<128> LibDir(this->SnRtInstallDir);
-  LibDir.append("/lib/static");
+  LibDir.append("/lib");
 
   Args.AddAllArgs(CmdArgs, options::OPT_L);
   TC.AddFilePathLibArgs(Args, CmdArgs);

@@ -590,6 +590,14 @@ def HasExtXmempool : Predicate<"Subtarget->hasExtXmempool()">,
                            AssemblerPredicate<(all_of FeatureExtXmempool),
                            "'Xmempool' (MemPool System)">;
 
+def FeatureHasNoFdiv
+    : SubtargetFeature<"nofdiv", "HasNoFdiv", "true",
+                       "Disable fdiv.* and fsqrt.* instructions, delegate to libcalls",
+                       [FeatureStdExtF]>;
+def HasNoFdiv : Predicate<"Subtarget->hasNoFdiv()">,
+                          AssemblerPredicate<(all_of FeatureHasNoFdiv),
+                          "Disable fdiv.* and fsqrt.* instructions, delegate to libcalls">;
+
 
 //===----------------------------------------------------------------------===//
 // Named operands for CSR instructions.

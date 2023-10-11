@@ -42,6 +42,7 @@
 #include "ToolChains/PPCFreeBSD.h"
 #include "ToolChains/PPCLinux.h"
 #include "ToolChains/PS4CPU.h"
+#include "ToolChains/HeroDevice.h"
 #include "ToolChains/HeroPULP.h"
 #include "ToolChains/HeroSnitch.h"
 #include "ToolChains/HeroHost.h"
@@ -5720,11 +5721,15 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
         break;
       case llvm::Triple::riscv32:
         if (Target.getVendor() == llvm::Triple::HERO) {
-          TC = std::make_unique<toolchains::HeroPULPToolChain>(*this, Target, Args);
+          TC = std::make_unique<toolchains::HeroDeviceToolChain>(*this, Target, Args);
           break;
         }
         else if (Target.getVendor() == llvm::Triple::Snitch) {
           TC = std::make_unique<toolchains::HeroSnitchToolChain>(*this, Target, Args);
+          break;
+        }
+        else if (Target.getVendor() == llvm::Triple::Pulp) {
+          TC = std::make_unique<toolchains::HeroPULPToolChain>(*this, Target, Args);
           break;
         }
       case llvm::Triple::riscv64:

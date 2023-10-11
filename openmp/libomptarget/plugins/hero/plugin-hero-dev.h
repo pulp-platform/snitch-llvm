@@ -118,7 +118,7 @@ static int init_hero_device() {
   int currFreq = 0x0;
 
   hd = &hero_dev;
-  hd->cluster_sel = HERO_DEV_DEFAULT_CLUSTER_ID;
+  //hd->cluster_sel = HERO_DEV_DEFAULT_CLUSTER_ID;
 
   // reserve virtual addresses overlapping with HERO Device's internal physical address
   // space

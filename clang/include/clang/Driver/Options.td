@@ -490,6 +490,19 @@ defvar asm_preprocessor = LangOpts<"AsmPreprocessor">;
 
 defvar std = !strconcat("LangStandard::getLangStandardForKind(", lang_std.KeyPath, ")");
 
+//===----------------------------------------------------------------------===//
+// HERO Options
+//===----------------------------------------------------------------------===//
+
+def hero_sysroot_EQ : Joined<["--"], "hero-sysroot=">, HelpText<"(HERO only) 32-bits sysroot for the device binary.">;
+def hero_ld_path_EQ : Joined<["--"], "hero-ld-path=">, HelpText<"(HERO only) Linker to use for the device binary.">;
+def hero_T_EQ : Joined<["--"], "hero-T=">, HelpText<"(HERO only) Linker script for the device binary.">;
+def hero_L : JoinedOrSeparate<["-"], "hero-L">, Flags<[RenderJoined]>, MetaVarName<"<dir>">, HelpText<"(HERO only) Add directory to library search path for the device binary.">;
+def hero_l : JoinedOrSeparate<["-"], "hero-l">, Flags<[LinkerInput, RenderJoined]>, HelpText<"(HERO only) Add library for the device binary.">;
+
+foreach i = {1-31} in
+  def hero_sysroot_EQ_#i : Joined<["--"], !strconcat("hero-sysroot-", !cast<string>(i), "=")>, HelpText<"(HERO only) 32-bits sysroot for the device binary.">;
+
 /////////
 // Options
 

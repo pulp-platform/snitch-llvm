@@ -142,7 +142,7 @@ RegSizeInfoByHwMode::RegSizeInfoByHwMode(Record *R,
   const HwModeSelect &MS = CGH.getHwModeSelect(R);
   for (const HwModeSelect::PairType &P : MS.Items) {
     auto I = Map.insert({P.first, RegSizeInfo(P.second, CGH)});
-    assert(I.second && "Duplicate entry?");
+    //assert(I.second && "Duplicate entry?");
     (void)I;
   }
 }

@@ -226,11 +226,10 @@ bool map_to_mem(__tgt_device_image *image, void **target, size_t *size) {
     const char *name;
   };
 
+  // Todo dynamic
   MemTarget devs[] = {
-      {&hd->clusters, hd->clusters.p_addr, "L1"},
-      {&hd->clusters, hd->clusters.p_addr, "alias"},
-      {&hd->l2_mem, hd->l2_mem.p_addr, "L2"},
-      {&hd->l3_mem, hd->l3_mem.p_addr, "L3"},
+      {&hd->local_mems[0], hd->local_mems[0].p_addr, hd->local_mems[0].alias},
+      {&hd->global_mems[0], hd->global_mems[0].p_addr, hd->global_mems[0].alias},
   };
   size_t dev_count = sizeof(devs) / sizeof(devs[0]);
 
@@ -337,6 +336,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
     DP("failed to satisfy requested OpenMP symbols\n");
     return NULL;
   }
+
 
   success = load_and_execute_image(image);
   if (!success) {
@@ -513,7 +513,7 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     const size_t stdout_buf_size = 1024*1024; // FIXME: this should be defined in the same place as
                                               // for HERO Device
     const size_t stdout_offset_per_core = stdout_buf_size / hero_dev_get_nb_pe(hd);
-    const volatile char* ptr = (char*)hd->l3_mem.v_addr + stdout_offset_per_core * i;
+    const volatile char* ptr = NULL;//(char*)hd->l3_mem.v_addr + stdout_offset_per_core * i;
     const volatile char* const end = ptr + stdout_offset_per_core;
     if (!*ptr)
       continue;

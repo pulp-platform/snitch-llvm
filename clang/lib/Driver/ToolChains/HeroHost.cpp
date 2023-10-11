@@ -19,6 +19,8 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/FormatVariadic.h"
 
+#include <iostream>
+
 using namespace clang::driver;
 using namespace clang::driver::toolchains;
 using namespace clang::driver::tools;
@@ -33,6 +35,8 @@ HeroHostToolChain::HeroHostToolChain(const Driver &D, const llvm::Triple &Triple
   std::string SysRoot = computeSysRoot();
   getFilePaths().push_back(SysRoot + "/lib");
   getFilePaths().push_back(SysRoot + "/usr/lib");
+
+  std::cout << "!!! CALLING HEROHOST: " << std::endl;
 
   if (GCCInstallation.isValid()) {
     getFilePaths().push_back(GCCInstallation.getInstallPath().str());
@@ -127,7 +131,9 @@ void HeroHost::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   const llvm::Triple &Triple = ToolChain.getTriple();
   ArgStringList CmdArgs;
 
-  std::string Linker = getToolChain().GetProgramPath((ToolChain.getTriple().getTriple() + "-" + getShortName()).c_str());
+  // Attention, this should be given by --ld-path
+  !Args.hasArg(options::OPT_ld_path_EQ);
+  std::string Linker = ToolChain.GetLinkerPath();
 
   if (!D.SysRoot.empty())
     CmdArgs.push_back(Args.MakeArgString("--sysroot=" + D.SysRoot));
@@ -193,6 +199,7 @@ void HeroHost::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   }
   }
   std::string DynamicLinker = "/" + LibDir + "/" + Loader;
+  std::cout << "!!! Linkers : " << Linker << " + " << DynamicLinker << std::endl;
   CmdArgs.push_back("-dynamic-linker");
   CmdArgs.push_back(Args.MakeArgString(Twine(D.DyldPrefix) +
                                         DynamicLinker));

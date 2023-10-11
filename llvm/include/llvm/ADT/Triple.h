@@ -169,6 +169,7 @@ public:
     SUSE,
     HERO,
     Snitch,
+    Pulp,
     OpenEmbedded,
     LastVendorType = OpenEmbedded
   };

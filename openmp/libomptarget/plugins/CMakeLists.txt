@@ -75,7 +75,7 @@ add_subdirectory(cuda)
 add_subdirectory(ppc64)
 add_subdirectory(ppc64le)
 add_subdirectory(ve)
-add_subdirectory(x86_64)
+#add_subdirectory(x86_64)
 add_subdirectory(remote)
 add_subdirectory(hero)
 

@@ -496,7 +496,7 @@ defvar std = !strconcat("LangStandard::getLangStandardForKind(", lang_std.KeyPat
 
 def hero_sysroot_EQ : Joined<["--"], "hero-sysroot=">, HelpText<"(HERO only) 32-bits sysroot for the device binary.">;
 def hero_ld_path_EQ : Joined<["--"], "hero-ld-path=">, HelpText<"(HERO only) Linker to use for the device binary.">;
-def hero_T_EQ : Joined<["--"], "hero-T=">, HelpText<"(HERO only) Linker script for the device binary.">;
+def hero_T : JoinedOrSeparate<["-"], "hero-T">, HelpText<"(HERO only) Specify <script> as linker script for the device binary">;
 def hero_L : JoinedOrSeparate<["-"], "hero-L">, Flags<[RenderJoined]>, MetaVarName<"<dir>">, HelpText<"(HERO only) Add directory to library search path for the device binary.">;
 def hero_l : JoinedOrSeparate<["-"], "hero-l">, Flags<[LinkerInput, RenderJoined]>, HelpText<"(HERO only) Add library for the device binary.">;
 

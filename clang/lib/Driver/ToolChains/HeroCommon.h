@@ -15,6 +15,7 @@
 #include "clang/Driver/InputInfo.h"
 #include "clang/Driver/Options.h"
 #include "llvm/Option/ArgList.h"
+#include "llvm/Support/Error.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/Path.h"
@@ -30,13 +31,15 @@ using namespace clang;
 using namespace llvm::opt;
 
 void getHeroParam(const ArgList &Args, std::string *StrArg, options::ID OPT) {
-    // Set this.sysroot from --hero-sysroot parameter
+    // Set StrArg based on Args and the OPT to fetch
     if (Arg *A = Args.getLastArg(OPT)) {
         StringRef Value = A->getValue();
         std::string StrArgVal = Value.str();
         std::cout << "!!! StrArgVal " << StrArgVal << std::endl;
         if (llvm::sys::fs::exists(StrArgVal))
             *StrArg = StrArgVal;
+        else
+            llvm::createStringError(llvm::inconvertibleErrorCode(), "Incorrect argument " + A->getSpelling() + StrArgVal);
     }
 }
 

@@ -137,7 +137,7 @@ void HeroDevice::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     // Get hero params
     getHeroParam(Args, (std::string*) &this->sysroot, options::OPT_hero_sysroot_EQ);
     getHeroParam(Args, (std::string*) &this->hero_ld_path, options::OPT_hero_ld_path_EQ);
-    getHeroParam(Args, (std::string*) &this->hero_ld_script_path, options::OPT_hero_T_EQ);
+    getHeroParam(Args, (std::string*) &this->hero_ld_script_path, options::OPT_hero_T);
 
     // Argument parsing buffer
     SmallString<128> ArgStr;
@@ -158,10 +158,9 @@ void HeroDevice::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("--no-relax");
 
     // Add linker script given as argument
-    ArgStr.clear();
-    ArgStr.append("-T");
-    llvm::sys::path::append(ArgStr, this->hero_ld_script_path);
-    CmdArgs.push_back(Args.MakeArgString(ArgStr));
+    std::cout << "!!! Debug1" << this->hero_ld_script_path << std::endl;
+    CmdArgs.push_back("-T");
+    CmdArgs.push_back(this->hero_ld_script_path.c_str());
 
     // Clean inputs to linker
     InputInfoList FinalInputs;

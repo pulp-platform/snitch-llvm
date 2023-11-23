@@ -70,8 +70,12 @@ if(${LIBOMPTARGET_HERO_DEV_TYPE} STREQUAL "hero")
   add_definitions(-DLIBOMPTARGET_HERO_DEV_TYPE_HERO)
   if(EXISTS $ENV{HERO_LIBHERO_DIR}/lib/libhero.so)
     target_link_libraries(omptarget.rtl.herodev
-        $ENV{HERO_LIBHERO_DIR}/lib/libhero.so)
+        $ENV{HERO_LIBHERO_DIR}/lib/libhero.a)
+  else()
+    message( FATAL_ERROR "libhero.a not found" )
   endif()
+else()
+  message( FATAL_ERROR "No device type for LIBOMPTARGET_HERO_DEV_TYPE=" ${LIBOMPTARGET_HERO_DEV_TYPE} )
 endif()
 
 

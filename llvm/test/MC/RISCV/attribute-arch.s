@@ -140,11 +140,17 @@
 .attribute arch, "rv32izfinx_zexpauxvechalfinx1p0"
 # CHECK: attribute      5, "rv32i2p0_zfinx1p0_zexpauxvechalfinx1p0"
 
+.attribute arch, "rv32izfinx_zexpauxvecquarterinx1p0"
+# CHECK: attribute      5, "rv32i2p0_zfinx1p0_zexpauxvecquarterinx1p0"
+
 .attribute arch, "rv32izfinx_zquarterinx1p0"
 # CHECK: attribute      5, "rv32i2p0_zfinx1p0_zquarterinx1p0"
 
 .attribute arch, "rv32izfinx_zvechalfinx1p0"
 # CHECK: attribute      5, "rv32i2p0_zfinx1p0_zvechalfinx1p0"
+
+.attribute arch, "rv32izfinx_zvecquarterinx1p0"
+# CHECK: attribute      5, "rv32i2p0_zfinx1p0_zvecquarterinx1p0"
 
 .attribute arch, "rv32i_zbkb1p0"
 # CHECK: attribute      5, "rv32i2p0_zbkb1p0"

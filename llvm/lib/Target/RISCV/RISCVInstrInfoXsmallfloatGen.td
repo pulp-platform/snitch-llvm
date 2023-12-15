@@ -1007,221 +1007,228 @@ def FeatureExtXfvecquarter : SubtargetFeature<
   "xfvecquarter", "HasExtXfvecquarter", "true", "'Xfvecquarter' (vectorial quarter-precision floats - requires FLEN >= 16)">;
 def HasExtXfvecquarter : Predicate<
   "Subtarget->hasExtXfvecquarter()">, AssemblerPredicate<(all_of FeatureExtXfvecquarter), "'Xfvecquarter' (vectorial quarter-precision floats - requires FLEN >= 16)">;
+
+// Subtarget definitions
+def FeatureExtZvecquarterinx : SubtargetFeature<
+  "zvecquarterinx", "HasExtZvecquarterinx", "true", "'Zvecquarterinx' (vectorial quarter-precision floats - requires FLEN >= 16)">;
+def HasExtZvecquarterinx : Predicate<
+  "Subtarget->hasExtZvecquarterinx()">, AssemblerPredicate<(all_of FeatureExtZvecquarterinx), "'Zvecquarterinx' (vectorial quarter-precision floats - requires FLEN >= 16)">;
+
 let Predicates = [HasExtXfvecquarter] in {
 
 // Instructions
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFADD_B : RVInstRVf<0b10, 0b00001, 0b0, VFMT_FP8, RISCVOpcode<"VFADD_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfadd.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFADD_R_B : RVInstRVf<0b10, 0b00001, 0b1, VFMT_FP8, RISCVOpcode<"VFADD_R_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfadd.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFSUB_B : RVInstRVf<0b10, 0b00010, 0b0, VFMT_FP8, RISCVOpcode<"VFSUB_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfsub.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFSUB_R_B : RVInstRVf<0b10, 0b00010, 0b1, VFMT_FP8, RISCVOpcode<"VFSUB_R_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfsub.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFMUL_B : RVInstRVf<0b10, 0b00011, 0b0, VFMT_FP8, RISCVOpcode<"VFMUL_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfmul.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFMUL_R_B : RVInstRVf<0b10, 0b00011, 0b1, VFMT_FP8, RISCVOpcode<"VFMUL_R_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfmul.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFDIV_B : RVInstRVf<0b10, 0b00100, 0b0, VFMT_FP8, RISCVOpcode<"VFDIV_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfdiv.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFDIV_R_B : RVInstRVf<0b10, 0b00100, 0b1, VFMT_FP8, RISCVOpcode<"VFDIV_R_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfdiv.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFMIN_B : RVInstRVf<0b10, 0b00101, 0b0, VFMT_FP8, RISCVOpcode<"VFMIN_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfmin.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFMIN_R_B : RVInstRVf<0b10, 0b00101, 0b1, VFMT_FP8, RISCVOpcode<"VFMIN_R_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfmin.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFMAX_B : RVInstRVf<0b10, 0b00110, 0b0, VFMT_FP8, RISCVOpcode<"VFMAX_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfmax.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFMAX_R_B : RVInstRVf<0b10, 0b00110, 0b1, VFMT_FP8, RISCVOpcode<"VFMAX_R_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfmax.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFSQRT_B : RVInstRVf<0b10, 0b00111, 0b0, VFMT_FP8, RISCVOpcode<"VFSQRT_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1), "vfsqrt.b", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00000;
   }
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFMAC_B : RVInstRVf<0b10, 0b01000, 0b0, VFMT_FP8, RISCVOpcode<"VFMAC_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfmac.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFMAC_R_B : RVInstRVf<0b10, 0b01000, 0b1, VFMT_FP8, RISCVOpcode<"VFMAC_R_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfmac.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFMRE_B : RVInstRVf<0b10, 0b01001, 0b0, VFMT_FP8, RISCVOpcode<"VFMRE_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfmre.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFMRE_R_B : RVInstRVf<0b10, 0b01001, 0b1, VFMT_FP8, RISCVOpcode<"VFMRE_R_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfmre.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFSGNJ_B : RVInstRVf<0b10, 0b01101, 0b0, VFMT_FP8, RISCVOpcode<"VFSGNJ_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfsgnj.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFSGNJ_R_B : RVInstRVf<0b10, 0b01101, 0b1, VFMT_FP8, RISCVOpcode<"VFSGNJ_R_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfsgnj.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFSGNJN_B : RVInstRVf<0b10, 0b01110, 0b0, VFMT_FP8, RISCVOpcode<"VFSGNJN_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfsgnjn.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFSGNJN_R_B : RVInstRVf<0b10, 0b01110, 0b1, VFMT_FP8, RISCVOpcode<"VFSGNJN_R_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfsgnjn.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFSGNJX_B : RVInstRVf<0b10, 0b01111, 0b0, VFMT_FP8, RISCVOpcode<"VFSGNJX_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfsgnjx.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFSGNJX_R_B : RVInstRVf<0b10, 0b01111, 0b1, VFMT_FP8, RISCVOpcode<"VFSGNJX_R_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfsgnjx.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFEQ_B : RVInstRVf<0b10, 0b10000, 0b0, VFMT_FP8, RISCVOpcode<"VFEQ_B", 0b0110011>,
              (outs GPR:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfeq.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFEQ_R_B : RVInstRVf<0b10, 0b10000, 0b1, VFMT_FP8, RISCVOpcode<"VFEQ_R_B", 0b0110011>,
              (outs GPR:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfeq.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFNE_B : RVInstRVf<0b10, 0b10001, 0b0, VFMT_FP8, RISCVOpcode<"VFNE_B", 0b0110011>,
              (outs GPR:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfne.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFNE_R_B : RVInstRVf<0b10, 0b10001, 0b1, VFMT_FP8, RISCVOpcode<"VFNE_R_B", 0b0110011>,
              (outs GPR:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfne.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFLT_B : RVInstRVf<0b10, 0b10010, 0b0, VFMT_FP8, RISCVOpcode<"VFLT_B", 0b0110011>,
              (outs GPR:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vflt.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFLT_R_B : RVInstRVf<0b10, 0b10010, 0b1, VFMT_FP8, RISCVOpcode<"VFLT_R_B", 0b0110011>,
              (outs GPR:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vflt.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFGE_B : RVInstRVf<0b10, 0b10011, 0b0, VFMT_FP8, RISCVOpcode<"VFGE_B", 0b0110011>,
              (outs GPR:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfge.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFGE_R_B : RVInstRVf<0b10, 0b10011, 0b1, VFMT_FP8, RISCVOpcode<"VFGE_R_B", 0b0110011>,
              (outs GPR:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfge.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFLE_B : RVInstRVf<0b10, 0b10100, 0b0, VFMT_FP8, RISCVOpcode<"VFLE_B", 0b0110011>,
              (outs GPR:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfle.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFLE_R_B : RVInstRVf<0b10, 0b10100, 0b1, VFMT_FP8, RISCVOpcode<"VFLE_R_B", 0b0110011>,
              (outs GPR:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfle.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFGT_B : RVInstRVf<0b10, 0b10101, 0b0, VFMT_FP8, RISCVOpcode<"VFGT_B", 0b0110011>,
              (outs GPR:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfgt.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFGT_R_B : RVInstRVf<0b10, 0b10101, 0b1, VFMT_FP8, RISCVOpcode<"VFGT_R_B", 0b0110011>,
              (outs GPR:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfgt.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFMV_X_B : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP8, RISCVOpcode<"VFMV_X_B", 0b0110011>,
              (outs GPR:$rd), (ins FPR16:$rs1), "vfmv.x.b", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00000;
   }
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFMV_B_X : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP8, RISCVOpcode<"VFMV_B_X", 0b0110011>,
              (outs FPR16:$rd), (ins GPR:$rs1), "vfmv.b.x", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00000;
   }
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFCLASS_B : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP8, RISCVOpcode<"VFCLASS_B", 0b0110011>,
              (outs GPR:$rd), (ins FPR16:$rs1), "vfclass.b", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00001;
   }
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFCVT_X_B : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP8, RISCVOpcode<"VFCVT_X_B", 0b0110011>,
              (outs GPR:$rd), (ins FPR16:$rs1), "vfcvt.x.b", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00010;
   }
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFCVT_XU_B : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP8, RISCVOpcode<"VFCVT_XU_B", 0b0110011>,
              (outs GPR:$rd), (ins FPR16:$rs1), "vfcvt.xu.b", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00010;
   }
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFCVT_B_X : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP8, RISCVOpcode<"VFCVT_B_X", 0b0110011>,
              (outs FPR16:$rd), (ins GPR:$rs1), "vfcvt.b.x", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00011;
   }
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFCVT_B_XU : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP8, RISCVOpcode<"VFCVT_B_XU", 0b0110011>,
              (outs FPR16:$rd), (ins GPR:$rs1), "vfcvt.b.xu", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00011;
   }
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFCPKA_B_S : RVInstRVf<0b10, 0b11000, 0b0, VFMT_FP8, RISCVOpcode<"VFCPKA_B_S", 0b0110011>,
              (outs FPR16:$rd), (ins FPR32:$rs1, FPR32:$rs2), "vfcpka.b.s", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFCPKB_B_S : RVInstRVf<0b10, 0b11000, 0b1, VFMT_FP8, RISCVOpcode<"VFCPKB_B_S", 0b0110011>,
              (outs FPR16:$rd), (ins FPR32:$rs1, FPR32:$rs2), "vfcpkb.b.s", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFCPKC_B_S : RVInstRVf<0b10, 0b11001, 0b0, VFMT_FP8, RISCVOpcode<"VFCPKC_B_S", 0b0110011>,
              (outs FPR16:$rd), (ins FPR32:$rs1, FPR32:$rs2), "vfcpkc.b.s", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFCPKD_B_S : RVInstRVf<0b10, 0b11001, 0b1, VFMT_FP8, RISCVOpcode<"VFCPKD_B_S", 0b0110011>,
              (outs FPR16:$rd), (ins FPR32:$rs1, FPR32:$rs2), "vfcpkd.b.s", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFCPKA_B_D : RVInstRVf<0b10, 0b11010, 0b0, VFMT_FP8, RISCVOpcode<"VFCPKA_B_D", 0b0110011>,
              (outs FPR16:$rd), (ins FPR64:$rs1, FPR64:$rs2), "vfcpka.b.d", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFCPKB_B_D : RVInstRVf<0b10, 0b11010, 0b1, VFMT_FP8, RISCVOpcode<"VFCPKB_B_D", 0b0110011>,
              (outs FPR16:$rd), (ins FPR64:$rs1, FPR64:$rs2), "vfcpkb.b.d", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFCPKC_B_D : RVInstRVf<0b10, 0b11011, 0b0, VFMT_FP8, RISCVOpcode<"VFCPKC_B_D", 0b0110011>,
              (outs FPR16:$rd), (ins FPR64:$rs1, FPR64:$rs2), "vfcpkc.b.d", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFCPKD_B_D : RVInstRVf<0b10, 0b11011, 0b1, VFMT_FP8, RISCVOpcode<"VFCPKD_B_D", 0b0110011>,
              (outs FPR16:$rd), (ins FPR64:$rs1, FPR64:$rs2), "vfcpkd.b.d", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFCVT_S_B : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP32, RISCVOpcode<"VFCVT_S_B", 0b0110011>,
              (outs FPR32:$rd), (ins FPR16:$rs1), "vfcvt.s.b", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00111;
   }
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFCVTU_S_B : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP32, RISCVOpcode<"VFCVTU_S_B", 0b0110011>,
              (outs FPR32:$rd), (ins GPR:$rs1), "vfcvtu.s.b", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00111;
   }
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFCVT_B_S : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP8, RISCVOpcode<"VFCVT_B_S", 0b0110011>,
              (outs FPR16:$rd), (ins FPR32:$rs1), "vfcvt.b.s", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00100;
   }
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFCVTU_B_S : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP8, RISCVOpcode<"VFCVTU_B_S", 0b0110011>,
              (outs FPR16:$rd), (ins GPR:$rs1), "vfcvtu.b.s", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00100;
   }
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFCVT_H_B : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP16, RISCVOpcode<"VFCVT_H_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1), "vfcvt.h.b", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00111;
   }
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFCVTU_H_B : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP16, RISCVOpcode<"VFCVTU_H_B", 0b0110011>,
              (outs FPR16:$rd), (ins GPR:$rs1), "vfcvtu.h.b", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00111;
   }
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFCVT_B_H : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP8, RISCVOpcode<"VFCVT_B_H", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1), "vfcvt.b.h", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00110;
   }
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFCVTU_B_H : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP8, RISCVOpcode<"VFCVTU_B_H", 0b0110011>,
              (outs FPR16:$rd), (ins GPR:$rs1), "vfcvtu.b.h", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00110;
   }
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFCVT_B_B : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP8, RISCVOpcode<"VFCVT_B_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1), "vfcvt.b.b", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00111;
   }
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFCVTU_B_B : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP8, RISCVOpcode<"VFCVTU_B_B", 0b0110011>,
              (outs FPR16:$rd), (ins GPR:$rs1), "vfcvtu.b.b", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00111;
@@ -1238,6 +1245,227 @@ def : InstAlias<"vfcvtu.ab.b $rd, $rs1",   (VFCVTU_B_B FPR16:$rd, GPR:$rs1), 0>;
 def : InstAlias<"vfcvtu.b.ab $rd, $rs1",   (VFCVTU_B_B FPR16:$rd, GPR:$rs1), 0>;
 } // let Predicates = [HasExtXfvecquarter]
 
+let Predicates = [HasExtZvecquarterinx] in {
+
+// Instructions
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFADD_B_INX : RVInstRVf<0b10, 0b00001, 0b0, VFMT_FP8INX, RISCVOpcode<"VFADD_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfadd.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFADD_R_B_INX : RVInstRVf<0b10, 0b00001, 0b1, VFMT_FP8INX, RISCVOpcode<"VFADD_R_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfadd.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFSUB_B_INX : RVInstRVf<0b10, 0b00010, 0b0, VFMT_FP8INX, RISCVOpcode<"VFSUB_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfsub.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFSUB_R_B_INX : RVInstRVf<0b10, 0b00010, 0b1, VFMT_FP8INX, RISCVOpcode<"VFSUB_R_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfsub.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFMUL_B_INX : RVInstRVf<0b10, 0b00011, 0b0, VFMT_FP8INX, RISCVOpcode<"VFMUL_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfmul.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFMUL_R_B_INX : RVInstRVf<0b10, 0b00011, 0b1, VFMT_FP8INX, RISCVOpcode<"VFMUL_R_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfmul.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFDIV_B_INX : RVInstRVf<0b10, 0b00100, 0b0, VFMT_FP8INX, RISCVOpcode<"VFDIV_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfdiv.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFDIV_R_B_INX : RVInstRVf<0b10, 0b00100, 0b1, VFMT_FP8INX, RISCVOpcode<"VFDIV_R_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfdiv.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFMIN_B_INX : RVInstRVf<0b10, 0b00101, 0b0, VFMT_FP8INX, RISCVOpcode<"VFMIN_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfmin.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFMIN_R_B_INX : RVInstRVf<0b10, 0b00101, 0b1, VFMT_FP8INX, RISCVOpcode<"VFMIN_R_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfmin.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFMAX_B_INX : RVInstRVf<0b10, 0b00110, 0b0, VFMT_FP8INX, RISCVOpcode<"VFMAX_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfmax.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFMAX_R_B_INX : RVInstRVf<0b10, 0b00110, 0b1, VFMT_FP8INX, RISCVOpcode<"VFMAX_R_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfmax.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFSQRT_B_INX : RVInstRVf<0b10, 0b00111, 0b0, VFMT_FP8INX, RISCVOpcode<"VFSQRT_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1), "vfsqrt.b", "$rd, $rs1">, Sched<[]> {
+    let rs2 = 0b00000;
+  }
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFMAC_B_INX : RVInstRVf<0b10, 0b01000, 0b0, VFMT_FP8INX, RISCVOpcode<"VFMAC_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfmac.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFMAC_R_B_INX : RVInstRVf<0b10, 0b01000, 0b1, VFMT_FP8INX, RISCVOpcode<"VFMAC_R_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfmac.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFMRE_B_INX : RVInstRVf<0b10, 0b01001, 0b0, VFMT_FP8INX, RISCVOpcode<"VFMRE_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfmre.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFMRE_R_B_INX : RVInstRVf<0b10, 0b01001, 0b1, VFMT_FP8INX, RISCVOpcode<"VFMRE_R_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfmre.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFSGNJ_B_INX : RVInstRVf<0b10, 0b01101, 0b0, VFMT_FP8INX, RISCVOpcode<"VFSGNJ_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfsgnj.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFSGNJ_R_B_INX : RVInstRVf<0b10, 0b01101, 0b1, VFMT_FP8INX, RISCVOpcode<"VFSGNJ_R_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfsgnj.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFSGNJN_B_INX : RVInstRVf<0b10, 0b01110, 0b0, VFMT_FP8INX, RISCVOpcode<"VFSGNJN_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfsgnjn.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFSGNJN_R_B_INX : RVInstRVf<0b10, 0b01110, 0b1, VFMT_FP8INX, RISCVOpcode<"VFSGNJN_R_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfsgnjn.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFSGNJX_B_INX : RVInstRVf<0b10, 0b01111, 0b0, VFMT_FP8INX, RISCVOpcode<"VFSGNJX_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfsgnjx.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFSGNJX_R_B_INX : RVInstRVf<0b10, 0b01111, 0b1, VFMT_FP8INX, RISCVOpcode<"VFSGNJX_R_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfsgnjx.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFEQ_B_INX : RVInstRVf<0b10, 0b10000, 0b0, VFMT_FP8INX, RISCVOpcode<"VFEQ_B_INX", 0b0110011>,
+             (outs GPR:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfeq.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFEQ_R_B_INX : RVInstRVf<0b10, 0b10000, 0b1, VFMT_FP8INX, RISCVOpcode<"VFEQ_R_B_INX", 0b0110011>,
+             (outs GPR:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfeq.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFNE_B_INX : RVInstRVf<0b10, 0b10001, 0b0, VFMT_FP8INX, RISCVOpcode<"VFNE_B_INX", 0b0110011>,
+             (outs GPR:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfne.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFNE_R_B_INX : RVInstRVf<0b10, 0b10001, 0b1, VFMT_FP8INX, RISCVOpcode<"VFNE_R_B_INX", 0b0110011>,
+             (outs GPR:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfne.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFLT_B_INX : RVInstRVf<0b10, 0b10010, 0b0, VFMT_FP8INX, RISCVOpcode<"VFLT_B_INX", 0b0110011>,
+             (outs GPR:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vflt.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFLT_R_B_INX : RVInstRVf<0b10, 0b10010, 0b1, VFMT_FP8INX, RISCVOpcode<"VFLT_R_B_INX", 0b0110011>,
+             (outs GPR:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vflt.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFGE_B_INX : RVInstRVf<0b10, 0b10011, 0b0, VFMT_FP8INX, RISCVOpcode<"VFGE_B_INX", 0b0110011>,
+             (outs GPR:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfge.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFGE_R_B_INX : RVInstRVf<0b10, 0b10011, 0b1, VFMT_FP8INX, RISCVOpcode<"VFGE_R_B_INX", 0b0110011>,
+             (outs GPR:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfge.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFLE_B_INX : RVInstRVf<0b10, 0b10100, 0b0, VFMT_FP8INX, RISCVOpcode<"VFLE_B_INX", 0b0110011>,
+             (outs GPR:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfle.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFLE_R_B_INX : RVInstRVf<0b10, 0b10100, 0b1, VFMT_FP8INX, RISCVOpcode<"VFLE_R_B_INX", 0b0110011>,
+             (outs GPR:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfle.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFGT_B_INX : RVInstRVf<0b10, 0b10101, 0b0, VFMT_FP8INX, RISCVOpcode<"VFGT_B_INX", 0b0110011>,
+             (outs GPR:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfgt.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFGT_R_B_INX : RVInstRVf<0b10, 0b10101, 0b1, VFMT_FP8INX, RISCVOpcode<"VFGT_R_B_INX", 0b0110011>,
+             (outs GPR:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfgt.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFMV_X_B_INX : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP8INX, RISCVOpcode<"VFMV_X_B_INX", 0b0110011>,
+             (outs GPR:$rd), (ins FPR16INX:$rs1), "vfmv.x.b", "$rd, $rs1">, Sched<[]> {
+    let rs2 = 0b00000;
+  }
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFMV_B_X_INX : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP8INX, RISCVOpcode<"VFMV_B_X_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins GPR:$rs1), "vfmv.b.x", "$rd, $rs1">, Sched<[]> {
+    let rs2 = 0b00000;
+  }
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFCLASS_B_INX : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP8INX, RISCVOpcode<"VFCLASS_B_INX", 0b0110011>,
+             (outs GPR:$rd), (ins FPR16INX:$rs1), "vfclass.b", "$rd, $rs1">, Sched<[]> {
+    let rs2 = 0b00001;
+  }
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFCVT_X_B_INX : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP8INX, RISCVOpcode<"VFCVT_X_B_INX", 0b0110011>,
+             (outs GPR:$rd), (ins FPR16INX:$rs1), "vfcvt.x.b", "$rd, $rs1">, Sched<[]> {
+    let rs2 = 0b00010;
+  }
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFCVT_XU_B_INX : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP8INX, RISCVOpcode<"VFCVT_XU_B_INX", 0b0110011>,
+             (outs GPR:$rd), (ins FPR16INX:$rs1), "vfcvt.xu.b", "$rd, $rs1">, Sched<[]> {
+    let rs2 = 0b00010;
+  }
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFCVT_B_X_INX : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP8INX, RISCVOpcode<"VFCVT_B_X_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins GPR:$rs1), "vfcvt.b.x", "$rd, $rs1">, Sched<[]> {
+    let rs2 = 0b00011;
+  }
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFCVT_B_XU_INX : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP8INX, RISCVOpcode<"VFCVT_B_XU_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins GPR:$rs1), "vfcvt.b.xu", "$rd, $rs1">, Sched<[]> {
+    let rs2 = 0b00011;
+  }
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFCPKA_B_S_INX : RVInstRVf<0b10, 0b11000, 0b0, VFMT_FP8INX, RISCVOpcode<"VFCPKA_B_S_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR32:$rs1, FPR32:$rs2), "vfcpka.b.s", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFCPKB_B_S_INX : RVInstRVf<0b10, 0b11000, 0b1, VFMT_FP8INX, RISCVOpcode<"VFCPKB_B_S_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR32:$rs1, FPR32:$rs2), "vfcpkb.b.s", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFCPKC_B_S_INX : RVInstRVf<0b10, 0b11001, 0b0, VFMT_FP8INX, RISCVOpcode<"VFCPKC_B_S_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR32:$rs1, FPR32:$rs2), "vfcpkc.b.s", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFCPKD_B_S_INX : RVInstRVf<0b10, 0b11001, 0b1, VFMT_FP8INX, RISCVOpcode<"VFCPKD_B_S_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR32:$rs1, FPR32:$rs2), "vfcpkd.b.s", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFCPKA_B_D_INX : RVInstRVf<0b10, 0b11010, 0b0, VFMT_FP8INX, RISCVOpcode<"VFCPKA_B_D_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR64:$rs1, FPR64:$rs2), "vfcpka.b.d", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFCPKB_B_D_INX : RVInstRVf<0b10, 0b11010, 0b1, VFMT_FP8INX, RISCVOpcode<"VFCPKB_B_D_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR64:$rs1, FPR64:$rs2), "vfcpkb.b.d", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFCPKC_B_D_INX : RVInstRVf<0b10, 0b11011, 0b0, VFMT_FP8INX, RISCVOpcode<"VFCPKC_B_D_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR64:$rs1, FPR64:$rs2), "vfcpkc.b.d", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFCPKD_B_D_INX : RVInstRVf<0b10, 0b11011, 0b1, VFMT_FP8INX, RISCVOpcode<"VFCPKD_B_D_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR64:$rs1, FPR64:$rs2), "vfcpkd.b.d", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFCVT_S_B_INX : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP32, RISCVOpcode<"VFCVT_S_B_INX", 0b0110011>,
+             (outs FPR32:$rd), (ins FPR16INX:$rs1), "vfcvt.s.b", "$rd, $rs1">, Sched<[]> {
+    let rs2 = 0b00111;
+  }
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFCVTU_S_B_INX : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP32, RISCVOpcode<"VFCVTU_S_B_INX", 0b0110011>,
+             (outs FPR32:$rd), (ins GPR:$rs1), "vfcvtu.s.b", "$rd, $rs1">, Sched<[]> {
+    let rs2 = 0b00111;
+  }
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFCVT_B_S_INX : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP8INX, RISCVOpcode<"VFCVT_B_S_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR32:$rs1), "vfcvt.b.s", "$rd, $rs1">, Sched<[]> {
+    let rs2 = 0b00100;
+  }
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFCVTU_B_S_INX : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP8INX, RISCVOpcode<"VFCVTU_B_S_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins GPR:$rs1), "vfcvtu.b.s", "$rd, $rs1">, Sched<[]> {
+    let rs2 = 0b00100;
+  }
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFCVT_H_B_INX : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP16, RISCVOpcode<"VFCVT_H_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1), "vfcvt.h.b", "$rd, $rs1">, Sched<[]> {
+    let rs2 = 0b00111;
+  }
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFCVTU_H_B_INX : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP16, RISCVOpcode<"VFCVTU_H_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins GPR:$rs1), "vfcvtu.h.b", "$rd, $rs1">, Sched<[]> {
+    let rs2 = 0b00111;
+  }
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFCVT_B_H_INX : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP8INX, RISCVOpcode<"VFCVT_B_H_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1), "vfcvt.b.h", "$rd, $rs1">, Sched<[]> {
+    let rs2 = 0b00110;
+  }
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFCVTU_B_H_INX : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP8INX, RISCVOpcode<"VFCVTU_B_H_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins GPR:$rs1), "vfcvtu.b.h", "$rd, $rs1">, Sched<[]> {
+    let rs2 = 0b00110;
+  }
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFCVT_B_B_INX : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP8INX, RISCVOpcode<"VFCVT_B_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1), "vfcvt.b.b", "$rd, $rs1">, Sched<[]> {
+    let rs2 = 0b00111;
+  }
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFCVTU_B_B_INX : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP8INX, RISCVOpcode<"VFCVTU_B_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins GPR:$rs1), "vfcvtu.b.b", "$rd, $rs1">, Sched<[]> {
+    let rs2 = 0b00111;
+  }
+
+} // let Predicates = [HasExtZvecquarterinx]
 
 //===----------------------------------------------------------------------===//
 // GROUP: Xfvecaltquarter (pred: HasExtXfvecaltquarter)
@@ -1648,29 +1876,35 @@ def FeatureExtXfexpauxvecquarter : SubtargetFeature<
   "xfexpauxvecquarter", "HasExtXfexpauxvecquarter", "true", "'Xfexpauxvecquarter' (vectorial quarter-precision expanding auxiliary operations)">;
 def HasExtXfexpauxvecquarter : Predicate<
   "Subtarget->hasExtXfexpauxvecquarter()">, AssemblerPredicate<(all_of FeatureExtXfexpauxvecquarter), "'Xfexpauxvecquarter' (vectorial quarter-precision expanding auxiliary operations)">;
+
+def FeatureExtZexpauxvecquarterinx : SubtargetFeature<
+  "zexpauxvecquarterinx", "HasExtZexpauxvecquarterinx", "true", "'Zexpauxvecquarterinx' (vectorial quarter-precision expanding auxiliary operations)">;
+def HasExtZexpauxvecquarterinx : Predicate<
+  "Subtarget->hasExtZexpauxvecquarterinx()">, AssemblerPredicate<(all_of FeatureExtZexpauxvecquarterinx), "'Zexpauxvecquarterinx' (vectorial quarter-precision expanding auxiliary operations)">;
+
 let Predicates = [HasExtXfexpauxvecquarter] in {
 
 // Instructions
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFSUMEX_H_B : RVInstRVf<0b10, 0b00111, 0b0, VFMT_FP16, RISCVOpcode<"VFSUMEX_H_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1), "vfsumex.h.b", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b10111;
   }
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFNSUMEX_H_B : RVInstRVf<0b10, 0b10111, 0b0, VFMT_FP16, RISCVOpcode<"VFNSUMEX_H_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1), "vfnsumex.h.b", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b10111;
   }
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFDOTPEX_H_B : RVInstRVf<0b10, 0b01011, 0b0, VFMT_FP16, RISCVOpcode<"VFDOTPEX_H_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfdotpex.h.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFDOTPEX_H_R_B : RVInstRVf<0b10, 0b01011, 0b1, VFMT_FP16, RISCVOpcode<"VFDOTPEX_H_R_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfdotpex.h.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFNDOTPEX_H_B : RVInstRVf<0b10, 0b11101, 0b0, VFMT_FP16, RISCVOpcode<"VFNDOTPEX_H_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfndotpex.h.b", "$rd, $rs1, $rs2">, Sched<[]>;
-let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFNDOTPEX_H_R_B : RVInstRVf<0b10, 0b11101, 0b1, VFMT_FP16, RISCVOpcode<"VFNDOTPEX_H_R_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfndotpex.h.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
 
@@ -1683,6 +1917,34 @@ def : InstAlias<"vfndotpex.ah.b $rd, $rs1, $rs2",   (VFNDOTPEX_H_B FPR16:$rd, FP
 def : InstAlias<"vfndotpex.ah.r.b $rd, $rs1, $rs2",   (VFNDOTPEX_H_R_B FPR16:$rd, FPR16:$rs1, FPR16:$rs2), 0>;
 } // let Predicates = [HasExtXfexpauxvecquarter]
 
+
+let Predicates = [HasExtZexpauxvecquarterinx] in {
+
+// Instructions
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFSUMEX_H_B_INX : RVInstRVf<0b10, 0b00111, 0b0, VFMT_FP16INX, RISCVOpcode<"VFSUMEX_H_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1), "vfsumex.h.b", "$rd, $rs1">, Sched<[]> {
+    let rs2 = 0b10111;
+  }
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFNSUMEX_H_B_INX : RVInstRVf<0b10, 0b10111, 0b0, VFMT_FP16INX, RISCVOpcode<"VFNSUMEX_H_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1), "vfnsumex.h.b", "$rd, $rs1">, Sched<[]> {
+    let rs2 = 0b10111;
+  }
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFDOTPEX_H_B_INX : RVInstRVf<0b10, 0b01011, 0b0, VFMT_FP16INX, RISCVOpcode<"VFDOTPEX_H_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfdotpex.h.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFDOTPEX_H_R_B_INX : RVInstRVf<0b10, 0b01011, 0b1, VFMT_FP16INX, RISCVOpcode<"VFDOTPEX_H_R_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfdotpex.h.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFNDOTPEX_H_B_INX : RVInstRVf<0b10, 0b11101, 0b0, VFMT_FP16INX, RISCVOpcode<"VFNDOTPEX_H_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfndotpex.h.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFNDOTPEX_H_R_B_INX : RVInstRVf<0b10, 0b11101, 0b1, VFMT_FP16INX, RISCVOpcode<"VFNDOTPEX_H_R_B_INX", 0b0110011>,
+             (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfndotpex.h.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+
+} // let Predicates = [HasExtZexpauxvecquarterinx]
 
 //===----------------------------------------------------------------------===//
 // GROUP: Xfexpauxvecaltquarter (pred: HasExtXfexpauxvecaltquarter)

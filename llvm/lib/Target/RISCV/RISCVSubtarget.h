@@ -124,8 +124,10 @@ private:
   bool HasStdExtZkt = false;
   bool HasStdExtZk = false;
   bool HasExtZexpauxvechalfinx = false;
+  bool HasExtZexpauxvecquarterinx = false;
   bool HasExtZquarterinx = false;
   bool HasExtZvechalfinx = false;
+  bool HasExtZvecquarterinx = false;
   bool HasExtXfrep = false;
   bool HasExtXdma = false;
   bool HasExtXssr = false;
@@ -240,8 +242,10 @@ public:
   bool hasStdExtZksh() const { return HasStdExtZksh; }
   bool hasStdExtZkr() const { return HasStdExtZkr; }
   bool hasExtZexpauxvechalfinx() const { return HasExtZexpauxvechalfinx; }
+  bool hasExtZexpauxvecquarterinx() const { return HasExtZexpauxvecquarterinx; }
   bool hasExtZquarterinx() const { return HasExtZquarterinx; }
   bool hasExtZvechalfinx() const { return HasExtZvechalfinx; }
+  bool hasExtZvecquarterinx() const { return HasExtZvecquarterinx; }
   bool hasExtXfrep() const { return HasExtXfrep; }
   bool hasExtXdma() const { return HasExtXdma; }
   bool hasExtXssr() const { return HasExtXssr; }

@@ -1839,16 +1839,16 @@ def VFNDOTPEX_S_R_H_INX : RVInstRVf<0b10, 0b11101, 0b1, VFMT_FP32INX, RISCVOpcod
              (outs FPR32INX:$rd), (ins FPR32INX:$rs1, FPR32INX:$rs2), "vfndotpex.s.r.h", "$rd, $rs1, $rs2">, Sched<[]>;
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
-def FCDOTPEX_S_H_INX : RVInstRVf<0b10, 0b11110, 0b0, VFMT_FP32INX, RISCVOpcode<"FCDOTPEX_S_H_INX", 0b0110011>,
+def FCDOTPEX_S_H_INX : RVInstRVf<0b10, 0b01011, 0b0, VFMT_FP32INX, RISCVOpcode<"FCDOTPEX_S_H_INX", 0b1110111>,
              (outs FPR32INX:$rd), (ins FPR32INX:$rs1, FPR32INX:$rs2), "fcdotpex.s.h", "$rd, $rs1, $rs2">, Sched<[]>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
-def FCNDOTPEX_S_H_INX : RVInstRVf<0b10, 0b11110, 0b1, VFMT_FP32INX, RISCVOpcode<"FCNDOTPEX_S_H_INX", 0b0110011>,
+def FCNDOTPEX_S_H_INX : RVInstRVf<0b10, 0b01011, 0b1, VFMT_FP32INX, RISCVOpcode<"FCNDOTPEX_S_H_INX", 0b1110111>,
              (outs FPR32INX:$rd), (ins FPR32INX:$rs1, FPR32INX:$rs2), "fcndotpex.s.h", "$rd, $rs1, $rs2">, Sched<[]>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
-def FCCDOTPEX_S_H_INX : RVInstRVf<0b10, 0b11111, 0b0, VFMT_FP32INX, RISCVOpcode<"FCCDOTPEX_S_H_INX", 0b0110011>,
+def FCCDOTPEX_S_H_INX : RVInstRVf<0b10, 0b11101, 0b0, VFMT_FP32INX, RISCVOpcode<"FCCDOTPEX_S_H_INX", 0b1110111>,
              (outs FPR32INX:$rd), (ins FPR32INX:$rs1, FPR32INX:$rs2), "fccdotpex.s.h", "$rd, $rs1, $rs2">, Sched<[]>;
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
-def FCCNDOTPEX_S_H_INX : RVInstRVf<0b10, 0b11111, 0b1, VFMT_FP32INX, RISCVOpcode<"FCCNDOTPEX_S_H_INX", 0b0110011>,
+def FCCNDOTPEX_S_H_INX : RVInstRVf<0b10, 0b11101, 0b1, VFMT_FP32INX, RISCVOpcode<"FCCNDOTPEX_S_H_INX", 0b1110111>,
              (outs FPR32INX:$rd), (ins FPR32INX:$rs1, FPR32INX:$rs2), "fccndotpex.s.h", "$rd, $rs1, $rs2">, Sched<[]>;
 
 // Pseudo instructions
@@ -1921,11 +1921,29 @@ let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "" in
 def VFNDOTPEX_H_R_B : RVInstRVf<0b10, 0b11101, 0b1, VFMT_FP16, RISCVOpcode<"VFNDOTPEX_H_R_B", 0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfndotpex.h.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
 
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+def VFDOTPEXA_S_B : RVInstRVf<0b10, 0b11100, 0b0, VFMT_FP32, RISCVOpcode<"VFDOTPEXA_S_B", 0b0110011>,
+             (outs FPR32:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfdotpexa.s.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+def VFDOTPEXA_S_R_B : RVInstRVf<0b10, 0b11100, 0b1, VFMT_FP32, RISCVOpcode<"VFDOTPEXA_S_R_B", 0b0110011>,
+             (outs FPR32:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfdotpexa.s.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+def VFDOTPEXB_S_B : RVInstRVf<0b10, 0b11110, 0b0, VFMT_FP32, RISCVOpcode<"VFDOTPEXB_S_B", 0b0110011>,
+             (outs FPR32:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfdotpexb.s.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+def VFDOTPEXB_S_R_B : RVInstRVf<0b10, 0b11110, 0b1, VFMT_FP32, RISCVOpcode<"VFDOTPEXB_S_R_B", 0b0110011>,
+             (outs FPR32:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfdotpexb.s.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+
+
 // Pseudo instructions
 def : InstAlias<"vfsumex.ah.b $rd, $rs1",   (VFSUMEX_H_B FPR16:$rd, FPR16:$rs1), 0>;
 def : InstAlias<"vfnsumex.ah.b $rd, $rs1",   (VFNSUMEX_H_B FPR16:$rd, FPR16:$rs1), 0>;
 def : InstAlias<"vfdotpex.ah.b $rd, $rs1, $rs2",   (VFDOTPEX_H_B FPR16:$rd, FPR16:$rs1, FPR16:$rs2), 0>;
 def : InstAlias<"vfdotpex.ah.r.b $rd, $rs1, $rs2",   (VFDOTPEX_H_R_B FPR16:$rd, FPR16:$rs1, FPR16:$rs2), 0>;
+def : InstAlias<"vfdotpexa.s.ab $rd, $rs1, $rs2",   (VFDOTPEXA_S_B FPR32:$rd, FPR16:$rs1, FPR16:$rs2), 0>;
+def : InstAlias<"vfdotpexa.s.r.ab $rd, $rs1, $rs2",   (VFDOTPEXA_S_R_B FPR32:$rd, FPR16:$rs1, FPR16:$rs2), 0>;
+def : InstAlias<"vfdotpexb.s.ab $rd, $rs1, $rs2",   (VFDOTPEXB_S_B FPR32:$rd, FPR16:$rs1, FPR16:$rs2), 0>;
+def : InstAlias<"vfdotpexb.s.r.ab $rd, $rs1, $rs2",   (VFDOTPEXB_S_R_B FPR32:$rd, FPR16:$rs1, FPR16:$rs2), 0>;
 def : InstAlias<"vfndotpex.ah.b $rd, $rs1, $rs2",   (VFNDOTPEX_H_B FPR16:$rd, FPR16:$rs1, FPR16:$rs2), 0>;
 def : InstAlias<"vfndotpex.ah.r.b $rd, $rs1, $rs2",   (VFNDOTPEX_H_R_B FPR16:$rd, FPR16:$rs1, FPR16:$rs2), 0>;
 } // let Predicates = [HasExtXfexpauxvecquarter]
@@ -1956,6 +1974,20 @@ def VFNDOTPEX_H_B_INX : RVInstRVf<0b10, 0b11101, 0b0, VFMT_FP16INX, RISCVOpcode<
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
 def VFNDOTPEX_H_R_B_INX : RVInstRVf<0b10, 0b11101, 0b1, VFMT_FP16INX, RISCVOpcode<"VFNDOTPEX_H_R_B_INX", 0b0110011>,
              (outs FPR16INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfndotpex.h.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFDOTPEXA_S_B_INX : RVInstRVf<0b10, 0b11100, 0b0, VFMT_FP32INX, RISCVOpcode<"VFDOTPEX_H_B_INX", 0b0110011>,
+             (outs FPR32INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfdotpexa.s.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFDOTPEXA_S_R_B_INX : RVInstRVf<0b10, 0b11100, 0b1, VFMT_FP32INX, RISCVOpcode<"VFDOTPEXA_S_R_B_INX", 0b0110011>,
+             (outs FPR32INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfdotpexa.s.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFDOTPEXB_S_B_INX : RVInstRVf<0b10, 0b11110, 0b0, VFMT_FP32INX, RISCVOpcode<"VFDOTPEXB_S_B_INX", 0b0110011>,
+             (outs FPR32INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfdotpexb.s.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0, DecoderNamespace = "RVZfinx" in
+def VFDOTPEXB_S_R_B_INX : RVInstRVf<0b10, 0b11110, 0b1, VFMT_FP32INX, RISCVOpcode<"VFDOTPEXB_S_R_B_INX", 0b0110011>,
+             (outs FPR32INX:$rd), (ins FPR16INX:$rs1, FPR16INX:$rs2), "vfdotpexb.s.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+
 
 } // let Predicates = [HasExtZexpauxvecquarterinx]
 

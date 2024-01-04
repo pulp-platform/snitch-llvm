@@ -175,11 +175,6 @@ void HeroSnitch::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
   CmdArgs.push_back("-melf32lriscv");
 
-  // from snRuntime
-  CmdArgs.push_back("-plugin-opt=mcpu=snitch");
-  CmdArgs.push_back("-plugin-opt=thinlto");
-  // CmdArgs.push_back("-z norelro");
-
   SmallString<128> InstallDir(this->SnRtInstallDir);
   SmallString<128> LibDir(this->SnRtInstallDir);
   LibDir.append("/lib");

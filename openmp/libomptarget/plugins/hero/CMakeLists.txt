@@ -68,7 +68,7 @@ endif()
 # runtime library, device dependent
 if(${LIBOMPTARGET_HERO_DEV_TYPE} STREQUAL "hero")
   add_definitions(-DLIBOMPTARGET_HERO_DEV_TYPE_HERO)
-  if(EXISTS $ENV{HERO_LIBHERO_DIR}/lib/libhero.so)
+  if(EXISTS $ENV{HERO_LIBHERO_DIR}/lib/libhero.a)
     target_link_libraries(omptarget.rtl.herodev
         $ENV{HERO_LIBHERO_DIR}/lib/libhero.a)
   else()

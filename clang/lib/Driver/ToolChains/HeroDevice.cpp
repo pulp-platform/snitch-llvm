@@ -8,7 +8,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "HeroCommon.h"
 #include "HeroDevice.h"
 #include "CommonArgs.h"
 #include "clang/Driver/Compilation.h"
@@ -23,13 +22,13 @@
 #include "llvm/Support/Regex.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <string>
+
 using namespace clang::driver;
 using namespace clang::driver::toolchains;
 using namespace clang::driver::tools;
 using namespace clang;
 using namespace llvm::opt;
-
-#include <iostream>
 
 /// Hero Toolchain
 // methods are adapted from RISCV.cpp
@@ -39,8 +38,14 @@ HeroDeviceToolChain::HeroDeviceToolChain(const Driver &D,
     : Generic_ELF(D, Triple, Args) {
     GCCInstallation.init(Triple, Args);
 
+    // Parse hero device id from triple
+    parseHeroDevice(Triple.str());
+
+    // Get hero params
+    sysroot_str = HeroDeviceToolChain::getHeroParam(Args, options::OPT_sysroot_EQ_hero1, HeroDeviceType, false);
+    march_str = HeroDeviceToolChain::getHeroParam(Args, options::OPT_march_EQ_hero1, HeroDeviceType, false);
+
     // Parse device's sysroot and add to the toolchain's path
-    getHeroParam(Args, &sysroot, options::OPT_hero_sysroot_EQ);
     auto SysRoot = computeSysRoot();
     getFilePaths().push_back(SysRoot + "/lib");
 
@@ -79,11 +84,19 @@ llvm::opt::DerivedArgList *HeroDeviceToolChain::TranslateArgs(
     for (auto &arg : Args) {
         DAL->append(arg);
     }
+
+    // Append march
+    const OptTable &Opts = getDriver().getOpts();
+    StringRef Value = "-march=";
+    Arg *march = new Arg(Opts.getOption(options::OPT_march_EQ), Value,
+                       Args.getBaseArgs().MakeIndex(Value), march_str.c_str());
+    DAL->append(march);
+
     return DAL;
 }
 
 std::string HeroDeviceToolChain::computeSysRoot() const {
-    return this->sysroot;
+    return sysroot_str;
 }
 
 HeroDevice::Linker::Linker(const ToolChain &TC)
@@ -131,13 +144,17 @@ void HeroDevice::Linker::ConstructJob(Compilation &C, const JobAction &JA,
                                       const InputInfoList &Inputs,
                                       const ArgList &Args,
                                       const char *LinkingOutput) const {
-    const ToolChain &ToolChain = getToolChain();
-    ArgStringList CmdArgs;
+
+    const ToolChain &TC = getToolChain();
+    const HeroDeviceToolChain &HeroDeviceTC = static_cast<const HeroDeviceToolChain&>(TC);
 
     // Get hero params
-    getHeroParam(Args, (std::string*) &this->sysroot, options::OPT_hero_sysroot_EQ);
-    getHeroParam(Args, (std::string*) &this->hero_ld_path, options::OPT_hero_ld_path_EQ);
-    getHeroParam(Args, (std::string*) &this->hero_ld_script_path, options::OPT_hero_T);
+    hero_ld_path = HeroDeviceToolChain::getHeroParam(Args, options::OPT_ld_path_EQ_hero1, HeroDeviceTC.HeroDeviceType, false);
+    hero_ld_script_path = HeroDeviceToolChain::getHeroParam(Args, options::OPT_T_hero1, HeroDeviceTC.HeroDeviceType, true);
+    hero_l = HeroDeviceToolChain::getHeroParam(Args, options::OPT_l_hero1, HeroDeviceTC.HeroDeviceType, true);
+    hero_L = HeroDeviceToolChain::getHeroParam(Args, options::OPT_L_hero1, HeroDeviceTC.HeroDeviceType, true);
+
+    ArgStringList CmdArgs;
 
     // Argument parsing buffer
     SmallString<128> ArgStr;
@@ -145,11 +162,9 @@ void HeroDevice::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     SmallString<128> Linker(hero_ld_path);
 
     CmdArgs.push_back("-melf32lriscv");
+    CmdArgs.push_back("-plugin-opt=mcpu=snitch");
 
-    // Note: Do not add the -L (they are for the host)
-    // Args.AddAllArgs(CmdArgs, options::OPT_L);
-
-    ToolChain.AddFilePathLibArgs(Args, CmdArgs);
+    TC.AddFilePathLibArgs(Args, CmdArgs);
     Args.AddAllArgs(CmdArgs,
                     {options::OPT_T_Group, options::OPT_e, options::OPT_s,
                      options::OPT_t, options::OPT_Z_Flag, options::OPT_r});
@@ -158,47 +173,28 @@ void HeroDevice::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("--no-relax");
 
     // Add linker script given as argument
-    std::cout << "!!! Debug1" << this->hero_ld_script_path << std::endl;
-    CmdArgs.push_back("-T");
-    CmdArgs.push_back(this->hero_ld_script_path.c_str());
+    CmdArgs.push_back(hero_ld_script_path.c_str());
 
-    // Clean inputs to linker
-    InputInfoList FinalInputs;
-    for (auto &Input : Inputs) {
-        if (Input.isInputArg()) {
-            const llvm::opt::Arg &Arg = Input.getInputArg();
-            if (Arg.getSpelling() == "-l" && Arg.getNumValues() > 0) {
-                // Libraries might be host-only
-                // FIXME: use host suffix for now to detect host-only libraries
-                StringRef ArgVal = Arg.getValue();
-                if (ArgVal.endswith("-host")) {
-                    continue;
-                }
-            }
-        }
-        FinalInputs.push_back(Input);
-    }
-    AddLinkerInputs(ToolChain, FinalInputs, Args, CmdArgs, JA);
+    // Add argument flagged for linker input
+    AddLinkerInputs(TC, Inputs, Args, CmdArgs, JA);
 
     Add64BitLinkerMode(C, Output, CmdArgs);
 
-    // Currently no support for C++, otherwise add C++ includes and libs if
-    // compiling C++.
+    // Currently no support for C++, otherwise add C++ includes and libs
 
-    // Add -Lhero and -lhero
-    for (std::string s : Args.getAllArgValues(options::OPT_hero_L)) {
-        CmdArgs.push_back(Args.MakeArgString("-L" + s));
-    }
-    for (std::string s : Args.getAllArgValues(options::OPT_hero_l)) {
-        CmdArgs.push_back(Args.MakeArgString("-l" + s));
-    }
-
+    // Add -Lhero and -lhero args
+    CmdArgs.push_back(hero_l.c_str());
+    CmdArgs.push_back(hero_L.c_str());
 
     CmdArgs.push_back("-lm");
     CmdArgs.push_back("--start-group");
     CmdArgs.push_back("-lc");
     CmdArgs.push_back("-lgloss");
     CmdArgs.push_back("--end-group");
+
+    // Add clang runtime (compiler-rt)
+    CmdArgs.push_back(Args.MakeArgString(
+        C.getDriver().ResourceDir + "/lib/libclang_rt.builtins-" + TC.getTriple().getArchName() + ".a"));
 
     CmdArgs.push_back("-o");
     CmdArgs.push_back(Output.getFilename());

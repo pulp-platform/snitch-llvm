@@ -494,14 +494,22 @@ defvar std = !strconcat("LangStandard::getLangStandardForKind(", lang_std.KeyPat
 // HERO Options
 //===----------------------------------------------------------------------===//
 
-def hero_sysroot_EQ : Joined<["--"], "hero-sysroot=">, HelpText<"(HERO only) 32-bits sysroot for the device binary.">;
-def hero_ld_path_EQ : Joined<["--"], "hero-ld-path=">, HelpText<"(HERO only) Linker to use for the device binary.">;
-def hero_T : JoinedOrSeparate<["-"], "hero-T">, HelpText<"(HERO only) Specify <script> as linker script for the device binary">;
-def hero_L : JoinedOrSeparate<["-"], "hero-L">, Flags<[RenderJoined]>, MetaVarName<"<dir>">, HelpText<"(HERO only) Add directory to library search path for the device binary.">;
-def hero_l : JoinedOrSeparate<["-"], "hero-l">, Flags<[LinkerInput, RenderJoined]>, HelpText<"(HERO only) Add library for the device binary.">;
-
-foreach i = {1-31} in
-  def hero_sysroot_EQ_#i : Joined<["--"], !strconcat("hero-sysroot-", !cast<string>(i), "=")>, HelpText<"(HERO only) 32-bits sysroot for the device binary.">;
+foreach i = {0-31} in
+  def Link_Group_hero#i : OptionGroup<"<T/e/s/t/u group>">, DocName<"Linker flags">, DocBrief<[{(HERO only) Flags that are passed on to the linker}]>;
+foreach i = {0-31} in
+  def m_Group_hero#i: OptionGroup<"<m group>">, Group<CompileOnly_Group>, DocName<"Target-dependent compilation options">;
+foreach i = {0-31} in
+  def L_hero#i : JoinedOrSeparate<["-"], "L-hero" # i >, Flags<[RenderJoined]>, Group<!cast<OptionGroup>("Link_Group_hero" # i)>, MetaVarName<"<dir>">, HelpText<"(HERO only) Add directory to library search path for the device binary.">;
+foreach i = {0-31} in
+  def sysroot_EQ_hero#i : Joined<["--"], "sysroot-hero" # i # "=">, HelpText<"(HERO only) 32-bits sysroot for the device binary.">;
+foreach i = {0-31} in
+  def ld_path_EQ_hero#i : Joined<["--"], "ld-path-hero" # i # "=">, Group<!cast<OptionGroup>("Link_Group_hero" # i)>, HelpText<"(HERO only) Linker to use for the device binary.">;
+foreach i = {0-31} in
+  def T_hero#i : JoinedOrSeparate<["-"], "T-hero" # i >, HelpText<"(HERO only) Specify <script> as linker script for the device binary">;
+foreach i = {0-31} in
+  def l_hero#i : JoinedOrSeparate<["-"], "l-hero" # i >, HelpText<"(HERO only) Add library for the device binary.">;
+foreach i = {0-31} in
+  def march_EQ_hero#i : Joined<["-"], "march-hero" # i # "=">, Group<!cast<OptionGroup>("m_Group_hero" # i)>, Flags<[CoreOption]>;
 
 /////////
 // Options

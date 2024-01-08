@@ -922,7 +922,8 @@ def PV_SHUFFLEI3_SCI_B : Pulp_ALU_vsci<0b11111, 0, 0b111, "pv.shufflei3.sci.b", 
 
 def PV_SHUFFLE2_H : Pulp_ALU_rr_wb<0b1100100, 0b000, OPC_OP_V, "pv.shuffle2.h", PulpV2>;
 def PV_SHUFFLE2_B : Pulp_ALU_rr_wb<0b1100100, 0b001, OPC_OP_V, "pv.shuffle2.b", PulpV4>;
-def PV_PACK_H : Pulp_ALU_rr<0b1101000, 0b000, OPC_OP_V, "pv.pack.h", GPR, GPR, PulpV2>;
+def PV_PACK_H : Pulp_ALU_rr<0b1101001, 0b000, OPC_OP_V, "pv.pack.h", GPR, GPR, PulpV2>;
+def PV_PACK   : Pulp_ALU_rr<0b1101000, 0b000, OPC_OP_V, "pv.pack", GPR, GPR, PulpV2>;
 def PV_PACKHI_B : Pulp_ALU_rr_wb<0b1101100, 0b001, OPC_OP_V, "pv.packhi.b", GPR, GPR, PulpV4>;
 def PV_PACKLO_B : Pulp_ALU_rr_wb<0b1110000, 0b001, OPC_OP_V, "pv.packlo.b", GPR, GPR, PulpV4>;
 
@@ -1674,6 +1675,8 @@ def : Pat<(v4i8 (build_vector (i32 (vector_extract PulpV4:$rs1, GPR:$index0)),
 
 def : Pat<(v2i16 (build_vector GPR:$rs1, GPR:$rs2)),
           (PV_PACK_H GPR:$rs2, GPR:$rs1)>;
+def : Pat<(v2i16 (build_vector GPR:$rs1, GPR:$rs2)),
+          (PV_PACK GPR:$rs2, GPR:$rs1)>;
 def : Pat<(v4i8 (build_vector GPR:$rs1, GPR:$rs2, GPR:$rs3, GPR:$rs4)),
           (PV_PACKLO_B (PV_PACKHI_B_nowb GPR:$rs4, GPR:$rs3), GPR:$rs2, GPR:$rs1)>;
 
@@ -1907,6 +1910,8 @@ defm : int_N_RN_r<"subu", "SUBU">;
 let Predicates = [IsRV32, HasPULPExtVectshufflepack] in {
 def : Pat<(int_riscv_pulp_pack2 GPR:$rs1, GPR:$rs2),
           (PV_PACK_H GPR:$rs2, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_pack2 GPR:$rs1, GPR:$rs2),
+          (PV_PACK GPR:$rs2, GPR:$rs1)>;
 def : Pat<(int_riscv_pulp_pack4 GPR:$rs1, GPR:$rs2, GPR:$rs3, GPR:$rs4),
           (PV_PACKLO_B (PV_PACKHI_B_nowb GPR:$rs4, GPR:$rs3), GPR:$rs2, GPR:$rs1)>;
 def : PatV2V2<int_riscv_pulp_shuffleh, PV_SHUFFLE_H>;

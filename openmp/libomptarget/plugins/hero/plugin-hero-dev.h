@@ -55,7 +55,7 @@
 
 extern "C" {
 
-#include "herodev.h"
+#include "libhero/herodev.h"
 
 #define HERO_DEV_DEFAULT_CLUSTER_ID (0x1U)
 #define HERO_DEV_DEFAULT_FREQ (HERO_DEV_DEFAULT_FREQ_MHZ)

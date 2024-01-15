@@ -12,6 +12,7 @@
 #define LLVM_CLANG_LIB_DRIVER_TOOLCHAINS_HERO_DEVICE_H
 
 #include <string>
+#include <iostream>
 
 #include "Gnu.h"
 #include "clang/Driver/ToolChain.h"
@@ -42,8 +43,8 @@ public:
   TranslateArgs(const llvm::opt::DerivedArgList &Args, StringRef BoundArch,
                 Action::OffloadKind DeviceOffloadKind) const override;
 
-  std::string sysroot_str;
-  std::string march_str;
+  llvm::SmallVector<std::string, 1> sysroot_str;
+  llvm::SmallVector<std::string, 1> march_str;
   int HeroDeviceType;
 
   // Helper function, Python like string replace function
@@ -56,29 +57,46 @@ public:
       return str;
   }
 
-  static std::string getHeroParam(const llvm::opt::ArgList &Args,
-                           clang::driver::options::ID OPT, int HeroDeviceType, bool AddPrefix) {
+  static void getHeroParam(llvm::SmallVectorImpl<std::string> &Result, const llvm::opt::ArgList &Args,
+                           clang::driver::options::ID OPT, int HeroDeviceType, bool AddPrefix, bool Mandatory) {
+    // We need to offset the OPT by the HeroDeviceType (device idx)
+    // Based on the ordering of options IDs in Options.inc we need to know
+    // the stride between hero0-X and hero1-X
+    int opt_stride = options::OPT_hero1_sysroot_EQ - options::OPT_hero0_sysroot_EQ;
+    assert(opt_stride == options::OPT_hero1_l - options::OPT_hero0_l && "Something went wrong in hero options ordering");
+    assert(opt_stride == options::OPT_hero1_L - options::OPT_hero0_L && "Something went wrong in hero options ordering");
 
-    if (!Args.getLastArg(OPT))
-      llvm::createStringError(llvm::inconvertibleErrorCode(),
-                              "No argument found");
+    int OPT_strided = OPT + opt_stride * HeroDeviceType;
+
+    // Verify the argument has been given by the user
+    if (!Args.getLastArg(OPT_strided)) {
+      if (Mandatory) {
+        std::cerr << "Cannot find option " << getDriverOptTable().getOption(OPT_strided).getPrefixedName() <<
+                    " ( " << getDriverOptTable().getOption(OPT).getPrefixedName() <<
+                    " + device " <<  HeroDeviceType << " )" << std::endl;
+        assert(false);
+      } else
+        return;
+    }
 
     // Get ready to remove -hero-X prefix from argument
     std::string prefix = "";
     std::string to_remove = "-hero" + std::to_string(HeroDeviceType);
     std::string result = "";
 
-    // Isolate prefix
-    prefix = Args.getLastArg(OPT)->getSpelling().str();
+    // Isolate argument prefix without -hero-X
+    prefix = Args.getLastArg(OPT_strided)->getSpelling().str();
     prefix = ReplaceAll(prefix, to_remove, "");
 
     // Concat all argument value with or without prefix
-    for (std::string s : Args.getAllArgValues(OPT)) {
-      result += AddPrefix ? " " + prefix + s : " " + ReplaceAll(s, "=", ""); 
+    for (std::string s : Args.getAllArgValues(OPT_strided)) {
+      Result.push_back(AddPrefix ? prefix + s : ReplaceAll(s, "=", ""));
     }
 
-    // Remove first space
-    return result.substr(1);
+    // Check if this parameter is just a flag without value (ex: -heroX-nostdlib)
+    if (Result.empty()) {
+      Result.push_back(AddPrefix ? prefix : "");
+    }
   }
 
 protected:
@@ -115,9 +133,10 @@ public:
                     const char *LinkingOutput) const override;
 
 private:
-  mutable std::string hero_ld_path;
-  mutable std::string hero_ld_script_path;
-  mutable std::string hero_l, hero_L;
+  mutable llvm::SmallVector<std::string, 1> hero_ld_path;
+  mutable llvm::SmallVector<std::string, 1> hero_ld_script_path;
+  mutable llvm::SmallVector<std::string, 4> hero_l, hero_L;
+  mutable llvm::SmallVector<std::string, 1> hero_nostdlib;
 };
 } // end namespace HeroDevice
 } // end namespace tools

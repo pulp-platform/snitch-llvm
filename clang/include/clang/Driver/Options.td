@@ -494,22 +494,26 @@ defvar std = !strconcat("LangStandard::getLangStandardForKind(", lang_std.KeyPat
 // HERO Options
 //===----------------------------------------------------------------------===//
 
-foreach i = {0-31} in
-  def Link_Group_hero#i : OptionGroup<"<T/e/s/t/u group>">, DocName<"Linker flags">, DocBrief<[{(HERO only) Flags that are passed on to the linker}]>;
-foreach i = {0-31} in
-  def m_Group_hero#i: OptionGroup<"<m group>">, Group<CompileOnly_Group>, DocName<"Target-dependent compilation options">;
-foreach i = {0-31} in
-  def L_hero#i : JoinedOrSeparate<["-"], "L-hero" # i >, Flags<[RenderJoined]>, Group<!cast<OptionGroup>("Link_Group_hero" # i)>, MetaVarName<"<dir>">, HelpText<"(HERO only) Add directory to library search path for the device binary.">;
-foreach i = {0-31} in
-  def sysroot_EQ_hero#i : Joined<["--"], "sysroot-hero" # i # "=">, HelpText<"(HERO only) 32-bits sysroot for the device binary.">;
-foreach i = {0-31} in
-  def ld_path_EQ_hero#i : Joined<["--"], "ld-path-hero" # i # "=">, Group<!cast<OptionGroup>("Link_Group_hero" # i)>, HelpText<"(HERO only) Linker to use for the device binary.">;
-foreach i = {0-31} in
-  def T_hero#i : JoinedOrSeparate<["-"], "T-hero" # i >, HelpText<"(HERO only) Specify <script> as linker script for the device binary">;
-foreach i = {0-31} in
-  def l_hero#i : JoinedOrSeparate<["-"], "l-hero" # i >, HelpText<"(HERO only) Add library for the device binary.">;
-foreach i = {0-31} in
-  def march_EQ_hero#i : Joined<["-"], "march-hero" # i # "=">, Group<!cast<OptionGroup>("m_Group_hero" # i)>, Flags<[CoreOption]>;
+// Attention! Verify in Options.inc that -*-heroX appear in contigious and increasing
+// Ids. This is required for getHeroParams (HeroDevice.h).
+foreach i = {0-9} in
+  def hero#i#_Link_Group : OptionGroup<"<T/e/s/t/u group>">, DocName<"Linker flags">, DocBrief<[{(HERO only) Flags that are passed on to the linker}]>;
+foreach i = {0-9} in
+  def hero#i#_m_Group: OptionGroup<"<m group>">, Group<CompileOnly_Group>, DocName<"Target-dependent compilation options">;
+foreach i = {0-9} in
+  def hero#i#_L : JoinedOrSeparate<["-"], "hero" # i # "-L" >, Flags<[RenderJoined]>, Group<!cast<OptionGroup>("hero" # i # "_Link_Group")>, MetaVarName<"<dir>">, HelpText<"(HERO only) Add directory to library search path for the device binary.">;
+foreach i = {0-9} in
+  def hero#i#_sysroot_EQ : Joined<["--"], "hero" # i # "-sysroot" # "=">, HelpText<"(HERO only) 32-bits sysroot for the device binary.">;
+foreach i = {0-9} in
+  def hero#i#_ld_path_EQ : Joined<["--"], "hero" # i # "-ld-path" # "=">, Group<!cast<OptionGroup>("hero" # i # "_Link_Group")>, HelpText<"(HERO only) Linker to use for the device binary.">;
+foreach i = {0-9} in
+  def hero#i#_T : JoinedOrSeparate<["-"], "hero" # i # "-T" >, HelpText<"(HERO only) Specify <script> as linker script for the device binary">;
+foreach i = {0-9} in
+  def hero#i#_l : JoinedOrSeparate<["-"], "hero" # i # "-l" >, HelpText<"(HERO only) Add library for the device binary.">;
+foreach i = {0-9} in
+  def hero#i#_march_EQ : Joined<["-"], "hero" # i # "-march" # "=">, Group<!cast<OptionGroup>("hero" # i # "_m_Group")>, Flags<[CoreOption]>;
+foreach i = {0-9} in
+  def hero#i#_nostdlib : Flag<["-"], "hero" # i # "-nostdlib">, Group<!cast<OptionGroup>("hero" # i # "_Link_Group")>;
 
 /////////
 // Options

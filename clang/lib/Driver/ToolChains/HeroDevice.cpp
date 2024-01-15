@@ -42,8 +42,8 @@ HeroDeviceToolChain::HeroDeviceToolChain(const Driver &D,
     parseHeroDevice(Triple.str());
 
     // Get hero params
-    sysroot_str = HeroDeviceToolChain::getHeroParam(Args, options::OPT_sysroot_EQ_hero1, HeroDeviceType, false);
-    march_str = HeroDeviceToolChain::getHeroParam(Args, options::OPT_march_EQ_hero1, HeroDeviceType, false);
+    HeroDeviceToolChain::getHeroParam(sysroot_str, Args, options::OPT_hero0_sysroot_EQ, HeroDeviceType, false, true);
+    HeroDeviceToolChain::getHeroParam(march_str, Args, options::OPT_hero0_march_EQ, HeroDeviceType, false, true);
 
     // Parse device's sysroot and add to the toolchain's path
     auto SysRoot = computeSysRoot();
@@ -89,14 +89,14 @@ llvm::opt::DerivedArgList *HeroDeviceToolChain::TranslateArgs(
     const OptTable &Opts = getDriver().getOpts();
     StringRef Value = "-march=";
     Arg *march = new Arg(Opts.getOption(options::OPT_march_EQ), Value,
-                       Args.getBaseArgs().MakeIndex(Value), march_str.c_str());
+                       Args.getBaseArgs().MakeIndex(Value), march_str.back().c_str());
     DAL->append(march);
 
     return DAL;
 }
 
 std::string HeroDeviceToolChain::computeSysRoot() const {
-    return sysroot_str;
+    return this->sysroot_str.back();
 }
 
 HeroDevice::Linker::Linker(const ToolChain &TC)
@@ -149,17 +149,18 @@ void HeroDevice::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     const HeroDeviceToolChain &HeroDeviceTC = static_cast<const HeroDeviceToolChain&>(TC);
 
     // Get hero params
-    hero_ld_path = HeroDeviceToolChain::getHeroParam(Args, options::OPT_ld_path_EQ_hero1, HeroDeviceTC.HeroDeviceType, false);
-    hero_ld_script_path = HeroDeviceToolChain::getHeroParam(Args, options::OPT_T_hero1, HeroDeviceTC.HeroDeviceType, true);
-    hero_l = HeroDeviceToolChain::getHeroParam(Args, options::OPT_l_hero1, HeroDeviceTC.HeroDeviceType, true);
-    hero_L = HeroDeviceToolChain::getHeroParam(Args, options::OPT_L_hero1, HeroDeviceTC.HeroDeviceType, true);
+    HeroDeviceToolChain::getHeroParam(hero_ld_path, Args, options::OPT_hero0_ld_path_EQ, HeroDeviceTC.HeroDeviceType, false, true);
+    HeroDeviceToolChain::getHeroParam(hero_ld_script_path, Args, options::OPT_hero0_T, HeroDeviceTC.HeroDeviceType, true, true);
+    HeroDeviceToolChain::getHeroParam(hero_l, Args, options::OPT_hero0_l, HeroDeviceTC.HeroDeviceType, true, true);
+    HeroDeviceToolChain::getHeroParam(hero_L, Args, options::OPT_hero0_L, HeroDeviceTC.HeroDeviceType, true, true);
+    HeroDeviceToolChain::getHeroParam(hero_nostdlib, Args, options::OPT_hero0_nostdlib, HeroDeviceTC.HeroDeviceType, true, false);
 
     ArgStringList CmdArgs;
 
     // Argument parsing buffer
     SmallString<128> ArgStr;
     // Linker path
-    SmallString<128> Linker(hero_ld_path);
+    SmallString<128> Linker(hero_ld_path.back());
 
     CmdArgs.push_back("-melf32lriscv");
     CmdArgs.push_back("-plugin-opt=mcpu=snitch");
@@ -173,7 +174,7 @@ void HeroDevice::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("--no-relax");
 
     // Add linker script given as argument
-    CmdArgs.push_back(hero_ld_script_path.c_str());
+    CmdArgs.push_back(hero_ld_script_path.back().c_str());
 
     // Add argument flagged for linker input
     AddLinkerInputs(TC, Inputs, Args, CmdArgs, JA);
@@ -183,18 +184,19 @@ void HeroDevice::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     // Currently no support for C++, otherwise add C++ includes and libs
 
     // Add -Lhero and -lhero args
-    CmdArgs.push_back(hero_l.c_str());
-    CmdArgs.push_back(hero_L.c_str());
+    for (auto & element : hero_l)
+        CmdArgs.push_back(element.c_str());
+    for (auto & element : hero_L)
+        CmdArgs.push_back(element.c_str());
+
+    if(!hero_nostdlib.empty())
+        CmdArgs.push_back(hero_nostdlib.back().c_str());
 
     CmdArgs.push_back("-lm");
     CmdArgs.push_back("--start-group");
     CmdArgs.push_back("-lc");
     CmdArgs.push_back("-lgloss");
     CmdArgs.push_back("--end-group");
-
-    // Add clang runtime (compiler-rt)
-    CmdArgs.push_back(Args.MakeArgString(
-        C.getDriver().ResourceDir + "/lib/libclang_rt.builtins-" + TC.getTriple().getArchName() + ".a"));
 
     CmdArgs.push_back("-o");
     CmdArgs.push_back(Output.getFilename());

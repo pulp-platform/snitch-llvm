@@ -123,7 +123,6 @@ static int init_hero_device() {
   // reserve virtual addresses overlapping with HERO Device's internal physical address
   // space
   hero_dev_reserve_v_addr(hd);
-
   ret = hero_dev_mmap(hd);
   if (ret < 0) {
     TRACE("ERROR: cannot load device!");
@@ -135,7 +134,6 @@ static int init_hero_device() {
     TRACE("HERO Device running @ %d MHz.", currFreq);
   //  else
   //    GOMP_PLUGIN_fatal("HERO device init failed!");
-
   hero_dev_rab_free(hd, 0x0);
   hero_dev_reset(hd, 0x1);
 

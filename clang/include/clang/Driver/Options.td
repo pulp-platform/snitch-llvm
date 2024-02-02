@@ -514,6 +514,9 @@ foreach i = {0-9} in
   def hero#i#_march_EQ : Joined<["-"], "hero" # i # "-march" # "=">, Group<!cast<OptionGroup>("hero" # i # "_m_Group")>, Flags<[CoreOption]>;
 foreach i = {0-9} in
   def hero#i#_nostdlib : Flag<["-"], "hero" # i # "-nostdlib">, Group<!cast<OptionGroup>("hero" # i # "_Link_Group")>;
+// TODO: Add groups for define -D flag
+foreach i = {0-9} in
+def hero#i#_D : JoinedOrSeparate<["-"], "hero" # i # "-D">;
 
 /////////
 // Options

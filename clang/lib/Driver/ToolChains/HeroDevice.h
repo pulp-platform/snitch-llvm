@@ -43,8 +43,9 @@ public:
   TranslateArgs(const llvm::opt::DerivedArgList &Args, StringRef BoundArch,
                 Action::OffloadKind DeviceOffloadKind) const override;
 
-  llvm::SmallVector<std::string, 1> sysroot_str;
-  llvm::SmallVector<std::string, 1> march_str;
+  llvm::SmallVector<std::string, 1> hero_sysroot;
+  llvm::SmallVector<std::string, 1> hero_march;
+  llvm::SmallVector<std::string, 2> hero_D;
   int HeroDeviceType;
 
   // Helper function, Python like string replace function

@@ -42,8 +42,9 @@ HeroDeviceToolChain::HeroDeviceToolChain(const Driver &D,
     parseHeroDevice(Triple.str());
 
     // Get hero params
-    HeroDeviceToolChain::getHeroParam(sysroot_str, Args, options::OPT_hero0_sysroot_EQ, HeroDeviceType, false, true);
-    HeroDeviceToolChain::getHeroParam(march_str, Args, options::OPT_hero0_march_EQ, HeroDeviceType, false, true);
+    HeroDeviceToolChain::getHeroParam(hero_sysroot, Args, options::OPT_hero0_sysroot_EQ, HeroDeviceType, false, true);
+    HeroDeviceToolChain::getHeroParam(hero_march, Args, options::OPT_hero0_march_EQ, HeroDeviceType, false, true);
+    HeroDeviceToolChain::getHeroParam(hero_D, Args, options::OPT_hero0_D, HeroDeviceType, true, false);
 
     // Parse device's sysroot and add to the toolchain's path
     auto SysRoot = computeSysRoot();
@@ -66,6 +67,9 @@ void HeroDeviceToolChain::addClangTargetOptions(
     // FIXME: extra argument for target to allow dynamic datalayout
     CC1Args.push_back("-D__host=__attribute((address_space(1)))");
     CC1Args.push_back("-D__device=__attribute((address_space(0)))");
+    // Add user input defines
+    for (auto & element : hero_D)
+        CC1Args.push_back(element.c_str());
 }
 
 void HeroDeviceToolChain::AddClangSystemIncludeArgs(
@@ -89,14 +93,14 @@ llvm::opt::DerivedArgList *HeroDeviceToolChain::TranslateArgs(
     const OptTable &Opts = getDriver().getOpts();
     StringRef Value = "-march=";
     Arg *march = new Arg(Opts.getOption(options::OPT_march_EQ), Value,
-                       Args.getBaseArgs().MakeIndex(Value), march_str.back().c_str());
+                       Args.getBaseArgs().MakeIndex(Value), hero_march.back().c_str());
     DAL->append(march);
 
     return DAL;
 }
 
 std::string HeroDeviceToolChain::computeSysRoot() const {
-    return this->sysroot_str.back();
+    return this->hero_sysroot.back();
 }
 
 HeroDevice::Linker::Linker(const ToolChain &TC)
@@ -166,9 +170,9 @@ void HeroDevice::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("-plugin-opt=mcpu=snitch");
 
     TC.AddFilePathLibArgs(Args, CmdArgs);
+
     Args.AddAllArgs(CmdArgs,
-                    {options::OPT_T_Group, options::OPT_e, options::OPT_s,
-                     options::OPT_t, options::OPT_Z_Flag, options::OPT_r});
+                    { options::OPT_T_Group, options::OPT_e, options::OPT_s, options::OPT_t, options::OPT_Z_Flag, options::OPT_r});
 
     // No relocation on ld.lld
     CmdArgs.push_back("--no-relax");
@@ -176,8 +180,18 @@ void HeroDevice::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     // Add linker script given as argument
     CmdArgs.push_back(hero_ld_script_path.back().c_str());
 
+    // Clean Linker inputs
+    // We remove all appart from filenames so that linker inputs like
+    // -L and -l are ignored on the device
+    InputInfoList FinalInputs;
+    for(auto& II : Inputs) {
+        if(II.isFilename()) {
+            FinalInputs.push_back(II);
+        }
+    }
+
     // Add argument flagged for linker input
-    AddLinkerInputs(TC, Inputs, Args, CmdArgs, JA);
+    AddLinkerInputs(TC, FinalInputs, Args, CmdArgs, JA);
 
     Add64BitLinkerMode(C, Output, CmdArgs);
 
@@ -207,6 +221,6 @@ void HeroDevice::Linker::ConstructJob(Compilation &C, const JobAction &JA,
         JA, *this,
         ResponseFileSupport{ResponseFileSupport::RF_Full, llvm::sys::WEM_UTF8,
                             "--options-file"},
-        Args.MakeArgString(Linker), CmdArgs, Inputs));
+        Args.MakeArgString(Linker), CmdArgs, FinalInputs));
 }
 // Hero tools end.

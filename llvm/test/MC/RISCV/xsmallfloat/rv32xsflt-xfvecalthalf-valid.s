@@ -105,8 +105,8 @@ vfcpkd.ah.d f30, f25, f8
 # CHECK-ASM: encoding: [0x33,0x06,0x60,0x98]
 vfcvt.s.ah f12, f0
 # CHECK-ASM: encoding: [0xb3,0xce,0x6a,0x98]
-vfcvtu.s.ah f29, x21
+vfcvtu.s.ah f29, f21
 # CHECK-ASM: encoding: [0x33,0x25,0x47,0x98]
 vfcvt.ah.s f10, f14
 # CHECK-ASM: encoding: [0x33,0xef,0x48,0x98]
-vfcvtu.ah.s f30, x17
+vfcvtu.ah.s f30, f17

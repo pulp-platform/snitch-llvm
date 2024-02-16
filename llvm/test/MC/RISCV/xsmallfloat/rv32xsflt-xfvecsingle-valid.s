@@ -108,9 +108,9 @@ vfcvt.h.h f4, f17
 vfcvt.h.ah f19, f14
 # CHECK-ASM: encoding: [0xb3,0x29,0x5d,0x98]
 vfcvt.ah.h f19, f26
-# CHECK-ASM: encoding: [0xb3,0xe8,0x5c,0x98]
-vfcvtu.h.h f17, x25
+# CHECK-ASM: encoding: [0xb3,0x68,0x5b,0x98]
+vfcvtu.h.h f17, f22
 # CHECK-ASM: encoding: [0xb3,0x62,0x51,0x98]
-vfcvtu.h.ah f5, x2
+vfcvtu.h.ah f5, f2
 # CHECK-ASM: encoding: [0x33,0xe9,0x5b,0x98]
-vfcvtu.ah.h f18, x23
+vfcvtu.ah.h f18, f23

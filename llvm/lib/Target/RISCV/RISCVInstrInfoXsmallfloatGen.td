@@ -538,15 +538,15 @@ def VFCVT_H_H : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP16, RISCVOpcode<"VFCVT_H_H"
   }
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 def VFCVTU_H_H : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP16, RISCVOpcode<"VFCVTU_H_H", 0b0110011>,
-             (outs FPR16:$rd), (ins GPR:$rs1), "vfcvtu.h.h", "$rd, $rs1">, Sched<[]> {
+             (outs FPR16:$rd), (ins FPR16:$rs1), "vfcvtu.h.h", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00101;
   }
 
 // Pseudo instructions
 def : InstAlias<"vfcvt.h.ah $rd, $rs1",   (VFCVT_H_H FPR16:$rd, FPR16:$rs1), 0>;
 def : InstAlias<"vfcvt.ah.h $rd, $rs1",   (VFCVT_H_H FPR16:$rd, FPR16:$rs1), 0>;
-def : InstAlias<"vfcvtu.h.ah $rd, $rs1",   (VFCVTU_H_H FPR16:$rd, GPR:$rs1), 0>;
-def : InstAlias<"vfcvtu.ah.h $rd, $rs1",   (VFCVTU_H_H FPR16:$rd, GPR:$rs1), 0>;
+def : InstAlias<"vfcvtu.h.ah $rd, $rs1",   (VFCVTU_H_H FPR16:$rd, FPR16:$rs1), 0>;
+def : InstAlias<"vfcvtu.ah.h $rd, $rs1",   (VFCVTU_H_H FPR16:$rd, FPR16:$rs1), 0>;
 } // let Predicates = [HasExtXfvecsingle]
 
 
@@ -736,7 +736,7 @@ def VFCVT_S_H : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP32, RISCVOpcode<"VFCVT_S_H"
   }
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 def VFCVTU_S_H : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP32, RISCVOpcode<"VFCVTU_S_H", 0b0110011>,
-             (outs FPR32:$rd), (ins GPR:$rs1), "vfcvtu.s.h", "$rd, $rs1">, Sched<[]> {
+             (outs FPR32:$rd), (ins FPR16:$rs1), "vfcvtu.s.h", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00110;
   }
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
@@ -746,7 +746,7 @@ def VFCVT_H_S : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP16, RISCVOpcode<"VFCVT_H_S"
   }
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 def VFCVTU_H_S : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP16, RISCVOpcode<"VFCVTU_H_S", 0b0110011>,
-             (outs FPR16:$rd), (ins GPR:$rs1), "vfcvtu.h.s", "$rd, $rs1">, Sched<[]> {
+             (outs FPR16:$rd), (ins FPR32:$rs1), "vfcvtu.h.s", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00100;
   }
 
@@ -820,9 +820,9 @@ def : InstAlias<"vfcpkb.ah.d $rd, $rs1, $rs2",   (VFCPKB_H_D FPR16:$rd, FPR64:$r
 def : InstAlias<"vfcpkc.ah.d $rd, $rs1, $rs2",   (VFCPKC_H_D FPR16:$rd, FPR64:$rs1, FPR64:$rs2), 0>;
 def : InstAlias<"vfcpkd.ah.d $rd, $rs1, $rs2",   (VFCPKD_H_D FPR16:$rd, FPR64:$rs1, FPR64:$rs2), 0>;
 def : InstAlias<"vfcvt.s.ah $rd, $rs1",   (VFCVT_S_H FPR32:$rd, FPR16:$rs1), 0>;
-def : InstAlias<"vfcvtu.s.ah $rd, $rs1",   (VFCVTU_S_H FPR32:$rd, GPR:$rs1), 0>;
+def : InstAlias<"vfcvtu.s.ah $rd, $rs1",   (VFCVTU_S_H FPR32:$rd, FPR16:$rs1), 0>;
 def : InstAlias<"vfcvt.ah.s $rd, $rs1",   (VFCVT_H_S FPR16:$rd, FPR32:$rs1), 0>;
-def : InstAlias<"vfcvtu.ah.s $rd, $rs1",   (VFCVTU_H_S FPR16:$rd, GPR:$rs1), 0>;
+def : InstAlias<"vfcvtu.ah.s $rd, $rs1",   (VFCVTU_H_S FPR16:$rd, FPR32:$rs1), 0>;
 } // let Predicates = [HasExtXfvecalthalf]
 
 
@@ -1012,7 +1012,7 @@ def VFCVT_S_B : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP32, RISCVOpcode<"VFCVT_S_B"
   }
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 def VFCVTU_S_B : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP32, RISCVOpcode<"VFCVTU_S_B", 0b0110011>,
-             (outs FPR32:$rd), (ins GPR:$rs1), "vfcvtu.s.b", "$rd, $rs1">, Sched<[]> {
+             (outs FPR32:$rd), (ins FPR16:$rs1), "vfcvtu.s.b", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00111;
   }
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
@@ -1022,7 +1022,7 @@ def VFCVT_B_S : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP8, RISCVOpcode<"VFCVT_B_S",
   }
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 def VFCVTU_B_S : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP8, RISCVOpcode<"VFCVTU_B_S", 0b0110011>,
-             (outs FPR16:$rd), (ins GPR:$rs1), "vfcvtu.b.s", "$rd, $rs1">, Sched<[]> {
+             (outs FPR16:$rd), (ins FPR32:$rs1), "vfcvtu.b.s", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00100;
   }
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
@@ -1032,7 +1032,7 @@ def VFCVT_H_B : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP16, RISCVOpcode<"VFCVT_H_B"
   }
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 def VFCVTU_H_B : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP16, RISCVOpcode<"VFCVTU_H_B", 0b0110011>,
-             (outs FPR16:$rd), (ins GPR:$rs1), "vfcvtu.h.b", "$rd, $rs1">, Sched<[]> {
+             (outs FPR16:$rd), (ins FPR16:$rs1), "vfcvtu.h.b", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00111;
   }
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
@@ -1042,7 +1042,7 @@ def VFCVT_B_H : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP8, RISCVOpcode<"VFCVT_B_H",
   }
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 def VFCVTU_B_H : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP8, RISCVOpcode<"VFCVTU_B_H", 0b0110011>,
-             (outs FPR16:$rd), (ins GPR:$rs1), "vfcvtu.b.h", "$rd, $rs1">, Sched<[]> {
+             (outs FPR16:$rd), (ins FPR16:$rs1), "vfcvtu.b.h", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00110;
   }
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
@@ -1052,19 +1052,19 @@ def VFCVT_B_B : RVInstRVf<0b10, 0b01100, 0b0, VFMT_FP8, RISCVOpcode<"VFCVT_B_B",
   }
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 def VFCVTU_B_B : RVInstRVf<0b10, 0b01100, 0b1, VFMT_FP8, RISCVOpcode<"VFCVTU_B_B", 0b0110011>,
-             (outs FPR16:$rd), (ins GPR:$rs1), "vfcvtu.b.b", "$rd, $rs1">, Sched<[]> {
+             (outs FPR16:$rd), (ins FPR16:$rs1), "vfcvtu.b.b", "$rd, $rs1">, Sched<[]> {
     let rs2 = 0b00111;
   }
 
 // Pseudo instructions
 def : InstAlias<"vfcvt.ah.b $rd, $rs1",   (VFCVT_H_B FPR16:$rd, FPR16:$rs1), 0>;
-def : InstAlias<"vfcvtu.ah.b $rd, $rs1",   (VFCVTU_H_B FPR16:$rd, GPR:$rs1), 0>;
+def : InstAlias<"vfcvtu.ah.b $rd, $rs1",   (VFCVTU_H_B FPR16:$rd, FPR16:$rs1), 0>;
 def : InstAlias<"vfcvt.b.ah $rd, $rs1",   (VFCVT_B_H FPR16:$rd, FPR16:$rs1), 0>;
-def : InstAlias<"vfcvtu.b.ah $rd, $rs1",   (VFCVTU_B_H FPR16:$rd, GPR:$rs1), 0>;
+def : InstAlias<"vfcvtu.b.ah $rd, $rs1",   (VFCVTU_B_H FPR16:$rd, FPR16:$rs1), 0>;
 def : InstAlias<"vfcvt.ab.b $rd, $rs1",   (VFCVT_B_B FPR16:$rd, FPR16:$rs1), 0>;
 def : InstAlias<"vfcvt.b.ab $rd, $rs1",   (VFCVT_B_B FPR16:$rd, FPR16:$rs1), 0>;
-def : InstAlias<"vfcvtu.ab.b $rd, $rs1",   (VFCVTU_B_B FPR16:$rd, GPR:$rs1), 0>;
-def : InstAlias<"vfcvtu.b.ab $rd, $rs1",   (VFCVTU_B_B FPR16:$rd, GPR:$rs1), 0>;
+def : InstAlias<"vfcvtu.ab.b $rd, $rs1",   (VFCVTU_B_B FPR16:$rd, FPR16:$rs1), 0>;
+def : InstAlias<"vfcvtu.b.ab $rd, $rs1",   (VFCVTU_B_B FPR16:$rd, FPR16:$rs1), 0>;
 } // let Predicates = [HasExtXfvecquarter]
 
 
@@ -1134,17 +1134,17 @@ def : InstAlias<"vfcpkb.ab.d $rd, $rs1, $rs2",   (VFCPKB_B_D FPR16:$rd, FPR64:$r
 def : InstAlias<"vfcpkc.ab.d $rd, $rs1, $rs2",   (VFCPKC_B_D FPR16:$rd, FPR64:$rs1, FPR64:$rs2), 0>;
 def : InstAlias<"vfcpkd.ab.d $rd, $rs1, $rs2",   (VFCPKD_B_D FPR16:$rd, FPR64:$rs1, FPR64:$rs2), 0>;
 def : InstAlias<"vfcvt.s.ab $rd, $rs1",   (VFCVT_S_B FPR32:$rd, FPR16:$rs1), 0>;
-def : InstAlias<"vfcvtu.s.ab $rd, $rs1",   (VFCVTU_S_B FPR32:$rd, GPR:$rs1), 0>;
+def : InstAlias<"vfcvtu.s.ab $rd, $rs1",   (VFCVTU_S_B FPR32:$rd, FPR16:$rs1), 0>;
 def : InstAlias<"vfcvt.ab.s $rd, $rs1",   (VFCVT_B_S FPR16:$rd, FPR32:$rs1), 0>;
-def : InstAlias<"vfcvtu.ab.s $rd, $rs1",   (VFCVTU_B_S FPR16:$rd, GPR:$rs1), 0>;
+def : InstAlias<"vfcvtu.ab.s $rd, $rs1",   (VFCVTU_B_S FPR16:$rd, FPR32:$rs1), 0>;
 def : InstAlias<"vfcvt.h.ab $rd, $rs1",   (VFCVT_H_B FPR16:$rd, FPR16:$rs1), 0>;
-def : InstAlias<"vfcvtu.h.ab $rd, $rs1",   (VFCVTU_H_B FPR16:$rd, GPR:$rs1), 0>;
+def : InstAlias<"vfcvtu.h.ab $rd, $rs1",   (VFCVTU_H_B FPR16:$rd, FPR16:$rs1), 0>;
 def : InstAlias<"vfcvt.ab.h $rd, $rs1",   (VFCVT_B_H FPR16:$rd, FPR16:$rs1), 0>;
-def : InstAlias<"vfcvtu.ab.h $rd, $rs1",   (VFCVTU_B_H FPR16:$rd, GPR:$rs1), 0>;
+def : InstAlias<"vfcvtu.ab.h $rd, $rs1",   (VFCVTU_B_H FPR16:$rd, FPR16:$rs1), 0>;
 def : InstAlias<"vfcvt.ah.ab $rd, $rs1",   (VFCVT_H_B FPR16:$rd, FPR16:$rs1), 0>;
-def : InstAlias<"vfcvtu.ah.ab $rd, $rs1",   (VFCVTU_H_B FPR16:$rd, GPR:$rs1), 0>;
+def : InstAlias<"vfcvtu.ah.ab $rd, $rs1",   (VFCVTU_H_B FPR16:$rd, FPR16:$rs1), 0>;
 def : InstAlias<"vfcvt.ab.ah $rd, $rs1",   (VFCVT_B_H FPR16:$rd, FPR16:$rs1), 0>;
-def : InstAlias<"vfcvtu.ab.ah $rd, $rs1",   (VFCVTU_B_H FPR16:$rd, GPR:$rs1), 0>;
+def : InstAlias<"vfcvtu.ab.ah $rd, $rs1",   (VFCVTU_B_H FPR16:$rd, FPR16:$rs1), 0>;
 } // let Predicates = [HasExtXfvecaltquarter]
 
 

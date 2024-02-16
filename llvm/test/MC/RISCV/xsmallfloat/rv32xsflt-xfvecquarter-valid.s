@@ -105,27 +105,27 @@ vfcpkd.b.d f19, f7, f6
 # CHECK-ASM: encoding: [0xb3,0x88,0x7d,0x98]
 vfcvt.s.b f17, f27
 # CHECK-ASM: encoding: [0x33,0xcf,0x74,0x98]
-vfcvtu.s.b f30, x9
+vfcvtu.s.b f30, f9
 # CHECK-ASM: encoding: [0xb3,0x37,0x4a,0x98]
 vfcvt.b.s f15, f20
 # CHECK-ASM: encoding: [0x33,0x7d,0x46,0x98]
-vfcvtu.b.s f26, x12
+vfcvtu.b.s f26, f12
 # CHECK-ASM: encoding: [0xb3,0xad,0x75,0x98]
 vfcvt.h.b f27, f11
 # CHECK-ASM: encoding: [0xb3,0xe5,0x77,0x98]
-vfcvtu.h.b f11, x15
+vfcvtu.h.b f11, f15
 # CHECK-ASM: encoding: [0x33,0xb8,0x69,0x98]
 vfcvt.b.h f16, f19
 # CHECK-ASM: encoding: [0x33,0xf9,0x6e,0x98]
-vfcvtu.b.h f18, x29
+vfcvtu.b.h f18, f29
 # CHECK-ASM: encoding: [0x33,0xa8,0x7f,0x98]
 vfcvt.ah.b f16, f31
 # CHECK-ASM: encoding: [0x33,0xe4,0x78,0x98]
-vfcvtu.ah.b f8, x17
+vfcvtu.ah.b f8, f17
 # CHECK-ASM: encoding: [0xb3,0x34,0x66,0x98]
 vfcvt.b.ah f9, f12
 # CHECK-ASM: encoding: [0x33,0x77,0x66,0x98]
-vfcvtu.b.ah f14, x12
+vfcvtu.b.ah f14, f12
 # CHECK-ASM: encoding: [0x33,0x3a,0x70,0x98]
 vfcvt.b.b f20, f0
 # CHECK-ASM: encoding: [0x33,0xb0,0x73,0x98]
@@ -133,8 +133,8 @@ vfcvt.ab.b f0, f7
 # CHECK-ASM: encoding: [0xb3,0xbe,0x7e,0x98]
 vfcvt.b.ab f29, f29
 # CHECK-ASM: encoding: [0xb3,0xf5,0x7b,0x98]
-vfcvtu.b.b f11, x23
+vfcvtu.b.b f11, f23
 # CHECK-ASM: encoding: [0x33,0xff,0x73,0x98]
-vfcvtu.ab.b f30, x7
+vfcvtu.ab.b f30, f7
 # CHECK-ASM: encoding: [0xb3,0x79,0x74,0x98]
-vfcvtu.b.ab f19, x8
+vfcvtu.b.ab f19, f8

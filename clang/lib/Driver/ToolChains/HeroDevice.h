@@ -46,6 +46,7 @@ public:
   llvm::SmallVector<std::string, 1> hero_sysroot;
   llvm::SmallVector<std::string, 1> hero_march;
   llvm::SmallVector<std::string, 2> hero_D;
+  llvm::SmallVector<std::string, 2> hero_I;
   int HeroDeviceType;
 
   // Helper function, Python like string replace function

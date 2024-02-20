@@ -45,6 +45,7 @@ HeroDeviceToolChain::HeroDeviceToolChain(const Driver &D,
     HeroDeviceToolChain::getHeroParam(hero_sysroot, Args, options::OPT_hero0_sysroot_EQ, HeroDeviceType, false, true);
     HeroDeviceToolChain::getHeroParam(hero_march, Args, options::OPT_hero0_march_EQ, HeroDeviceType, false, true);
     HeroDeviceToolChain::getHeroParam(hero_D, Args, options::OPT_hero0_D, HeroDeviceType, true, false);
+    HeroDeviceToolChain::getHeroParam(hero_I, Args, options::OPT_hero0_I, HeroDeviceType, true, false);
 
     // Parse device's sysroot and add to the toolchain's path
     auto SysRoot = computeSysRoot();
@@ -69,6 +70,8 @@ void HeroDeviceToolChain::addClangTargetOptions(
     CC1Args.push_back("-D__device=__attribute((address_space(0)))");
     // Add user input defines
     for (auto & element : hero_D)
+        CC1Args.push_back(element.c_str());
+    for (auto & element : hero_I)
         CC1Args.push_back(element.c_str());
 }
 
@@ -167,7 +170,6 @@ void HeroDevice::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     SmallString<128> Linker(hero_ld_path.back());
 
     CmdArgs.push_back("-melf32lriscv");
-    CmdArgs.push_back("-plugin-opt=mcpu=snitch");
 
     TC.AddFilePathLibArgs(Args, CmdArgs);
 

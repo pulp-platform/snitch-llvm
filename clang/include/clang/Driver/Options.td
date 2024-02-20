@@ -516,7 +516,9 @@ foreach i = {0-9} in
   def hero#i#_nostdlib : Flag<["-"], "hero" # i # "-nostdlib">, Group<!cast<OptionGroup>("hero" # i # "_Link_Group")>;
 // TODO: Add groups for define -D flag
 foreach i = {0-9} in
-def hero#i#_D : JoinedOrSeparate<["-"], "hero" # i # "-D">;
+  def hero#i#_D : JoinedOrSeparate<["-"], "hero" # i # "-D">;
+foreach i = {0-9} in
+  def hero#i#_I : JoinedOrSeparate<["-"], "hero" # i # "-I">, MetaVarName<"<dir>">;
 
 /////////
 // Options

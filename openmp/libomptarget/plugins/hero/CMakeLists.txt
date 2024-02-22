@@ -44,41 +44,44 @@ if(LIBOMPTARGET_ENABLE_PREM)
   add_definitions(-DPREM_MODE)
 endif()
 
-add_library(omptarget.rtl.herodev SHARED
-  rtl.cpp
-)
 
-# Install plugin under the lib destination folder.
-install(TARGETS omptarget.rtl.herodev LIBRARY DESTINATION "${OPENMP_INSTALL_LIBDIR}")
-
-if(LIBOMPTARGET_ENABLE_PREM)
-  target_link_libraries(omptarget.rtl.herodev
-    ${LIBOMPTARGET_DEP_LIBFFI_LIBRARIES}
-    ${LIBOMPTARGET_DEP_LIBELF_LIBRARIES}
-    "cmux-vote"
-    "premnotify"
-  )
-else()
-  target_link_libraries(omptarget.rtl.herodev
-    ${LIBOMPTARGET_DEP_LIBFFI_LIBRARIES}
-    ${LIBOMPTARGET_DEP_LIBELF_LIBRARIES}
-  )
+if(LIBOMPTARGET_HERO_DEV_TYPE STREQUAL "")
+  message(FATAL_ERROR "No device chosen for Hero (LIBOMPTARGET_HERO_DEV_TYPE)")
 endif()
 
-# runtime library, device dependent
-if( DEFINED LIBOMPTARGET_HERO_DEV_TYPE )
-  string(TOLOWER ${LIBOMPTARGET_HERO_DEV_TYPE} LIBOMPTARGET_HERO_DEV_TYPE_LOWER)
-  add_definitions(-DLIBOMPTARGET_HERO_DEV_TYPE_${LIBOMPTARGET_HERO_DEV_TYPE})
-  if(EXISTS $ENV{HERO_LIBHERO_DIR}/lib/libhero_${LIBOMPTARGET_HERO_DEV_TYPE_LOWER}.so)
-    target_link_libraries(omptarget.rtl.herodev
-        $ENV{HERO_LIBHERO_DIR}/lib/libhero_${LIBOMPTARGET_HERO_DEV_TYPE_LOWER}.so)
+foreach(HERO_DEV_TYPE ${LIBOMPTARGET_HERO_DEV_TYPE})
+
+  string(TOLOWER ${HERO_DEV_TYPE} HERO_DEV_TYPE_LOWER)
+
+  add_library(omptarget.rtl.herodev_${HERO_DEV_TYPE_LOWER} SHARED
+    rtl.cpp
+  )
+
+  # Install plugin under the lib destination folder.
+  install(TARGETS omptarget.rtl.herodev_${HERO_DEV_TYPE_LOWER} LIBRARY DESTINATION "${OPENMP_INSTALL_LIBDIR}")
+
+  if(LIBOMPTARGET_ENABLE_PREM)
+    target_link_libraries(omptarget.rtl.herodev_${HERO_DEV_TYPE_LOWER}
+      ${LIBOMPTARGET_DEP_LIBFFI_LIBRARIES}
+      ${LIBOMPTARGET_DEP_LIBELF_LIBRARIES}
+      "cmux-vote"
+      "premnotify"
+    )
   else()
-    message( FATAL_ERROR ${LIBOMPTARGET_HERO_DEV_TYPE_LOWER} ".so not found" )
+    target_link_libraries(omptarget.rtl.herodev_${HERO_DEV_TYPE_LOWER}
+      ${LIBOMPTARGET_DEP_LIBFFI_LIBRARIES}
+      ${LIBOMPTARGET_DEP_LIBELF_LIBRARIES}
+    )
   endif()
-else()
-  message( FATAL_ERROR "No device type for LIBOMPTARGET_HERO_DEV_TYPE=" ${LIBOMPTARGET_HERO_DEV_TYPE} )
-endif()
 
+  add_definitions(-DLIBOMPTARGET_HERO_DEV_TYPE_${HERO_DEV_TYPE})
+  if(EXISTS $ENV{HERO_LIBHERO_DIR}/lib/libhero_${HERO_DEV_TYPE_LOWER}.so)
+    target_link_libraries(omptarget.rtl.herodev_${HERO_DEV_TYPE_LOWER}
+        $ENV{HERO_LIBHERO_DIR}/lib/libhero_${HERO_DEV_TYPE_LOWER}.so)
+  else()
+    message( FATAL_ERROR $ENV{HERO_LIBHERO_DIR} "/lib/libhero_" ${HERO_DEV_TYPE_LOWER} ".so not found" )
+  endif()
+endforeach()
 
 # Report to the parent scope that we are building a plugin for HERO.
 set(LIBOMPTARGET_SYSTEM_TARGETS "${LIBOMPTARGET_SYSTEM_TARGETS} hero" PARENT_SCOPE)

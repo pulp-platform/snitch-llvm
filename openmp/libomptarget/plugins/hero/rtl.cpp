@@ -76,6 +76,7 @@ void __tgt_register_requires(int64_t flags) {
 }
 
 int32_t __tgt_rtl_init_device(int32_t device_id) {
+  hero_add_timestamp("start",__func__,0);
   DP("__tgt_rtl_init_device(%d)\n", device_id);
   if (device_id != HERODEV_SVM && device_id != HERODEV_MEMCPY) {
     DP("HERO Device plugin should have device id %d (memcpy) or %d (svm)\n",
@@ -314,10 +315,12 @@ bool map_to_mem(__tgt_device_image *image, void **target, size_t *size) {
 bool load_and_execute_image(__tgt_device_image *image) {
   void *image_start;
   size_t image_size;
+  hero_add_timestamp("start_tx",__func__,0);
   bool success = map_to_mem(image, &image_start, &image_size);
   if (!success) {
     return false;
   }
+  hero_add_timestamp("end_tx",__func__,0);
 
   hero_dev_exe_start(hd);
   return true;
@@ -325,6 +328,7 @@ bool load_and_execute_image(__tgt_device_image *image) {
 
 __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
                                           __tgt_device_image *image) {
+  hero_add_timestamp("start",__func__,0);
   DP("__tgt_rtl_load_binary(%d, " DPxMOD ")\n", device_id, DPxPTR(image));
 
   DP("Dev %d: load binary from " DPxMOD " image\n", device_id,
@@ -376,12 +380,12 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
 
   table->EntriesBegin = &*sym_vec->begin();
   table->EntriesEnd = &*sym_vec->end();
-
+  hero_add_timestamp("end",__func__,0);
   return table;
 }
 
 void *__tgt_rtl_data_alloc(int32_t device_id, int64_t size, void *hst_ptr, int32_t kind) {
-
+  hero_add_timestamp("start",__func__,0);
   if (kind != TARGET_ALLOC_DEFAULT) {
     REPORT("Invalid target data allocation kind or requested allocator not "
            "implemented yet\n");
@@ -396,11 +400,13 @@ void *__tgt_rtl_data_alloc(int32_t device_id, int64_t size, void *hst_ptr, int32
   } else {
     ptr = GOMP_OFFLOAD_alloc(device_id, size);
   }
+  hero_add_timestamp("end",__func__,0);
   return ptr;
 }
 
 int32_t __tgt_rtl_data_submit(int32_t device_id, void *tgt_ptr, void *hst_ptr,
                               int64_t size) {
+  hero_add_timestamp("start",__func__,0);
   DP("__tgt_rtl_data_submit(device_id=%d, tgt_ptr=" DPxMOD ", hst_ptr=" DPxMOD
      ", size=%lld\n",
      device_id, DPxPTR(tgt_ptr), DPxPTR(hst_ptr), size);
@@ -408,9 +414,9 @@ int32_t __tgt_rtl_data_submit(int32_t device_id, void *tgt_ptr, void *hst_ptr,
     assert(hst_ptr == tgt_ptr);
     return OFFLOAD_SUCCESS;
   }
-  return GOMP_OFFLOAD_host2dev(device_id, tgt_ptr, hst_ptr, size)
-             ? OFFLOAD_SUCCESS
-             : OFFLOAD_FAIL;
+  int32_t err = GOMP_OFFLOAD_host2dev(device_id, tgt_ptr, hst_ptr, size) ? OFFLOAD_SUCCESS : OFFLOAD_FAIL;
+  hero_add_timestamp("end",__func__,0);
+  return err;
 }
 
 int32_t __tgt_rtl_data_retrieve(int32_t device_id, void *hst_ptr, void *tgt_ptr,
@@ -442,16 +448,7 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
                                          int32_t arg_num, int32_t team_num,
                                          int32_t thread_limit,
                                          uint64_t loop_tripcount) {
-  DP("__tgt_rtl_run_target_team_region(..)\n");
-
-#ifdef PREM_MODE
-  // disallow realloc
-  if (arg_num + 1 > ARG_BUF_SIZE) {
-    DP("argument buffer too large, max. number of args: %d\n",
-           ARG_BUF_SIZE - 1);
-    return OFFLOAD_FAIL;
-    }
-#endif
+  hero_add_timestamp("start",__func__,0);
 
   for (int32_t i = 0; i < arg_num; i++) {
     if (tgt_offsets[i] != 0) {
@@ -461,46 +458,24 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
   }
 
   host_arg_buf.clear();
-  DP("Offload Args (%p): ", host_arg_buf.data());
   for (int32_t i = 0; i < arg_num; i++) {
     host_arg_buf.push_back((uint64_t)tgt_args[i]);
-    DP(DPxMOD ", ", DPxPTR((void *)tgt_args[i]));
   }
-  DP("\n");
-
-#ifdef PREM_MODE
-  host_arg_buf.push_back(((uint32_t)channel_phys));
-  DP(DPxMOD ", ", DPxPTR((void*) channel_phys));
-#endif
 
   void *host_buf = host_arg_buf.data();
-  if (device_id == HERODEV_SVM) {
-    // FIXME: assumes the host buf is in 32-bit range for now
-    dev_arg_buf = host_buf;
-  } else {
-    size_t size = sizeof(uint64_t) * host_arg_buf.size();
+  size_t size = sizeof(uint64_t) * host_arg_buf.size();
+  __tgt_rtl_data_submit(device_id, dev_arg_buf, host_buf, size);
 
-    DP("copying argbuf from host buffer " DPxMOD " to device buffer: " DPxMOD
-       "\n",
-       DPxPTR(host_buf), DPxPTR(dev_arg_buf));
-    __tgt_rtl_data_submit(device_id, dev_arg_buf, host_buf, size);
-  }
 
-  // instruct HERO Device to run the offload function
-  DP("Start offloading...\n");
+  hero_add_timestamp("offload_start",__func__,0);
+
   hero_dev_mbox_write(hd, MBOX_DEVICE_START);
   hero_dev_mbox_write(hd, (uint32_t)tgt_entry_ptr);
   hero_dev_mbox_write(hd, (uint32_t)dev_arg_buf);
-  const uint32_t num_miss_handler_threads = (device_id == HERODEV_SVM) ? 1 : 0;
+  const uint32_t num_miss_handler_threads = 0;
   hero_dev_mbox_write(hd, num_miss_handler_threads);
 
-#ifdef PREM_MODE
-  // synchronize with CMUX
-  DP("starting PREM sync on channel (virt/phys): " DPxMOD ", "
-        DPxMOD "\n", DPxPTR(channel_virt), DPxPTR(channel_phys));
-  host_sync(&voteopts);
-  DP("Done PREM sync\n");
-#endif
+  hero_add_timestamp("offload_wait",__func__,0);
 
   uint32_t ret[2];
   while (hero_dev_mbox_read(hd, (unsigned int *)&ret[0], 1));
@@ -508,25 +483,9 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
          "Software mailbox protocol failure: Expected MBOX_DEVICE_DONE.");
   while (hero_dev_mbox_read(hd, (unsigned int *)&ret[1], 1));
 
-#if defined(LIBOMPTARGET_HERO_DEV_TYPE_PULP)
-  for (unsigned i = 0; i < hero_dev_get_nb_pe(hd); ++i) {
-    const size_t stdout_buf_size = 1024*1024; // FIXME: this should be defined in the same place as
-                                              // for HERO Device
-    const size_t stdout_offset_per_core = stdout_buf_size / hero_dev_get_nb_pe(hd);
-    const volatile char* ptr = NULL;//(char*)hd->l3_mem.v_addr + stdout_offset_per_core * i;
-    const volatile char* const end = ptr + stdout_offset_per_core;
-    if (!*ptr)
-      continue;
-    printf(">>> PRINTING BUFFER OF CORE %d:\n", i);
-    while (*ptr && ptr < end) {
-      printf("%c", *ptr);
-      ++ptr;
-    }
-    printf("<<< END OF BUFFER\n");
-  }
-#endif // defined(LIBOMPTARGET_HERO_DEV_TYPE_PULP)
-
   DP("Done offloading, cycles to execute kernel: %d!\n", (int)ret[1]);
+  hero_add_timestamp("end",__func__,0);
+  hero_device_cycles[hero_num_device_cycles++] = (uint32_t) ret[1];
 
   return OFFLOAD_SUCCESS;
 }

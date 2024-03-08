@@ -28,6 +28,7 @@
  */
 
 #ifndef PLUGIN_HERO_DEV_H__
+#define PLUGIN_HERO_DEV_H__
 
 #define PRINT_CYCLES_PLUGIN_HERO_DEV 1
 #define DEBUG_LEVEL_PLUGIN_HERO_DEV 0
@@ -65,6 +66,7 @@ extern "C" {
 #define HERO_DEV_DEFAULT_INTR_RAB_MISS_DIS (0x1U)
 #define HERO_DEV_DEFAULT_ACP_EN (0x0U)
 #define HERO_DEV_DEFAULT_TIMEOUT (20U)
+
 }
 
 /* Start/end addresses of functions and global variables on a device.  */

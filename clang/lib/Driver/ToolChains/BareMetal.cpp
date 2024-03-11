@@ -75,23 +75,38 @@ static bool findRISCVMultilibs(const Driver &D,
     MultilibBuilder Imafc = MultilibBuilder("/rv32imafc/ilp32f")
                                 .flag("-march=rv32imafc")
                                 .flag("-mabi=ilp32f");
+    MultilibBuilder Imafd = MultilibBuilder("/rv32imafd/ilp32d")
+                                .flag("-march=rv32imafd")
+                                .flag("-mabi=ilp32d");
+    MultilibBuilder Imfcxpulpv2 = MultilibBuilder("/rv32imfcxpulpv2/ilp32f", 2)
+                                .flag("-march=rv32imfcxpulpv2")
+                                .flag("-mabi=ilp32f");
 
     // Multilib reuse
     bool UseI = (Arch == "rv32i") || (Arch == "rv32ic");    // ic => i
-    bool UseIm = (Arch == "rv32im") || (Arch == "rv32imc"); // imc => im
+    bool UseIm = (Arch == "rv32im") || (Arch == "rv32ima") || (Arch == "rv32imc"); // ima,imc => im
     bool UseImafc = (Arch == "rv32imafc") || (Arch == "rv32imafdc") ||
                     (Arch == "rv32gc"); // imafdc,gc => imafc
+    std::string prefix = "rv32imafd";
+    bool UseImafd  = (Arch.substr(0, prefix.size()) == prefix);
+    prefix = "rv32imaf";
+    bool UseImaf  = !UseImafc && !UseImafd && (Arch.substr(0, prefix.size()) == prefix);
 
     addMultilibFlag(UseI, "-march=rv32i", Flags);
     addMultilibFlag(UseIm, "-march=rv32im", Flags);
     addMultilibFlag((Arch == "rv32iac"), "-march=rv32iac", Flags);
     addMultilibFlag((Arch == "rv32imac"), "-march=rv32imac", Flags);
     addMultilibFlag(UseImafc, "-march=rv32imafc", Flags);
+    addMultilibFlag(UseImaf, "-march=rv32imaf", Flags);
+    addMultilibFlag(UseImafd, "-march=rv32imafd", Flags);
+    addMultilibFlag((Arch == "rv32imcxpulpv2"), "-march=rv32imcxpulpv2", Flags);
+    addMultilibFlag((Arch == "rv32imfcxpulpv2"), "-march=rv32imfcxpulpv2", Flags);
     addMultilibFlag(Abi == "ilp32", "-mabi=ilp32", Flags);
     addMultilibFlag(Abi == "ilp32f", "-mabi=ilp32f", Flags);
+    addMultilibFlag(Abi == "ilp32d", "-mabi=ilp32d", Flags);
 
     Result.Multilibs =
-        MultilibSetBuilder().Either(I, Im, Iac, Imac, Imafc).makeMultilibSet();
+        MultilibSetBuilder().Either(I, Im, Iac, Imac, Imaf, Imafc, Imafd, Imcxpulpv2, Imfcxpulpv2).makeMultilibSet();
     return Result.Multilibs.select(Flags, Result.SelectedMultilibs);
   }
   return false;

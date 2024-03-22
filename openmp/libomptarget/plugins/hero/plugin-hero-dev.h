@@ -119,6 +119,8 @@ static int init_hero_device() {
   int ret;
   int currFreq = 0x0;
 
+  hero_add_timestamp("device_init",__func__,0);
+
   hd = &hero_dev;
   //hd->cluster_sel = HERO_DEV_DEFAULT_CLUSTER_ID;
 

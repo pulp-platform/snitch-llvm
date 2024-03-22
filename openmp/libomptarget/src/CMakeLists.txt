@@ -41,3 +41,5 @@ target_link_libraries(omptarget PRIVATE
 # Install libomptarget under the lib destination folder.
 install(TARGETS omptarget LIBRARY COMPONENT omptarget
   DESTINATION "${OPENMP_INSTALL_LIBDIR}")
+
+include_directories($ENV{HERO_LIBHERO_DIR}/include)

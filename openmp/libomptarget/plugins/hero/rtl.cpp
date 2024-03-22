@@ -76,7 +76,6 @@ void __tgt_register_requires(int64_t flags) {
 }
 
 int32_t __tgt_rtl_init_device(int32_t device_id) {
-  hero_add_timestamp("start",__func__,0);
   DP("__tgt_rtl_init_device(%d)\n", device_id);
   if (device_id != HERODEV_SVM && device_id != HERODEV_MEMCPY) {
     DP("HERO Device plugin should have device id %d (memcpy) or %d (svm)\n",
@@ -315,12 +314,10 @@ bool map_to_mem(__tgt_device_image *image, void **target, size_t *size) {
 bool load_and_execute_image(__tgt_device_image *image) {
   void *image_start;
   size_t image_size;
-  hero_add_timestamp("start_tx",__func__,0);
   bool success = map_to_mem(image, &image_start, &image_size);
   if (!success) {
     return false;
   }
-  hero_add_timestamp("end_tx",__func__,0);
 
   hero_dev_exe_start(hd);
   return true;
@@ -328,7 +325,7 @@ bool load_and_execute_image(__tgt_device_image *image) {
 
 __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
                                           __tgt_device_image *image) {
-  hero_add_timestamp("start",__func__,0);
+  hero_add_timestamp("load_binary",__func__,0);
   DP("__tgt_rtl_load_binary(%d, " DPxMOD ")\n", device_id, DPxPTR(image));
 
   DP("Dev %d: load binary from " DPxMOD " image\n", device_id,
@@ -341,11 +338,12 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
     return NULL;
   }
 
-
   success = load_and_execute_image(image);
   if (!success) {
     return NULL;
   }
+
+  hero_add_timestamp("init_omp",__func__,0);
 
   // init argument buffers
   host_arg_buf.reserve(ARG_BUF_SIZE); // memory leak
@@ -380,12 +378,10 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t device_id,
 
   table->EntriesBegin = &*sym_vec->begin();
   table->EntriesEnd = &*sym_vec->end();
-  hero_add_timestamp("end",__func__,0);
   return table;
 }
 
 void *__tgt_rtl_data_alloc(int32_t device_id, int64_t size, void *hst_ptr, int32_t kind) {
-  hero_add_timestamp("start",__func__,0);
   if (kind != TARGET_ALLOC_DEFAULT) {
     REPORT("Invalid target data allocation kind or requested allocator not "
            "implemented yet\n");
@@ -400,13 +396,11 @@ void *__tgt_rtl_data_alloc(int32_t device_id, int64_t size, void *hst_ptr, int32
   } else {
     ptr = GOMP_OFFLOAD_alloc(device_id, size);
   }
-  hero_add_timestamp("end",__func__,0);
   return ptr;
 }
 
 int32_t __tgt_rtl_data_submit(int32_t device_id, void *tgt_ptr, void *hst_ptr,
                               int64_t size) {
-  hero_add_timestamp("start",__func__,0);
   DP("__tgt_rtl_data_submit(device_id=%d, tgt_ptr=" DPxMOD ", hst_ptr=" DPxMOD
      ", size=%lld\n",
      device_id, DPxPTR(tgt_ptr), DPxPTR(hst_ptr), size);
@@ -415,7 +409,6 @@ int32_t __tgt_rtl_data_submit(int32_t device_id, void *tgt_ptr, void *hst_ptr,
     return OFFLOAD_SUCCESS;
   }
   int32_t err = GOMP_OFFLOAD_host2dev(device_id, tgt_ptr, hst_ptr, size) ? OFFLOAD_SUCCESS : OFFLOAD_FAIL;
-  hero_add_timestamp("end",__func__,0);
   return err;
 }
 
@@ -448,8 +441,7 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
                                          int32_t arg_num, int32_t team_num,
                                          int32_t thread_limit,
                                          uint64_t loop_tripcount) {
-  hero_add_timestamp("start",__func__,0);
-
+  hero_add_timestamp("send_args",__func__,0);
   for (int32_t i = 0; i < arg_num; i++) {
     if (tgt_offsets[i] != 0) {
       fprintf(stderr, "Unimplemented: non-zero offset");
@@ -466,16 +458,13 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
   size_t size = sizeof(uint64_t) * host_arg_buf.size();
   __tgt_rtl_data_submit(device_id, dev_arg_buf, host_buf, size);
 
-
-  hero_add_timestamp("offload_start",__func__,0);
+  hero_add_timestamp("offload_wait",__func__,0);
 
   hero_dev_mbox_write(hd, MBOX_DEVICE_START);
   hero_dev_mbox_write(hd, (uint32_t)tgt_entry_ptr);
   hero_dev_mbox_write(hd, (uint32_t)dev_arg_buf);
   const uint32_t num_miss_handler_threads = 0;
   hero_dev_mbox_write(hd, num_miss_handler_threads);
-
-  hero_add_timestamp("offload_wait",__func__,0);
 
   uint32_t ret[2];
   while (hero_dev_mbox_read(hd, (unsigned int *)&ret[0], 1));
@@ -484,8 +473,9 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
   while (hero_dev_mbox_read(hd, (unsigned int *)&ret[1], 1));
 
   DP("Done offloading, cycles to execute kernel: %d!\n", (int)ret[1]);
-  hero_add_timestamp("end",__func__,0);
   hero_device_cycles[hero_num_device_cycles++] = (uint32_t) ret[1];
+
+  hero_add_timestamp("offload_return",__func__,0);
 
   return OFFLOAD_SUCCESS;
 }

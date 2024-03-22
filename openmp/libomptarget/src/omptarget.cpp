@@ -20,6 +20,12 @@
 #include <cstdint>
 #include <vector>
 
+
+extern "C" {
+#include "libhero/herodev.h"
+}
+
+
 int AsyncInfoTy::synchronize() {
   int Result = OFFLOAD_SUCCESS;
   if (AsyncInfo.Queue) {
@@ -1439,6 +1445,7 @@ int target(ident_t *loc, DeviceTy &Device, void *HostPtr, int32_t ArgNum,
            map_var_info_t *ArgNames, void **ArgMappers, int32_t TeamNum,
            int32_t ThreadLimit, int IsTeamConstruct, AsyncInfoTy &AsyncInfo) {
   int32_t DeviceId = Device.DeviceID;
+  hero_add_timestamp((char*)"map",(char*)__func__,0);
 
   TableMap *TM = getTableMap(HostPtr);
   // No map for this host pointer found!

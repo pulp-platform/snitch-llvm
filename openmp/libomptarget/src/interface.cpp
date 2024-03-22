@@ -21,6 +21,10 @@
 #include <cstdlib>
 #include <mutex>
 
+extern "C" {
+#include "libhero/herodev.h"
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 /// adds requires flags
 EXTERN void __tgt_register_requires(int64_t flags) {
@@ -279,6 +283,7 @@ EXTERN int __tgt_target_mapper(ident_t *loc, int64_t device_id, void *host_ptr,
                                int64_t *arg_sizes, int64_t *arg_types,
                                map_var_info_t *arg_names, void **arg_mappers) {
   TIMESCOPE_WITH_IDENT(loc);
+  hero_add_timestamp((char*)"init",(char*)__func__,0);
   DP("Entering target region with entry point " DPxMOD " and device Id %" PRId64
      "\n",
      DPxPTR(host_ptr), device_id);

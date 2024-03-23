@@ -1,0 +1,45 @@
+# RUN: llc -x mir -march=riscv32 -mattr=+xpulpv -run-pass=pulp-expand-pseudo < %s | FileCheck %s
+name: pulp_pseudo_test_01
+body:    |
+  bb.0:
+    ; CHECK-LABEL: name: pulp_pseudo_test_01
+    ; CHECK: [[VALUE:%[0-9]+]]:gpr = ADDI $x0, 60
+    ; CHECK-NEXT: {{%[0-9]+}}:gpr = PV_ADD_SC_B $x0, killed [[VALUE]] 
+    %0:gpr = ADDI $x0, 60
+    %1:gpr = PseudoPV_ADD_SC_B_VL $x0, killed %0:gpr, -1
+    PseudoRET
+...
+---
+
+name: pulp_pseudo_test_02
+body:    |
+  bb.0:
+    ; CHECK-LABEL: name: pulp_pseudo_test_02
+    ; CHECK: {{%[0-9]+}}:gpr = PV_ADD_SCI_B $x0, 2
+    %0:gpr = PseudoPV_ADD_SCI_B_VL $x0, 2, -1
+    PseudoRET
+...
+---
+
+name: pulp_pseudo_test_03
+body:    |
+  bb.0:
+    ; CHECK-LABEL: name: pulp_pseudo_test_03
+    ; CHECK: [[VALUE:%[0-9]+]]:gpr = ADDI $x0, 60
+    ; CHECK-NEXT: {{%[0-9]+}}:gpr = PV_ADD_SC_H $x0, killed [[VALUE]]
+    %0:gpr = ADDI $x0, 60
+    %1:gpr = PseudoPV_ADD_SC_H_VL $x0, killed %0:gpr, -1
+    PseudoRET
+...
+---
+
+name: pulp_pseudo_test_04
+body:    |
+  bb.0:
+    ; CHECK-LABEL: name: pulp_pseudo_test_04
+    ; CHECK: {{%[0-9]+}}:gpr = PV_ADD_SCI_H $x0, 2
+    %0:gpr = PseudoPV_ADD_SCI_H_VL $x0, 2, -1
+    PseudoRET
+...
+---
+

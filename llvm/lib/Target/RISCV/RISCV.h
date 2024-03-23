@@ -81,6 +81,10 @@ void initializeRISCVMoveMergePass(PassRegistry &);
 
 FunctionPass *createRISCVPushPopOptimizationPass();
 void initializeRISCVPushPopOptPass(PassRegistry &);
+
+FunctionPass *createPULPExpandPseudoPass();
+void initializePULPExpandPseudoPass(PassRegistry &);
+
 FunctionPass *createPULPHardwareLoops();
 void initializePULPHardwareLoopsPass(PassRegistry &);
 

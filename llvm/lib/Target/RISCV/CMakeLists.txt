@@ -68,6 +68,7 @@ add_llvm_target(RISCVCodeGen
   GISel/RISCVPreLegalizerCombiner.cpp
   GISel/RISCVRegisterBankInfo.cpp
   Snitch/SNITCHFrepLoops.cpp
+  PULPExpandPseudoInsts.cpp
 
   LINK_COMPONENTS
   Analysis

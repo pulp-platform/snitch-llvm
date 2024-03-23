@@ -907,6 +907,14 @@ let isCodeGenOnly = 1 in { // Helper for Patterns
   def PV_SHUFFLE_B_GPR : Pulp_ALU_rr<0b1100000, 0b001, OPC_OP_V, "pv.shuffle.b", PulpV4, GPR, GPR>;
 }
 
+// Pseudos used to lower vector splat operations on packed SIMD data types
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in {
+  def PseudoPV_ADD_SC_H_VL  : Pseudo<(outs PulpV2:$dst), (ins GPR:$src1, GPR:$src2, AVL:$vl),[]>;
+  def PseudoPV_ADD_SC_B_VL  : Pseudo<(outs PulpV4:$dst), (ins GPR:$src1, GPR:$src2, AVL:$vl),[]>;
+  def PseudoPV_ADD_SCI_H_VL : Pseudo<(outs PulpV2:$dst), (ins GPR:$src1, simm6:$imm, AVL:$vl),[]>;
+  def PseudoPV_ADD_SCI_B_VL : Pseudo<(outs PulpV4:$dst), (ins GPR:$src1, simm6:$imm, AVL:$vl),[]>;
+}
+
 } // Predicates = [IsRV32, HasPULPExtV2], DecoderNamespace = "RV32Xpulp"
 
 //===----------------------------------------------------------------------===//
@@ -1588,6 +1596,18 @@ def : Pat<(v4i8 (build_vector GPR:$rs1, GPR:$rs2, GPR:$rs3, GPR:$rs4)),
 
 def : Pat<(v2i16 (splat_vector GPR:$rs1)), (PV_PACK_H GPR:$rs1, GPR:$rs1)>;
 def : Pat<(v4i8 (splat_vector GPR:$rs1)), (PV_ADD_SC_B X0, GPR:$rs1)>;
+
+
+// Pattern to map vector splat operations on pseudos
+def : Pat<(v2i16 (riscv_vmv_v_x_vl (v2i16 undef), GPR:$imm, VLOpFrag)),
+          (PseudoPV_ADD_SC_H_VL X0, GPR:$imm, $vl)>;
+def : Pat<(v2i16 (riscv_vmv_v_x_vl (v2i16 undef), simm6:$imm, VLOpFrag)),
+          (PseudoPV_ADD_SCI_H_VL X0, simm6:$imm, $vl)>;
+def : Pat<(v4i8 (riscv_vmv_v_x_vl (v4i8 undef), GPR:$imm, VLOpFrag)),
+          (PseudoPV_ADD_SC_B_VL X0, GPR:$imm, $vl)>;
+def : Pat<(v4i8 (riscv_vmv_v_x_vl (v4i8 undef), simm6:$imm, VLOpFrag)),
+          (PseudoPV_ADD_SCI_B_VL X0, simm6:$imm, $vl)>;
+
 
 defm : GeneralSVectorPattern<seteq, "CMPEQ">;
 defm : GeneralSVectorPattern<setne, "CMPNE">;

@@ -377,8 +377,8 @@ int targetDataMapper(ident_t *loc, DeviceTy &Device, void *arg_base, void *arg,
                      map_var_info_t arg_names, void *arg_mapper,
                      AsyncInfoTy &AsyncInfo,
                      TargetDataFuncPtrTy target_data_function) {
-  TIMESCOPE_WITH_IDENT(loc);
-  DP("Calling the mapper function " DPxMOD "\n", DPxPTR(arg_mapper));
+  // TIMESCOPE_WITH_IDENT(loc);
+  // DP("Calling the mapper function " DPxMOD "\n", DPxPTR(arg_mapper));
 
   // The mapper function fills up Components.
   MapperComponentsTy MapperComponents;
@@ -430,7 +430,7 @@ int targetDataBegin(ident_t *loc, DeviceTy &Device, int32_t arg_num,
       // Instead of executing the regular path of targetDataBegin, call the
       // targetDataMapper variant which will call targetDataBegin again
       // with new arguments.
-      DP("Calling targetDataMapper for the %dth argument\n", i);
+      // DP("Calling targetDataMapper for the %dth argument\n", i);
 
       map_var_info_t arg_name = (!arg_names) ? nullptr : arg_names[i];
       int rc = targetDataMapper(loc, Device, args_base[i], args[i],
@@ -461,9 +461,9 @@ int targetDataBegin(ident_t *loc, DeviceTy &Device, int32_t arg_num,
         getParentIndex(arg_types[next_i]) == i) {
       padding = (int64_t)HstPtrBegin % Alignment;
       if (padding) {
-        DP("Using a padding of %" PRId64 " bytes for begin address " DPxMOD
-           "\n",
-           padding, DPxPTR(HstPtrBegin));
+        //DP("Using a padding of %" PRId64 " bytes for begin address " DPxMOD
+        //   "\n",
+        //   padding, DPxPTR(HstPtrBegin));
         HstPtrBegin = (char *)HstPtrBegin - padding;
         data_size += padding;
       }
@@ -487,7 +487,7 @@ int targetDataBegin(ident_t *loc, DeviceTy &Device, int32_t arg_num,
     bool UpdateRef =
         !(arg_types[i] & OMP_TGT_MAPTYPE_MEMBER_OF) && !(FromMapper && i == 0);
     if (arg_types[i] & OMP_TGT_MAPTYPE_PTR_AND_OBJ) {
-      DP("Has a pointer entry: \n");
+      // DP("Has a pointer entry: \n");
       // Base is address of pointer.
       //
       // Usually, the pointer is already allocated by this time.  For example:
@@ -513,10 +513,10 @@ int targetDataBegin(ident_t *loc, DeviceTy &Device, int32_t arg_num,
                                   : "device failure or illegal mapping");
         return OFFLOAD_FAIL;
       }
-      DP("There are %zu bytes allocated at target address " DPxMOD " - is%s new"
-         "\n",
-         sizeof(void *), DPxPTR(PointerTgtPtrBegin),
-         (Pointer_TPR.Flags.IsNewEntry ? "" : " not"));
+      //DP("There are %zu bytes allocated at target address " DPxMOD " - is%s new"
+      //   "\n",
+      //   sizeof(void *), DPxPTR(PointerTgtPtrBegin),
+      //   (Pointer_TPR.Flags.IsNewEntry ? "" : " not"));
       Pointer_HstPtrBegin = HstPtrBase;
       // modify current entry.
       HstPtrBase = *(void **)HstPtrBase;
@@ -542,14 +542,14 @@ int targetDataBegin(ident_t *loc, DeviceTy &Device, int32_t arg_num,
                                 : "device failure or illegal mapping");
       return OFFLOAD_FAIL;
     }
-    DP("There are %" PRId64 " bytes allocated at target address " DPxMOD
-       " - is%s new\n",
-       data_size, DPxPTR(TgtPtrBegin), (TPR.Flags.IsNewEntry ? "" : " not"));
+    //DP("There are %" PRId64 " bytes allocated at target address " DPxMOD
+    //   " - is%s new\n",
+    //   data_size, DPxPTR(TgtPtrBegin), (TPR.Flags.IsNewEntry ? "" : " not"));
 
     if (arg_types[i] & OMP_TGT_MAPTYPE_RETURN_PARAM) {
       uintptr_t Delta = (uintptr_t)HstPtrBegin - (uintptr_t)HstPtrBase;
       void *TgtPtrBase = (void *)((uintptr_t)TgtPtrBegin - Delta);
-      DP("Returning device pointer " DPxMOD "\n", DPxPTR(TgtPtrBase));
+      //DP("Returning device pointer " DPxMOD "\n", DPxPTR(TgtPtrBase));
       args_base[i] = TgtPtrBase;
     }
 
@@ -587,8 +587,8 @@ int targetDataBegin(ident_t *loc, DeviceTy &Device, int32_t arg_num,
             *Pointer_TPR.MapTableEntry);
         Device.ShadowMtx.unlock();
 
-        DP("Update pointer (" DPxMOD ") -> [" DPxMOD "]\n",
-           DPxPTR(PointerTgtPtrBegin), DPxPTR(TgtPtrBegin));
+        //DP("Update pointer (" DPxMOD ") -> [" DPxMOD "]\n",
+        //   DPxPTR(PointerTgtPtrBegin), DPxPTR(TgtPtrBegin));
 
         void *&TgtPtrBase = AsyncInfo.getVoidPtrLocation();
         TgtPtrBase = ExpectedTgtPtrBase;
@@ -688,7 +688,7 @@ int targetDataEnd(ident_t *loc, DeviceTy &Device, int32_t ArgNum,
       // Instead of executing the regular path of targetDataEnd, call the
       // targetDataMapper variant which will call targetDataEnd again
       // with new arguments.
-      DP("Calling targetDataMapper for the %dth argument\n", I);
+      // DP("Calling targetDataMapper for the %dth argument\n", I);
 
       map_var_info_t ArgName = (!ArgNames) ? nullptr : ArgNames[I];
       Ret = targetDataMapper(loc, Device, ArgBases[I], Args[I], ArgSizes[I],
@@ -1284,6 +1284,7 @@ static int processDataBefore(ident_t *loc, int64_t DeviceId, void *HostPtr,
                              PrivateArgumentManagerTy &PrivateArgumentManager,
                              AsyncInfoTy &AsyncInfo) {
   TIMESCOPE_WITH_NAME_AND_IDENT("mappingBeforeTargetRegion", loc);
+  hero_add_timestamp((char*)"all",(char*)__func__,0);
   DeviceTy &Device = *PM->Devices[DeviceId];
   int Ret = targetDataBegin(loc, Device, ArgNum, ArgBases, Args, ArgSizes,
                             ArgTypes, ArgNames, ArgMappers, AsyncInfo);
@@ -1412,7 +1413,8 @@ static int processDataAfter(ident_t *loc, int64_t DeviceId, void *HostPtr,
                             map_var_info_t *ArgNames, void **ArgMappers,
                             PrivateArgumentManagerTy &PrivateArgumentManager,
                             AsyncInfoTy &AsyncInfo) {
-  TIMESCOPE_WITH_NAME_AND_IDENT("mappingAfterTargetRegion", loc);
+  hero_add_timestamp((char*)"all",(char*)__func__,0);
+  //TIMESCOPE_WITH_NAME_AND_IDENT("mappingAfterTargetRegion", loc);
   DeviceTy &Device = *PM->Devices[DeviceId];
 
   // Move data from device.
@@ -1445,7 +1447,6 @@ int target(ident_t *loc, DeviceTy &Device, void *HostPtr, int32_t ArgNum,
            map_var_info_t *ArgNames, void **ArgMappers, int32_t TeamNum,
            int32_t ThreadLimit, int IsTeamConstruct, AsyncInfoTy &AsyncInfo) {
   int32_t DeviceId = Device.DeviceID;
-  hero_add_timestamp((char*)"map",(char*)__func__,0);
 
   TableMap *TM = getTableMap(HostPtr);
   // No map for this host pointer found!

@@ -79,7 +79,7 @@ USED inline std::atomic<uint32_t> &getInfoLevelInternal() {
   return InfoLevel;
 }
 
-USED inline uint32_t getInfoLevel() { return getInfoLevelInternal().load(); }
+USED inline uint32_t getInfoLevel() { return 0; }
 
 // Add __attribute__((used)) to work around a bug in gcc 5/6.
 USED inline uint32_t getDebugLevel() {

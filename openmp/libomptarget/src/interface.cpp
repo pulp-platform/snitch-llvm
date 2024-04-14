@@ -282,16 +282,16 @@ EXTERN int __tgt_target_mapper(ident_t *loc, int64_t device_id, void *host_ptr,
                                int32_t arg_num, void **args_base, void **args,
                                int64_t *arg_sizes, int64_t *arg_types,
                                map_var_info_t *arg_names, void **arg_mappers) {
-  TIMESCOPE_WITH_IDENT(loc);
-  hero_add_timestamp((char*)"init",(char*)__func__,0);
-  DP("Entering target region with entry point " DPxMOD " and device Id %" PRId64
-     "\n",
-     DPxPTR(host_ptr), device_id);
+  //TIMESCOPE_WITH_IDENT(loc);
+  //DP("Entering target region with entry point " DPxMOD " and device Id %" PRId64
+  //   "\n",
+  //   DPxPTR(host_ptr), device_id);
   if (checkDeviceAndCtors(device_id, loc)) {
     DP("Not offloading to device %" PRId64 "\n", device_id);
     return OMP_TGT_FAIL;
   }
 
+  /*
   if (getInfoLevel() & OMP_INFOTYPE_KERNEL_ARGS)
     printKernelArguments(loc, device_id, arg_num, arg_sizes, arg_types,
                          arg_names, "Entering OpenMP kernel");
@@ -303,6 +303,7 @@ EXTERN int __tgt_target_mapper(ident_t *loc, int64_t device_id, void *host_ptr,
        (arg_names) ? getNameFromMapping(arg_names[i]).c_str() : "unknown");
   }
 #endif
+*/
 
   DeviceTy &Device = *PM->Devices[device_id];
   AsyncInfoTy AsyncInfo(Device);

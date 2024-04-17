@@ -516,12 +516,12 @@ int32_t DeviceTy::retrieveData(void *HstPtrBegin, void *TgtPtrBegin,
   if (getInfoLevel() & OMP_INFOTYPE_DATA_TRANSFER) {
     LookupResult LR = lookupMapping(HstPtrBegin, Size);
     auto *HT = &*LR.Entry;
-    INFO(OMP_INFOTYPE_DATA_TRANSFER, DeviceID,
-         "Copying data from device to host, TgtPtr=" DPxMOD ", HstPtr=" DPxMOD
-         ", Size=%" PRId64 ", Name=%s\n",
-         DPxPTR(TgtPtrBegin), DPxPTR(HstPtrBegin), Size,
-         (HT && HT->HstPtrName) ? getNameFromMapping(HT->HstPtrName).c_str()
-                                : "unknown");
+    //INFO(OMP_INFOTYPE_DATA_TRANSFER, DeviceID,
+    //     "Copying data from device to host, TgtPtr=" DPxMOD ", HstPtr=" DPxMOD
+    //     ", Size=%" PRId64 ", Name=%s\n",
+    //     DPxPTR(TgtPtrBegin), DPxPTR(HstPtrBegin), Size,
+    //     (HT && HT->HstPtrName) ? getNameFromMapping(HT->HstPtrName).c_str()
+    //                            : "unknown");
   }
 
   if (!RTL->data_retrieve_async || !RTL->synchronize)

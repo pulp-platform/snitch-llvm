@@ -394,7 +394,12 @@ void *__tgt_rtl_data_alloc(int32_t device_id, int64_t size, void *hst_ptr, int32
   if (device_id == HERODEV_SVM) {
     ptr = hst_ptr;
   } else {
+    //char toprint[128];
+    //snprintf(toprint, 128, "alloc-%x", hst_ptr);
+    //hero_add_timestamp(toprint,__func__,0);
     ptr = GOMP_OFFLOAD_alloc(device_id, size);
+    //snprintf(toprint, 128, "end-alloc-%x", hst_ptr);
+    //hero_add_timestamp(toprint,__func__,0);
   }
   return ptr;
 }
@@ -414,25 +419,39 @@ int32_t __tgt_rtl_data_submit(int32_t device_id, void *tgt_ptr, void *hst_ptr,
 
 int32_t __tgt_rtl_data_retrieve(int32_t device_id, void *hst_ptr, void *tgt_ptr,
                                 int64_t size) {
-  DP("__tgt_rtl_data_retrieve(device_id=%d, hst_ptr=" DPxMOD ", tgt_ptr=" DPxMOD
-     ", size=%lld\n",
-     device_id, DPxPTR(hst_ptr), DPxPTR(tgt_ptr), size);
+  //DP("__tgt_rtl_data_retrieve(device_id=%d, hst_ptr=" DPxMOD ", tgt_ptr=" DPxMOD
+  //   ", size=%lld\n",
+  //   device_id, DPxPTR(hst_ptr), DPxPTR(tgt_ptr), size);
+  int32_t ret;
   if (device_id == HERODEV_SVM) {
     assert(hst_ptr == tgt_ptr);
     return OFFLOAD_SUCCESS;
   }
-  return GOMP_OFFLOAD_dev2host(device_id, hst_ptr, tgt_ptr, size)
+  //char toprint[128];
+  //snprintf(toprint, 128, "retrieve-%x", hst_ptr);
+  //hero_add_timestamp(toprint,__func__,0);
+  ret = GOMP_OFFLOAD_dev2host(device_id, hst_ptr, tgt_ptr, size)
              ? OFFLOAD_SUCCESS
              : OFFLOAD_FAIL;
+  //snprintf(toprint, 128, "end-retrieve-%x", hst_ptr);
+  //hero_add_timestamp(toprint,__func__,0);
+  return ret;
 }
 
 int32_t __tgt_rtl_data_delete(int32_t device_id, void *tgt_ptr) {
+  int32_t ret;
   DP("__tgt_rtl_data_delete(device_id=%d, tgt_ptr=" DPxMOD ")\n", device_id,
      DPxPTR(tgt_ptr));
   if (device_id == HERODEV_SVM) {
     return OFFLOAD_SUCCESS;
   }
-  return GOMP_OFFLOAD_free(device_id, tgt_ptr) ? OFFLOAD_SUCCESS : OFFLOAD_FAIL;
+  //char toprint[128];
+  //snprintf(toprint, 128, "dealloc-%x", tgt_ptr);
+  //hero_add_timestamp(toprint,__func__,0);
+  ret = GOMP_OFFLOAD_free(device_id, tgt_ptr) ? OFFLOAD_SUCCESS : OFFLOAD_FAIL;
+  //snprintf(toprint, 128, "end-dealloc-%x", tgt_ptr);
+  //hero_add_timestamp(toprint,__func__,0);
+  return ret;
 }
 
 int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,

@@ -20,10 +20,11 @@
 #include <cstdint>
 #include <vector>
 
-
+#ifdef LIBOMPTARGET_HERO
 extern "C" {
 #include "libhero/herodev.h"
 }
+#endif
 
 
 int AsyncInfoTy::synchronize() {
@@ -1284,7 +1285,9 @@ static int processDataBefore(ident_t *loc, int64_t DeviceId, void *HostPtr,
                              PrivateArgumentManagerTy &PrivateArgumentManager,
                              AsyncInfoTy &AsyncInfo) {
   TIMESCOPE_WITH_NAME_AND_IDENT("mappingBeforeTargetRegion", loc);
+#ifdef LIBOMPTARGET_HERO
   hero_add_timestamp((char*)"all",(char*)__func__,0);
+#endif
   DeviceTy &Device = *PM->Devices[DeviceId];
   int Ret = targetDataBegin(loc, Device, ArgNum, ArgBases, Args, ArgSizes,
                             ArgTypes, ArgNames, ArgMappers, AsyncInfo);
@@ -1413,7 +1416,9 @@ static int processDataAfter(ident_t *loc, int64_t DeviceId, void *HostPtr,
                             map_var_info_t *ArgNames, void **ArgMappers,
                             PrivateArgumentManagerTy &PrivateArgumentManager,
                             AsyncInfoTy &AsyncInfo) {
+#ifdef LIBOMPTARGET_HERO
   hero_add_timestamp((char*)"all",(char*)__func__,0);
+#endif
   //TIMESCOPE_WITH_NAME_AND_IDENT("mappingAfterTargetRegion", loc);
   DeviceTy &Device = *PM->Devices[DeviceId];
 

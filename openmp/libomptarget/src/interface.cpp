@@ -21,10 +21,6 @@
 #include <cstdlib>
 #include <mutex>
 
-extern "C" {
-#include "libhero/herodev.h"
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 /// adds requires flags
 EXTERN void __tgt_register_requires(int64_t flags) {

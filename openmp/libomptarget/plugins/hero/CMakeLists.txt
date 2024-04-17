@@ -10,9 +10,8 @@
 # Build a plugin for a HERO accelerator.
 #
 ##===----------------------------------------------------------------------===##
-set(LIBOMPTARGET_HERO_BUILD ON CACHE BOOL
+set(LIBOMPTARGET_HERO_BUILD OFF CACHE BOOL
   "Should the HERO offloading plugin be built")
-
 if(NOT LIBOMPTARGET_HERO_BUILD)
   libomptarget_say("Not building HERO offloading plugin: build disabled.")
   return()
@@ -74,6 +73,7 @@ foreach(HERO_DEV_TYPE ${LIBOMPTARGET_HERO_DEV_TYPE})
     )
   endif()
 
+  add_definitions(-DLIBOMPTARGET_HERO)
   add_definitions(-DLIBOMPTARGET_HERO_DEV_TYPE_${HERO_DEV_TYPE})
   if(EXISTS $ENV{HERO_LIBHERO_DIR}/lib/libhero_${HERO_DEV_TYPE_LOWER}.so)
     target_link_libraries(omptarget.rtl.herodev_${HERO_DEV_TYPE_LOWER}

@@ -25,6 +25,9 @@ namespace targets {
 
 // RISC-V Target
 class RISCVTargetInfo : public TargetInfo {
+  // Initialized via features.
+  unsigned HasNoFdiv : 1;
+  
 protected:
   std::string ABI, CPU;
   std::unique_ptr<llvm::RISCVISAInfo> ISAInfo;
@@ -34,7 +37,7 @@ private:
   bool HasExperimental = false;
 
 public:
-  RISCVTargetInfo(const llvm::Triple &Triple, const TargetOptions &)
+  RISCVTargetInfo(const llvm::Triple &Triple, const TargetOptions & Opts)
       : TargetInfo(Triple) {
     BFloat16Width = 16;
     BFloat16Align = 16;
@@ -49,6 +52,7 @@ public:
     MCountName = "_mcount";
     HasFloat16 = true;
     HasStrictFP = true;
+    HasNoFdiv = llvm::is_contained(Opts.FeaturesAsWritten, "+nofdiv");
   }
 
   bool setCPU(const std::string &Name) override {

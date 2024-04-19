@@ -1443,6 +1443,21 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::INTRINSIC_W_CHAIN, MVT::i64, Custom);
   }
 
+  if (Subtarget.hasNoFdiv()) {
+    assert(Subtarget.hasStdExtF() && "+nofdiv implies +f");
+    setOperationAction(ISD::FDIV, MVT::f32, LibCall);
+    setOperationAction(ISD::STRICT_FDIV, MVT::f32, LibCall);
+    setOperationAction(ISD::FSQRT, MVT::f32, LibCall);
+    setOperationAction(ISD::STRICT_FSQRT, MVT::f32, LibCall);
+  }
+
+  if (Subtarget.hasNoFdiv() && Subtarget.hasStdExtD()) {
+    setOperationAction(ISD::FDIV, MVT::f64, LibCall);
+    setOperationAction(ISD::STRICT_FDIV, MVT::f64, LibCall);
+    setOperationAction(ISD::FSQRT, MVT::f64, LibCall);
+    setOperationAction(ISD::STRICT_FSQRT, MVT::f64, LibCall);
+  }
+
   // Function alignments.
   const Align FunctionAlignment(Subtarget.hasStdExtCOrZca() ? 2 : 4);
   setMinFunctionAlignment(FunctionAlignment);

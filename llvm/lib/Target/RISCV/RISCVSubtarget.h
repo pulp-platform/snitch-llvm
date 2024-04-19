@@ -110,7 +110,7 @@ private:
   bool HasExtXfexpauxvecquarter = false;
   bool HasExtXfexpauxvecaltquarter = false;
   // -->
-
+  bool HasNoFdiv = false;
   RISCVFrameLowering FrameLowering;
   RISCVInstrInfo InstrInfo;
   RISCVRegisterInfo RegInfo;
@@ -290,6 +290,7 @@ public:
   bool hasExtXfexpauxvecquarter() const { return HasExtXfexpauxvecquarter; }
   bool hasExtXfexpauxvecaltquarter() const { return HasExtXfexpauxvecaltquarter; }
   // -->
+  bool hasNoFdiv() const { return HasNoFdiv; }
 
 protected:
   // GlobalISel related APIs.

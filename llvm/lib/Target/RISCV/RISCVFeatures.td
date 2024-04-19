@@ -1085,3 +1085,46 @@ def FeatureTaggedGlobals : SubtargetFeature<"tagged-globals",
     "AllowTaggedGlobals",
     "true", "Use an instruction sequence for taking the address of a global "
     "that allows a memory tag in the upper address bits">;
+
+// TODO We should remove the "V2" part, since this is handled specially now.
+def FeaturePULPExtV2
+    : SubtargetFeature<"xpulpv", "HasPULPExtV2",
+                       "true", "'pulpv2' (PULP extensions version 2)">;
+def HasPULPExtV2 : Predicate<"Subtarget->hasPULPExtV2()">,
+                             AssemblerPredicate<(all_of FeaturePULPExtV2)>;
+
+def FeatureExtXfrep
+    : SubtargetFeature<"xfrep", "HasExtXfrep", "true",
+                       "'Xfrep' (Floating-Point Repetition)">;
+def HasExtXfrep : Predicate<"Subtarget->hasExtXfrep()">,
+                           AssemblerPredicate<(all_of FeatureExtXfrep),
+                           "'Xfrep' (Floating-Point Repetition)">;
+
+def FeatureExtXdma
+    : SubtargetFeature<"xdma", "HasExtXdma", "true",
+                       "'Xdma' (Asynchronous Data Movement)">;
+def HasExtXdma : Predicate<"Subtarget->hasExtXdma()">,
+                           AssemblerPredicate<(all_of FeatureExtXdma),
+                           "'Xdma' (Asynchronous Data Movement)">;
+
+def FeatureExtXssr
+    : SubtargetFeature<"xssr", "HasExtXssr", "true",
+                       "'Xssr' (Stream Semantic Registers)">;
+def HasExtXssr : Predicate<"Subtarget->hasExtXssr()">,
+                           AssemblerPredicate<(all_of FeatureExtXssr),
+                           "'Xssr' (Stream Semantic Registers)">;
+
+def FeatureExtXmempool
+    : SubtargetFeature<"xmempool", "HasExtXmempool", "true",
+                       "'Xmempool' (MemPool System)">;
+def HasExtXmempool : Predicate<"Subtarget->hasExtXmempool()">,
+                           AssemblerPredicate<(all_of FeatureExtXmempool),
+                           "'Xmempool' (MemPool System)">;
+
+def FeatureHasNoFdiv
+    : SubtargetFeature<"nofdiv", "HasNoFdiv", "true",
+                       "Disable fdiv.* and fsqrt.* instructions, delegate to libcalls",
+                       [FeatureStdExtF]>;
+def HasNoFdiv : Predicate<"Subtarget->hasNoFdiv()">,
+                          AssemblerPredicate<(all_of FeatureHasNoFdiv),
+                          "Disable fdiv.* and fsqrt.* instructions, delegate to libcalls">;

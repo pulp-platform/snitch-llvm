@@ -541,3 +541,7 @@
 // RUN: -fsyntax-only 2>&1 | FileCheck -check-prefix=RV32-D-ZDINX-ER %s
 // RV32-D-ZDINX-ER: error: invalid arch name 'rv32idzdinx',
 // RV32-D-ZFINX-ER: 'f' and 'zfinx' extensions are incompatible
+
+// RUN: %clang -target riscv32-unknown-elf -march=rv32imaf -mno-fdiv -### %s \
+// RUN: -fsyntax-only 2>&1 | FileCheck -check-prefix=RV32-NOFDIV %s
+// RV32-NOFDIV: "-target-feature" "+nofdiv"

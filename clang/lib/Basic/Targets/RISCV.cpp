@@ -186,6 +186,9 @@ void RISCVTargetInfo::getTargetDefines(const LangOptions &Opts,
 
   if (FLen) {
     Builder.defineMacro("__riscv_flen", Twine(FLen));
+  }
+
+  if (FLen && !HasNoFdiv) {
     Builder.defineMacro("__riscv_fdiv");
     Builder.defineMacro("__riscv_fsqrt");
   }

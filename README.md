@@ -21,6 +21,7 @@ Refer to [snitch-toolchain-cd](https://github.com/pulp-platform/snitch-toolchain
 | `--ssr-noregmerge` | Disable the SSR register merging in the SSR pseudo instruction expansion pass. Register merging is enabled by default and can be disabled with this flag. |
 | `--snitch-frep-inference` | Globally enable the FREP inference on all loops in the compiled module. |
 | `--enable-misched=false` | Disable the machine instruction scheduler. Instructions in a complex loop with multiple SSR push or pop instructions on the same data mover may not be rescheduled because the order in which the SSR are accessed is important. |
+| `-mno-fdiv` | No support for the sqrtdiv hardware unit. FDIV.x and FSQRT.x assembly instructions are replaced by equivalent function calls to compiler-rt and libm codebase, respectively. |
 
 ## `clang` builtins
 The following `clang` builtins can be used to directly make use of the SSR and DMA extensions.

@@ -175,6 +175,21 @@ void riscv::getRISCVTargetFeatures(const Driver &D, const llvm::Triple &Triple,
   // which may override the defaults.
   handleTargetFeaturesGroup(D, Triple, Args, Features,
                             options::OPT_m_riscv_Features_Group);
+
+  // GCC Compatibility: -mno-fdiv
+  if (Args.hasArg(options::OPT_mno_fdiv)) {
+    // Args is const, and we can't prevent handleTargetFeaturesGroup to
+    // mess up with our own awkwardly spelled "-mno-fdiv" that gets
+    // interpreted as "negate fdiv feature", with a "-fdiv" being passed
+    // down.
+    Features.erase(std::remove_if(Features.begin(), Features.end(),
+                                  [](StringRef feat) {
+                                    return feat.equals("+fdiv") ||
+                                           feat.equals("-fdiv");
+                                  }),
+                   Features.end());
+    Features.push_back("+nofdiv");
+  }
 }
 
 StringRef riscv::getRISCVABI(const ArgList &Args, const llvm::Triple &Triple) {

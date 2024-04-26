@@ -186,7 +186,7 @@ class Pulp_ALU_rii<bits<2> funct2, bits<3> funct3, string opcodestr>
   let Inst{19-15} = rs1;
   let Inst{14-12} = funct3;
   let Inst{11-7} = rd;
-  let Opcode = 0b0110011;
+  let Inst{6-0} = 0b0110011;
 }
 
 class Pulp_ALU_rii_wb<bits<2> funct2, bits<3> funct3, string opcodestr>
@@ -204,7 +204,7 @@ class Pulp_ALU_rii_wb<bits<2> funct2, bits<3> funct3, string opcodestr>
   let Inst{19-15} = rs1;
   let Inst{14-12} = funct3;
   let Inst{11-7} = rd;
-  let Opcode = 0b0110011;
+  let Inst{6-0} = 0b0110011;
 
   let Constraints = "$rd = $rd_wb";
 }
@@ -224,7 +224,7 @@ class Pulp_ALU_rri<bits<2> funct2, bits<3> funct3, RISCVOpcode opcode, string op
   let Inst{19-15} = rs1;
   let Inst{14-12} = funct3;
   let Inst{11-7} = rd;
-  let Opcode = opcode.Value;
+  let Inst{6-0} = opcode.Value;
 }
 
 class Pulp_ALU_rri_wb<bits<2> funct2, bits<3> funct3, RISCVOpcode opcode, string opcodestr>
@@ -242,7 +242,7 @@ class Pulp_ALU_rri_wb<bits<2> funct2, bits<3> funct3, RISCVOpcode opcode, string
   let Inst{19-15} = rs1;
   let Inst{14-12} = funct3;
   let Inst{11-7} = rd;
-  let Opcode = opcode.Value;
+  let Inst{6-0} = opcode.Value;
 
   let Constraints = "$rd = $rd_wb";
 }
@@ -266,7 +266,7 @@ class Pulp_ALU_vsci<bits<5> funct5, bit F, bits<3> funct3, string opcodestr,
   let Inst{19-15} = rs1;
   let Inst{14-12} = funct3;
   let Inst{11-7} = rd;
-  let Opcode = 0b1010111;
+  let Inst{6-0} = 0b1010111;
 }
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
@@ -287,7 +287,7 @@ class Pulp_ALU_vsci_wb<bits<5> funct5, bit F, bits<3> funct3, string opcodestr,
   let Inst{19-15} = rs1;
   let Inst{14-12} = funct3;
   let Inst{11-7} = rd;
-  let Opcode = 0b1010111;
+  let Inst{6-0} = 0b1010111;
 }
 
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0, isBranch = 1, isTerminator = 1 in

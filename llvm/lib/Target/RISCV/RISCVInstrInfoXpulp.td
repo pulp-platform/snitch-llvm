@@ -15,18 +15,6 @@
 // RISC-V specific DAG Nodes
 //===----------------------------------------------------------------------===//
 
-def uimm1 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<1>(Imm);}]> {
-  let ParserMatchClass = UImmAsmOperand<1>;
-  let EncoderMethod = "getImmOpValue";
-  let DecoderMethod = "decodeUImmOperand<1>";
-  let MCOperandPredicate = [{
-    int64_t Imm;
-    if (MCOp.evaluateAsConstantImm(Imm))
-      return isUInt<1>(Imm);
-    return MCOp.isBareSymbolRef();
-  }];
-}
-
 def uimm13_lsb0 : Operand<OtherVT>,
                   ImmLeaf<XLenVT, [{return isShiftedUInt<12, 1>(Imm);}]>  {
   let ParserMatchClass = UImmAsmOperand<13, "Lsb0">;
@@ -36,18 +24,6 @@ def uimm13_lsb0 : Operand<OtherVT>,
     int64_t Imm;
     if (MCOp.evaluateAsConstantImm(Imm))
       return isShiftedInt<12, 1>(Imm);
-    return MCOp.isBareSymbolRef();
-  }];
-}
-
-def uimm6 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<6>(Imm);}]> {
-  let ParserMatchClass = UImmAsmOperand<6>;
-  let EncoderMethod = "getImmOpValue";
-  let DecoderMethod = "decodeUImmOperand<6>";
-  let MCOperandPredicate = [{
-    int64_t Imm;
-    if (MCOp.evaluateAsConstantImm(Imm))
-      return isUInt<6>(Imm);
     return MCOp.isBareSymbolRef();
   }];
 }
@@ -84,16 +60,6 @@ def tuimm12 : Operand<XLenVT>, TImmLeaf<XLenVT, [{return isUInt<12>(Imm);}]> {
     return MCOp.isBareSymbolRef();
   }];
   let OperandType = "OPERAND_UIMM12";
-  let OperandNamespace = "RISCVOp";
-}
-
-// tuimm5 predicate - same ass uimm, but use TargetConstant (TImmLeaf)
-// instead of Constant (ImmLeaf)
-// FIXME: factor common code between uimm5 and tuimm5
-def tuimm5 : Operand<XLenVT>, TImmLeaf<XLenVT, [{return isUInt<5>(Imm);}]> {
-  let ParserMatchClass = UImmAsmOperand<5>;
-  let DecoderMethod = "decodeUImmOperand<5>";
-  let OperandType = "OPERAND_UIMM5";
   let OperandNamespace = "RISCVOp";
 }
 

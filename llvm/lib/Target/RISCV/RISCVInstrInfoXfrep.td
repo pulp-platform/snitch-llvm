@@ -24,7 +24,7 @@ class RVInstFrep<bit is_outer, dag outs, dag ins, string opcodestr, string argst
   let Inst{14-12} = stagger_max;
   let Inst{11-8} = stagger_mask;
   let Inst{7} = is_outer;
-  let Opcode = 0b0001011;
+  let Inst{6-0} = 0b0001011;
 }
 
 //===----------------------------------------------------------------------===//

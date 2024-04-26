@@ -26,7 +26,7 @@ let hasSideEffects = 1, mayLoad = 0, mayStore = 0 in {
     let Inst{19-15} = 0b00000; // rs1 = 0
     let Inst{14-12} = funct3; 
     let Inst{11-7}  = rd;
-    let Opcode = OPC_XSSR.Value;
+    let Inst{6-0} = OPC_XSSR.Value;
   }
 
   class SSRInstImmWrite<bits<3> funct3, string opcodestr>
@@ -39,7 +39,7 @@ let hasSideEffects = 1, mayLoad = 0, mayStore = 0 in {
     let Inst{19-15} = rs1;
     let Inst{14-12} = funct3; 
     let Inst{11-7}  = 0b00000; // rd = 0
-    let Opcode = OPC_XSSR.Value;
+    let Inst{6-0} = OPC_XSSR.Value;
   }
 
   class SSRInstRegRead<bits<7> funct7, bits<3> funct3, string opcodestr>

@@ -37,7 +37,7 @@ class RVInstRVf<bits<2> funct2, bits<5> vecfltop, bits<1> r, RISCVVFFormat vfmt,
   let Inst{14} = r;
   let Inst{13-12} = vfmt.Value;
   let Inst{11-7} = rd;
-  let Opcode = opcode.Value;
+  let Inst{6-0} = opcode.Value;
 }
 
 //===----------------------------------------------------------------------===//

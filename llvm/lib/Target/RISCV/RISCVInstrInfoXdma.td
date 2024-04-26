@@ -25,7 +25,7 @@ let hasSideEffects = 1, mayLoad = 1, mayStore = 1 in {
     let Inst{19-15} = rs1;
     let Inst{14-12} = 0b000;
     let Inst{11-7} = 0b00000;
-    let Opcode = OPC_XDMA.Value;
+    let Inst{6-0} = OPC_XDMA.Value;
   }
 
   class DMInstRdRs1Uimm5<bits<7> funct7, dag outs, dag ins, string opcodestr, string argstr>
@@ -39,7 +39,7 @@ let hasSideEffects = 1, mayLoad = 1, mayStore = 1 in {
     let Inst{19-15} = rs1;
     let Inst{14-12} = 0b000;
     let Inst{11-7} = rd;
-    let Opcode = OPC_XDMA.Value;
+    let Inst{6-0} = OPC_XDMA.Value;
   }
 
   class DMInstRdRs1Rs2<bits<7> funct7, string opcodestr>

@@ -1063,159 +1063,160 @@ let Predicates = [IsRV32, HasPULPExtV2] in {
 multiclass int_mul_mac_N_RN<string intrin, string instr> {
   // mul<op>N: mul op with normalization factor as immediate
   def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mul" # intrin # "N")
-              GPR:$rs1, GPR:$rs2, tuimm5:$shift),
+              (i32 GPR:$rs1), (i32 GPR:$rs2), tuimm5:$shift),
             (!cast<RVInst>("P_MUL" # instr # "N")
-              GPR:$rs1, GPR:$rs2, tuimm5:$shift)>;
+              (i32 GPR:$rs1), (i32 GPR:$rs2), tuimm5:$shift)>;
   // mul<op>RN: mul op with normalization and rounding factors as immediates
   def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mul" # intrin # "RN")
-              GPR:$rs1, GPR:$rs2, tuimm5:$shift, timm),
+              (i32 GPR:$rs1), (i32 GPR:$rs2), tuimm5:$shift, timm),
             (!cast<RVInst>("P_MUL" # instr # "RN")
-              GPR:$rs1, GPR:$rs2, tuimm5:$shift)>;
+              (i32 GPR:$rs1), (i32 GPR:$rs2), tuimm5:$shift)>;
   // mac<op>N: mac op with normalization factor as immediate
   def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mac" # intrin # "N")
-              GPR:$rs1, GPR:$rs2, GPR:$rd, tuimm5:$shift),
+              (i32 GPR:$rs1), (i32 GPR:$rs2), (i32 GPR:$rd), tuimm5:$shift),
             (!cast<RVInst>("P_MAC" # instr # "N")
-              GPR:$rd, GPR:$rs1, GPR:$rs2, tuimm5:$shift)>;
+              (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2), tuimm5:$shift)>;
   // mac<op>RN: mac op with normalization and rounding factors as immediates
   def : Pat<(!cast<Intrinsic>("int_riscv_pulp_mac" # intrin # "RN")
-              GPR:$rs1, GPR:$rs2, GPR:$rd, tuimm5:$shift, timm),
+              (i32 GPR:$rs1), (i32 GPR:$rs2), (i32 GPR:$rd), tuimm5:$shift, timm),
             (!cast<RVInst>("P_MAC" # instr # "RN")
-              GPR:$rd, GPR:$rs1, GPR:$rs2, tuimm5:$shift)>;
+              (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2), tuimm5:$shift)>;
 }
 
 // Patterns for bit manipulation operations
 
 // extract
 // widthMinus1 and shift immediates
-def : Pat<(extract:$extract GPR:$rs1, uimm5, uimm5:$shiftRight),
-          (P_EXTRACT GPR:$rs1, (31minus imm:$shiftRight), (extractOffset $extract))>;
+def : Pat<(extract:$extract (i32 GPR:$rs1), uimm5, uimm5:$shiftRight),
+          (P_EXTRACT (i32 GPR:$rs1), (31minus imm:$shiftRight), (extractOffset $extract))>;
 
 // shift = 0
-def : Pat<(sra (shl GPR:$rs1, (sub 31, GPR:$widthMinus1)),
-               (sub 31, GPR:$widthMinus1)),
-          (P_EXTRACTR GPR:$rs1, (SLLI GPR:$widthMinus1, 5))>;
+def : Pat<(sra (shl (i32 GPR:$rs1), (sub 31, (i32 GPR:$widthMinus1))),
+               (sub 31, (i32 GPR:$widthMinus1))),
+          (P_EXTRACTR (i32 GPR:$rs1), (SLLI (i32 GPR:$widthMinus1), 5))>;
 
 // shift immediate
-def : Pat<(sra (shl GPR:$rs1, (sub uimm5:$_31MinusShift, GPR:$widthMinus1)),
-               (sub 31, GPR:$widthMinus1)),
-          (P_EXTRACTR GPR:$rs1, (P_INSERT (ADDI X0, (31minus uimm5:$_31MinusShift)), GPR:$widthMinus1, 4, 5))>;
+def : Pat<(sra (shl (i32 GPR:$rs1), (sub uimm5:$_31MinusShift, (i32 GPR:$widthMinus1))),
+               (sub 31, (i32 GPR:$widthMinus1))),
+          (P_EXTRACTR (i32 GPR:$rs1), (P_INSERT (ADDI (XLenVT X0), (31minus uimm5:$_31MinusShift)), (i32 GPR:$widthMinus1), 4, 5))>;
 
 // widthMinus1 immediate
-def : Pat<(sra (shl GPR:$rs1, (sub uimm5:$_32MinusWidth, GPR:$shift)),
+def : Pat<(sra (shl (i32 GPR:$rs1), (sub uimm5:$_32MinusWidth, (i32 GPR:$shift))),
                uimm5:$_32MinusWidth),
-          (P_EXTRACTR GPR:$rs1, (P_INSERT GPR:$shift, (ADDI X0, (31minus uimm5:$_32MinusWidth)), 4, 5))>;
+          (P_EXTRACTR (i32 GPR:$rs1), (P_INSERT (i32 GPR:$shift), (ADDI (XLenVT X0), (31minus uimm5:$_32MinusWidth)), 4, 5))>;
 
 // widthMinus1 = 0
-def : Pat<(sra (shl GPR:$rs1, (sub 31, GPR:$shift)), (i32 31)),
-          (P_EXTRACTR GPR:$rs1, (ANDI GPR:$shift, 31))>;
+def : Pat<(sra (shl (i32 GPR:$rs1), (sub 31, (i32 GPR:$shift))), (i32 31)),
+          (P_EXTRACTR (i32 GPR:$rs1), (ANDI (i32 GPR:$shift), 31))>;
 
 // no immediates
-def : Pat<(sra (shl GPR:$rs1, (sub (sub 31, GPR:$widthMinus1), GPR:$shift)),
-               (sub 31, GPR:$widthMinus1)),
-          (P_EXTRACTR GPR:$rs1, (P_INSERT GPR:$shift, GPR:$widthMinus1, 4, 5))>;
+def : Pat<(sra (shl (i32 GPR:$rs1), (sub (sub 31, (i32 GPR:$widthMinus1)), (i32 GPR:$shift))),
+               (sub 31, (i32 GPR:$widthMinus1))),
+          (P_EXTRACTR (i32 GPR:$rs1), (P_INSERT (i32 GPR:$shift), (i32 GPR:$widthMinus1), 4, 5))>;
 
 // extractu
 // widthMinus1 and shift immediates
-def : Pat<(and (srl GPR:$rs1, uimm5:$shift), mask:$mask),
-          (P_EXTRACTU GPR:$rs1, (maskWidthMinus1 mask:$mask), uimm5:$shift)>;
+def : Pat<(and (srl (i32 GPR:$rs1), uimm5:$shift), mask:$mask),
+          (P_EXTRACTU (i32 GPR:$rs1), (maskWidthMinus1 mask:$mask), uimm5:$shift)>;
 
 // shift = 0
-def : Pat<(and GPR:$rs1, (add (shl 2, GPR:$widthMinus1), -1)),
-          (P_EXTRACTUR GPR:$rs1, (SLLI GPR:$widthMinus1, 5))>;
+def : Pat<(and (i32 GPR:$rs1), (add (shl 2, (i32 GPR:$widthMinus1)), -1)),
+          (P_EXTRACTUR (i32 GPR:$rs1), (SLLI (i32 GPR:$widthMinus1), 5))>;
 
 // no immediates
-def : Pat<(and (srl GPR:$rs1, GPR:$shift), (add (shl 2, GPR:$widthMinus1), -1)),
-          (P_EXTRACTUR GPR:$rs1, (P_INSERT GPR:$shift, GPR:$widthMinus1, 4, 5))>;
+def : Pat<(and (srl (i32 GPR:$rs1), (i32 GPR:$shift)), (add (shl 2, (i32 GPR:$widthMinus1)), -1)),
+          (P_EXTRACTUR (i32 GPR:$rs1), (P_INSERT (i32 GPR:$shift), (i32 GPR:$widthMinus1), 4, 5))>;
 
 // insert
 // widthMinus1 and shift immediates
-def : Pat<(insert GPR:$rd, GPR:$rs1, shiftedMask:$mask, uimm5:$shift),
-          (P_INSERT GPR:$rd, GPR:$rs1, (maskWidthMinus1 imm:$mask), uimm5:$shift)>;
+def : Pat<(insert (i32 GPR:$rd), (i32 GPR:$rs1), shiftedMask:$mask, uimm5:$shift),
+          (P_INSERT (i32 GPR:$rd), (i32 GPR:$rs1), (maskWidthMinus1 imm:$mask), uimm5:$shift)>;
 
 // widthMinus1 immediate
-def : Pat<(or (and GPR:$rd, (not (shl mask:$mask, GPR:$shift))),
-              (shl (and GPR:$rs1, mask:$mask), GPR:$shift)),
-          (P_INSERTR GPR:$rd, GPR:$rs1,
-                     (P_INSERT GPR:$shift,
-                               (ADDI X0, (maskWidthMinus1 mask:$mask)), 4, 5))>;
+def : Pat<(or (and (i32 GPR:$rd), (not (shl mask:$mask, (i32 GPR:$shift)))),
+              (shl (and (i32 GPR:$rs1), mask:$mask), (i32 GPR:$shift))),
+          (P_INSERTR (i32 GPR:$rd), (i32 GPR:$rs1),
+                     (P_INSERT (i32 GPR:$shift),
+                               (ADDI (XLenVT X0), (maskWidthMinus1 mask:$mask)), 4, 5))>;
 
 // widthMinus1 = 0
-def : Pat<(or (and GPR:$rd, (not (shl 1, GPR:$shift))),
-              (shl (and GPR:$rs1, 1), GPR:$shift)),
-          (P_INSERTR GPR:$rd, GPR:$rs1, (ANDI GPR:$shift, 31))>;
+def : Pat<(or (and (i32 GPR:$rd), (not (shl 1, (i32 GPR:$shift)))),
+              (shl (and (i32 GPR:$rs1), 1), (i32 GPR:$shift))),
+          (P_INSERTR (i32 GPR:$rd), (i32 GPR:$rs1), (ANDI (i32 GPR:$shift), 31))>;
 
 // shift = 0
-def : Pat<(or (and GPR:$rs1, (add (shl 2, GPR:$widthMinus1), -1)),
-              (and GPR:$rd, (sub 0, (shl 2, GPR:$widthMinus1)))),
-          (P_INSERTR GPR:$rd, GPR:$rs1, (SLLI GPR:$widthMinus1, 5))>;
+def : Pat<(or (and (i32 GPR:$rs1), (add (shl 2, (i32 GPR:$widthMinus1)), -1)),
+              (and (i32 GPR:$rd), (sub 0, (shl 2, (i32 GPR:$widthMinus1))))),
+          (P_INSERTR (i32 GPR:$rd), (i32 GPR:$rs1), (SLLI (i32 GPR:$widthMinus1), 5))>;
 
 // no immediates
-def : Pat<(or (and GPR:$dest, (not (maskFromRegs GPR:$widthMinus1, GPR:$shift))),
-              (shl (and (add (shl 2, GPR:$widthMinus1), -1), GPR:$rs1), GPR:$shift)),
-          (P_INSERTR GPR:$dest, GPR:$rs1, (P_INSERT GPR:$shift, GPR:$widthMinus1, 4, 5))>;
+def : Pat<(or (and (i32 GPR:$dest), (not (maskFromRegs (i32 GPR:$widthMinus1), (i32 GPR:$shift)))),
+              (shl (and (add (shl 2, (i32 GPR:$widthMinus1)), -1), (i32 GPR:$rs1)), (i32 GPR:$shift))),
+          (P_INSERTR (i32 GPR:$dest), (i32 GPR:$rs1), (P_INSERT (i32 GPR:$shift), (i32 GPR:$widthMinus1), 4, 5))>;
 
 // bclr
 // widthMinus1 and shift immediates
-def : Pat<(and GPR:$rs1, shiftedFlippedMask:$mask),
-          (P_BCLR GPR:$rs1, (flippedMaskWidthMinus1 imm:$mask), (trailing1s imm:$mask))>;
+def : Pat<(and (i32 GPR:$rs1), shiftedFlippedMask:$mask),
+          (P_BCLR (i32 GPR:$rs1), (flippedMaskWidthMinus1 imm:$mask), (trailing1s imm:$mask))>;
 
 // widthMinus1 immediate
-def : Pat<(and GPR:$rs1, (not (shl mask:$mask, GPR:$shift))),
-          (P_BCLRR GPR:$rs1, (P_INSERT GPR:$shift, (ADDI X0, (maskWidthMinus1 mask:$mask)), 4, 5))>;
+def : Pat<(and (i32 GPR:$rs1), (not (shl mask:$mask, (i32 GPR:$shift)))),
+          (P_BCLRR (i32 GPR:$rs1), (P_INSERT (i32 GPR:$shift), (ADDI (XLenVT X0), (maskWidthMinus1 mask:$mask)), 4, 5))>;
 
 // widthMinus1 = 0
-def : Pat<(and GPR:$rs1, (not (shl 1, GPR:$shift))),
-          (P_BCLRR GPR:$rs1, (ANDI GPR:$shift, 31))>;
+def : Pat<(and (i32 GPR:$rs1), (not (shl 1, (i32 GPR:$shift)))),
+          (P_BCLRR (i32 GPR:$rs1), (ANDI (i32 GPR:$shift), 31))>;
 
 // shift immediate
-def : Pat<(and GPR:$rs1, (shiftedFlippedMask_shiftImmediate GPR:$widthMinus1, mask:$mask)),
-          (P_BCLRR GPR:$rs1, (P_INSERT (ADDI X0, (trailing1s mask:$mask)),
-                                       GPR:$widthMinus1, 4, 5))>;
+def : Pat<(and (i32 GPR:$rs1), (shiftedFlippedMask_shiftImmediate (i32 GPR:$widthMinus1), mask:$mask)),
+          (P_BCLRR (i32 GPR:$rs1), (P_INSERT (ADDI (XLenVT X0), (trailing1s mask:$mask)),
+                                       (i32 GPR:$widthMinus1), 4, 5))>;
 
 // shift = 0
-def : Pat<(and GPR:$rs1, (shl -2, GPR:$widthMinus1)),
-          (P_BCLRR GPR:$rs1, (SLLI GPR:$widthMinus1, 5))>;
+def : Pat<(and (i32 GPR:$rs1), (shl -2, (i32 GPR:$widthMinus1))),
+          (P_BCLRR (i32 GPR:$rs1), (SLLI (i32 GPR:$widthMinus1), 5))>;
 
 // no immediates
-def : Pat<(and (not (maskFromRegs GPR:$widthMinus1, GPR:$shift)), GPR:$rs1),
-          (P_BCLRR GPR:$rs1, (P_INSERT GPR:$shift, GPR:$widthMinus1, 4, 5))>;
+def : Pat<(and (not (maskFromRegs (i32 GPR:$widthMinus1), (i32 GPR:$shift))), (i32 GPR:$rs1)),
+          (P_BCLRR (i32 GPR:$rs1), (P_INSERT (i32 GPR:$shift), (i32 GPR:$widthMinus1), 4, 5))>;
 
 // bset
 // widthMinus1 and shift immediates
-def : Pat<(or GPR:$rs1, shiftedMask:$mask),
-          (P_BSET GPR:$rs1, (maskWidthMinus1 imm:$mask), (trailing0s imm:$mask))>;
+def : Pat<(or (i32 GPR:$rs1), shiftedMask:$mask),
+          (P_BSET (i32 GPR:$rs1), (maskWidthMinus1 imm:$mask), (trailing0s imm:$mask))>;
 
 // widthMinus1 immediate
-def : Pat<(or GPR:$rs1, (shl mask:$mask, GPR:$shift)),
-          (P_BSETR GPR:$rs1, (P_INSERT GPR:$shift, (ADDI X0, (maskWidthMinus1 mask:$mask)), 4, 5))>;
+def : Pat<(or (i32 GPR:$rs1), (shl mask:$mask, (i32 GPR:$shift))),
+          (P_BSETR (i32 GPR:$rs1), (P_INSERT (i32 GPR:$shift), (ADDI (XLenVT X0), (maskWidthMinus1 mask:$mask)), 4, 5))>;
 
 // widthMinus1 = 0
-def : Pat<(or GPR:$rs1, (shl 1, GPR:$shift)),
-          (P_BSETR GPR:$rs1, (ANDI GPR:$shift, 31))>;
+def : Pat<(or (i32 GPR:$rs1), (shl 1, (i32 GPR:$shift))),
+          (P_BSETR (i32 GPR:$rs1), (ANDI (i32 GPR:$shift), 31))>;
 
 // shift immediate
-def : Pat<(or GPR:$rs1, (shiftedMask_shiftImmediate GPR:$widthMinus1, flippedMask:$flippedMask)),
-          (P_BSETR GPR:$rs1, (P_INSERT (ADDI X0, (trailing0s flippedMask:$flippedMask)),
-                                       GPR:$widthMinus1, 4, 5))>;
+def : Pat<(or (i32 GPR:$rs1), (shiftedMask_shiftImmediate (i32 GPR:$widthMinus1), flippedMask:$flippedMask)),
+          (P_BSETR (i32 GPR:$rs1), (P_INSERT (ADDI (XLenVT X0), (trailing0s flippedMask:$flippedMask)),
+                                       (i32 GPR:$widthMinus1), 4, 5))>;
 
 // shift = 0
-def : Pat<(or GPR:$rs1, (add (shl 2, GPR:$widthMinus1), -1)),
-          (P_BSETR GPR:$rs1, (SLLI GPR:$widthMinus1, 5))>;
+def : Pat<(or (i32 GPR:$rs1), (add (shl 2, (i32 GPR:$widthMinus1)), -1)),
+          (P_BSETR (i32 GPR:$rs1), (SLLI (i32 GPR:$widthMinus1), 5))>;
 
 // no immediates
-def : Pat<(or (maskFromRegs GPR:$widthMinus1, GPR:$shift), GPR:$rs1),
-          (P_BSETR GPR:$rs1, (P_INSERT GPR:$shift, GPR:$widthMinus1, 4, 5))>;
+def : Pat<(or (maskFromRegs (i32 GPR:$widthMinus1), (i32 GPR:$shift)), (i32 GPR:$rs1)),
+          (P_BSETR (i32 GPR:$rs1), (P_INSERT (i32 GPR:$shift), (i32 GPR:$widthMinus1), 4, 5))>;
 
-def : Pat<(cttz GPR:$rs1), (P_FF1 GPR:$rs1)>;
-def : Pat<(ctlz_zero_undef GPR:$rs1), (XORI (P_FL1 GPR:$rs1), 31)>;
-def : Pat<(xor (ctlz_zero_undef GPR:$rs1), 31), (P_FL1 GPR:$rs1)>;
-def : Pat<(ctlz_zero_undef (xor GPR:$rs1, (sra GPR:$rs1, (i32 31)))), (P_CLB GPR:$rs1)>;
-def : Pat<(ctpop GPR:$rs1), (P_CNT GPR:$rs1)>;
-def : PatGprGpr<rotr, P_ROR>;
+//TODO
+//def : Pat<(cttz (i32 GPR:$rs1)), (P_FF1 (i32 GPR:$rs1))>;
+//def : Pat<(ctlz_zero_undef (i32 GPR:$rs1)), (XORI (P_FL1 (i32 GPR:$rs1)), 31)>;
+//def : Pat<(xor (ctlz_zero_undef (i32 GPR:$rs1)), 31), (P_FL1 (i32 GPR:$rs1))>;
+//def : Pat<(ctlz_zero_undef (xor (i32 GPR:$rs1), (sra (i32 GPR:$rs1), (i32 31)))), (P_CLB (i32 GPR:$rs1))>;
+//def : Pat<(ctpop (i32 GPR:$rs1)), (P_CNT (i32 GPR:$rs1))>;
+//def : PatGprGpr<rotr, P_ROR>;
 
 // Patterns for general ALU operations
 
-def : Pat<(abs GPR:$rs1), (P_ABS GPR:$rs1)>;
+def : Pat<(abs (i32 GPR:$rs1)), (P_ABS (i32 GPR:$rs1))>;
 def : PatGprGpr<setle, P_SLET>;
 def : PatGprGpr<setule, P_SLETU>;
 def : PatGprGpr<smin, P_MIN>;
@@ -1223,131 +1224,131 @@ def : PatGprGpr<umin, P_MINU>;
 def : PatGprGpr<smax, P_MAX>;
 def : PatGprGpr<umax, P_MAXU>;
 
-def : Pat<(sext_inreg GPR:$rs1, i16), (P_EXTHS GPR:$rs1)>;
-def : Pat<(sext_inreg GPR:$rs1, i8 ), (P_EXTBS GPR:$rs1)>;
-def : Pat<(and GPR:$rs1, 0xffff), (P_EXTHZ GPR:$rs1)>;
-def : Pat<(and GPR:$rs1, 0xff  ), (P_EXTBZ GPR:$rs1)>;
+def : Pat<(sext_inreg (i32 GPR:$rs1), i16), (P_EXTHS (i32 GPR:$rs1))>;
+def : Pat<(sext_inreg (i32 GPR:$rs1), i8 ), (P_EXTBS (i32 GPR:$rs1))>;
+def : Pat<(and (i32 GPR:$rs1), 0xffff), (P_EXTHZ (i32 GPR:$rs1))>;
+def : Pat<(and (i32 GPR:$rs1), 0xff  ), (P_EXTBZ (i32 GPR:$rs1))>;
 
-def : Pat<(clip negativePowerOf2, powerOf2Minus1:$upperBound, GPR:$rs1),
-          (P_CLIP GPR:$rs1, (trailing1sPlus1 imm:$upperBound))>;
-def : Pat<(between (not GPR:$rs2), GPR:$rs2, GPR:$rs1),
-          (P_CLIPR GPR:$rs1, GPR:$rs2)>;
-def : Pat<(betweenu powerOf2Minus1:$upperBound, GPR:$rs1),
-          (P_CLIPU GPR:$rs1, (trailing1sPlus1 imm:$upperBound))>;
-def : Pat<(betweenu GPR:$rs2, GPR:$rs1),
-          (P_CLIPUR GPR:$rs1, GPR:$rs2)>;
+def : Pat<(clip negativePowerOf2, powerOf2Minus1:$upperBound, (i32 GPR:$rs1)),
+          (P_CLIP (i32 GPR:$rs1), (trailing1sPlus1 imm:$upperBound))>;
+def : Pat<(between (not (i32 GPR:$rs2)), (i32 GPR:$rs2), (i32 GPR:$rs1)),
+          (P_CLIPR (i32 GPR:$rs1), (i32 GPR:$rs2))>;
+def : Pat<(betweenu powerOf2Minus1:$upperBound, (i32 GPR:$rs1)),
+          (P_CLIPU (i32 GPR:$rs1), (trailing1sPlus1 imm:$upperBound))>;
+def : Pat<(betweenu (i32 GPR:$rs2), (i32 GPR:$rs1)),
+          (P_CLIPUR (i32 GPR:$rs1), (i32 GPR:$rs2))>;
 
-def : Pat<(sra (add GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_ADDN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(srl (add GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_ADDUN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(shiftRound (add GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_ADDRN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(ushiftRound (add GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_ADDURN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(sra (add (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_ADDN (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
+def : Pat<(srl (add (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_ADDUN (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
+def : Pat<(shiftRound (add (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_ADDRN (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
+def : Pat<(ushiftRound (add (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_ADDURN (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
 
-def : Pat<(sra (sub GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_SUBN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(srl (sub GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_SUBUN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(shiftRound (sub GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_SUBRN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(ushiftRound (sub GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_SUBURN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(sra (sub (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_SUBN (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
+def : Pat<(srl (sub (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_SUBUN (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
+def : Pat<(shiftRound (sub (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_SUBRN (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
+def : Pat<(ushiftRound (sub (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_SUBURN (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
 
-def : Pat<(sra (add GPR:$rd, GPR:$rs1), GPR:$rs2),
-          (P_ADDNR GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(srl (add GPR:$rd, GPR:$rs1), GPR:$rs2),
-          (P_ADDUNR GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(sra (add (add GPR:$rd, GPR:$rs1), (roundBit GPR:$rs2)), GPR:$rs2),
-          (P_ADDRNR  GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(srl (add (add GPR:$rd, GPR:$rs1), (roundBit GPR:$rs2)), GPR:$rs2),
-          (P_ADDURNR GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(sra (add (i32 GPR:$rd), (i32 GPR:$rs1)), (i32 GPR:$rs2)),
+          (P_ADDNR (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2))>;
+def : Pat<(srl (add (i32 GPR:$rd), (i32 GPR:$rs1)), (i32 GPR:$rs2)),
+          (P_ADDUNR (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2))>;
+def : Pat<(sra (add (add (i32 GPR:$rd), (i32 GPR:$rs1)), (roundBit (i32 GPR:$rs2))), (i32 GPR:$rs2)),
+          (P_ADDRNR  (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2))>;
+def : Pat<(srl (add (add (i32 GPR:$rd), (i32 GPR:$rs1)), (roundBit (i32 GPR:$rs2))), (i32 GPR:$rs2)),
+          (P_ADDURNR (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2))>;
 
-def : Pat<(sra (sub GPR:$rd, GPR:$rs1), GPR:$rs2),
-          (P_SUBNR GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(srl (sub GPR:$rd, GPR:$rs1), GPR:$rs2),
-          (P_SUBUNR GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(sra (add (sub GPR:$rd, GPR:$rs1), (roundBit GPR:$rs2)), GPR:$rs2),
-          (P_SUBRNR  GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(srl (add (sub GPR:$rd, GPR:$rs1), (roundBit GPR:$rs2)), GPR:$rs2),
-          (P_SUBURNR GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(sra (sub (i32 GPR:$rd), (i32 GPR:$rs1)), (i32 GPR:$rs2)),
+          (P_SUBNR (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2))>;
+def : Pat<(srl (sub (i32 GPR:$rd), (i32 GPR:$rs1)), (i32 GPR:$rs2)),
+          (P_SUBUNR (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2))>;
+def : Pat<(sra (add (sub (i32 GPR:$rd), (i32 GPR:$rs1)), (roundBit (i32 GPR:$rs2))), (i32 GPR:$rs2)),
+          (P_SUBRNR  (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2))>;
+def : Pat<(srl (add (sub (i32 GPR:$rd), (i32 GPR:$rs1)), (roundBit (i32 GPR:$rs2))), (i32 GPR:$rs2)),
+          (P_SUBURNR (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2))>;
 
 // Patterns for immediate branching Operations
-def : Pat<(brcond (XLenVT (seteq GPR:$rs1, simm5:$imm5)), bb:$imm12),
-          (P_BEQIMM GPR:$rs1, simm5:$imm5, simm13_lsb0:$imm12)>;
-def : Pat<(brcond (XLenVT (setne GPR:$rs1, simm5:$imm5)), bb:$imm12),
-          (P_BNEIMM GPR:$rs1, simm5:$imm5, simm13_lsb0:$imm12)>;
+def : Pat<(brcond (XLenVT (seteq (i32 GPR:$rs1), simm5:$imm5)), bb:$imm12),
+          (P_BEQIMM (i32 GPR:$rs1), simm5:$imm5, simm13_lsb0:$imm12)>;
+def : Pat<(brcond (XLenVT (setne (i32 GPR:$rs1), simm5:$imm5)), bb:$imm12),
+          (P_BNEIMM (i32 GPR:$rs1), simm5:$imm5, simm13_lsb0:$imm12)>;
 
-def : Pat<(add GPR:$rd, (mul GPR:$rs1, GPR:$rs2)),
-          (P_MAC GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(sub GPR:$rd, (mul GPR:$rs1, GPR:$rs2)),
-          (P_MSU GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(add (i32 GPR:$rd), (mul (i32 GPR:$rs1), (i32 GPR:$rs2))),
+          (P_MAC (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2))>;
+def : Pat<(sub (i32 GPR:$rd), (mul (i32 GPR:$rs1), (i32 GPR:$rs2))),
+          (P_MSU (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2))>;
 
-def : Pat<(muls GPR:$rs1, GPR:$rs2),
-          (P_MULS GPR:$rs1, GPR:$rs2)>;
-def : Pat<(mulhhs GPR:$rs1, GPR:$rs2),
-          (P_MULHHS GPR:$rs1, GPR:$rs2)>;
-def : Pat<(sra (muls GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_MULSN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(sra (mulhhs GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_MULHHSN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(shiftRound (muls GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_MULSRN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(shiftRound (mulhhs GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_MULHHSRN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(muls (i32 GPR:$rs1), (i32 GPR:$rs2)),
+          (P_MULS (i32 GPR:$rs1), (i32 GPR:$rs2))>;
+def : Pat<(mulhhs (i32 GPR:$rs1), (i32 GPR:$rs2)),
+          (P_MULHHS (i32 GPR:$rs1), (i32 GPR:$rs2))>;
+def : Pat<(sra (muls (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_MULSN (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
+def : Pat<(sra (mulhhs (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_MULHHSN (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
+def : Pat<(shiftRound (muls (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_MULSRN (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
+def : Pat<(shiftRound (mulhhs (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_MULHHSRN (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
 
-def : Pat<(mulu GPR:$rs1, GPR:$rs2),
-          (P_MULU GPR:$rs1, GPR:$rs2)>;
-def : Pat<(mulhhu GPR:$rs1, GPR:$rs2),
-          (P_MULHHU GPR:$rs1, GPR:$rs2)>;
-def : Pat<(srl (mulu GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_MULUN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(srl (mulhhu GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_MULHHUN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(ushiftRound (mulu GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_MULURN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(ushiftRound (mulhhu GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_MULHHURN GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(mulu (i32 GPR:$rs1), (i32 GPR:$rs2)),
+          (P_MULU (i32 GPR:$rs1), (i32 GPR:$rs2))>;
+def : Pat<(mulhhu (i32 GPR:$rs1), (i32 GPR:$rs2)),
+          (P_MULHHU (i32 GPR:$rs1), (i32 GPR:$rs2))>;
+def : Pat<(srl (mulu (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_MULUN (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
+def : Pat<(srl (mulhhu (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_MULHHUN (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
+def : Pat<(ushiftRound (mulu (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_MULURN (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
+def : Pat<(ushiftRound (mulhhu (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_MULHHURN (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
 
-def : Pat<(macs GPR:$rd, GPR:$rs1, GPR:$rs2),
-          (P_MACS GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(machhs GPR:$rd, GPR:$rs1, GPR:$rs2),
-          (P_MACHHS GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(sra (macs GPR:$rd, GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_MACSN GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(sra (machhs GPR:$rd, GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_MACHHSN GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(shiftRound (macs GPR:$rd, GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_MACSRN GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(shiftRound (machhs GPR:$rd, GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_MACHHSRN GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(macs (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2)),
+          (P_MACS (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2))>;
+def : Pat<(machhs (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2)),
+          (P_MACHHS (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2))>;
+def : Pat<(sra (macs (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_MACSN (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
+def : Pat<(sra (machhs (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_MACHHSN (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
+def : Pat<(shiftRound (macs (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_MACSRN (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
+def : Pat<(shiftRound (machhs (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_MACHHSRN (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
 
-def : Pat<(macu GPR:$rd, GPR:$rs1, GPR:$rs2),
-          (P_MACU GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(machhu GPR:$rd, GPR:$rs1, GPR:$rs2),
-          (P_MACHHU GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(srl (macu GPR:$rd, GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_MACUN GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(srl (machhu GPR:$rd, GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_MACHHUN GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(ushiftRound (macu GPR:$rd, GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_MACURN GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
-def : Pat<(ushiftRound (machhu GPR:$rd, GPR:$rs1, GPR:$rs2), uimm5:$Is3),
-          (P_MACHHURN GPR:$rd, GPR:$rs1, GPR:$rs2, uimm5:$Is3)>;
+def : Pat<(macu (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2)),
+          (P_MACU (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2))>;
+def : Pat<(machhu (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2)),
+          (P_MACHHU (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2))>;
+def : Pat<(srl (macu (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_MACUN (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
+def : Pat<(srl (machhu (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_MACHHUN (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
+def : Pat<(ushiftRound (macu (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_MACURN (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
+def : Pat<(ushiftRound (machhu (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2)), uimm5:$Is3),
+          (P_MACHHURN (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2), uimm5:$Is3)>;
 
 // Patterns for vectorial ALU operations
 class PatV2V2<SDPatternOperator OpNode, RVInst Inst>
-    : Pat<(OpNode PulpV2:$rs1, PulpV2:$rs2), (Inst PulpV2:$rs1, PulpV2:$rs2)>;
+    : Pat<(OpNode (i32 PulpV2:$rs1), (i32 PulpV2:$rs2)), (Inst (i32 PulpV2:$rs1), (i32 PulpV2:$rs2))>;
 
 class PatV4V4<SDPatternOperator OpNode, RVInst Inst>
     : Pat<(OpNode PulpV4:$rs1, PulpV4:$rs2), (Inst PulpV4:$rs1, PulpV4:$rs2)>;
 
 class PatV2GPR<SDPatternOperator OpNode, RVInst Inst>
-    : Pat<(OpNode PulpV2:$rs1, (v2i16 (splat_vector GPR:$rs2))), (Inst PulpV2:$rs1, GPR:$rs2)>;
+    : Pat<(OpNode PulpV2:$rs1, (v2i16 (splat_vector (i32 GPR:$rs2)))), (Inst PulpV2:$rs1, (i32 GPR:$rs2))>;
 
 class PatV4GPR<SDPatternOperator OpNode, RVInst Inst>
-    : Pat<(OpNode PulpV4:$rs1, (v4i8 (splat_vector GPR:$rs2))), (Inst PulpV4:$rs1, GPR:$rs2)>;
+    : Pat<(OpNode PulpV4:$rs1, (v4i8 (splat_vector (i32 GPR:$rs2)))), (Inst PulpV4:$rs1, (i32 GPR:$rs2))>;
 
 class PatV2Simm6<SDPatternOperator OpNode, RVInst Inst>
     : Pat<(OpNode PulpV2:$rs1, (v2i16 (splat_vector simm6:$imm))), (Inst PulpV2:$rs1, simm6:$imm)>;
@@ -1421,36 +1422,36 @@ def : Pat<(i32 (and (vector_extract (v2i16 PulpV2:$rs1), uimm6:$index), 65535)),
           (PV_EXTRACT_H PulpV2:$rs1, uimm6:$index)>;
 def : Pat<(i32 (and (vector_extract (v4i8 PulpV4:$rs1), uimm6:$index), 255)),
           (PV_EXTRACT_B PulpV4:$rs1, uimm6:$index)>;
-def : Pat<(vector_insert PulpV2:$rd, GPR:$rs1, uimm6:$index),
-          (PV_INSERT_H PulpV2:$rd, GPR:$rs1, uimm6:$index)>;
-def : Pat<(vector_insert PulpV4:$rd, GPR:$rs1, uimm6:$index),
-          (PV_INSERT_B PulpV4:$rd, GPR:$rs1, uimm6:$index)>;
+def : Pat<(vector_insert PulpV2:$rd, (i32 GPR:$rs1), uimm6:$index),
+          (PV_INSERT_H PulpV2:$rd, (i32 GPR:$rs1), uimm6:$index)>;
+def : Pat<(vector_insert PulpV4:$rd, (i32 GPR:$rs1), uimm6:$index),
+          (PV_INSERT_B PulpV4:$rd, (i32 GPR:$rs1), uimm6:$index)>;
 
 // insert/extract without immediate index
-def : Pat<(vector_insert PulpV2:$rd, GPR:$rs1, GPR:$index),
-          (P_INSERTR_v2 PulpV2:$rd, GPR:$rs1,
-                     (P_INSERT (ADDI X0, 0b111100000), GPR:$index, 0, 4))>;
-def : Pat<(vector_insert PulpV4:$rd, GPR:$rs1, GPR:$index),
-          (P_INSERTR_v4 PulpV4:$rd, GPR:$rs1,
-                     (P_INSERT (ADDI X0, 0b11100000), GPR:$index, 1, 3))>;
+def : Pat<(vector_insert PulpV2:$rd, (i32 GPR:$rs1), (i32 GPR:$index)),
+          (P_INSERTR_v2 PulpV2:$rd, (i32 GPR:$rs1),
+                     (P_INSERT (ADDI (XLenVT X0), 0b111100000), (i32 GPR:$index), 0, 4))>;
+def : Pat<(vector_insert PulpV4:$rd, (i32 GPR:$rs1), (i32 GPR:$index)),
+          (P_INSERTR_v4 PulpV4:$rd, (i32 GPR:$rs1),
+                     (P_INSERT (ADDI (XLenVT X0), 0b11100000), (i32 GPR:$index), 1, 3))>;
 
-def : Pat<(i32 (vector_extract PulpV2:$rs1, GPR:$rs2)),
-          (PV_SHUFFLE_H_GPR PulpV2:$rs1, GPR:$rs2)>;
-def : Pat<(i32 (vector_extract PulpV4:$rs1, GPR:$rs2)),
-          (PV_SHUFFLE_B_GPR PulpV4:$rs1, GPR:$rs2)>;
+def : Pat<(i32 (vector_extract PulpV2:$rs1, (i32 GPR:$rs2))),
+          (PV_SHUFFLE_H_GPR PulpV2:$rs1, (i32 GPR:$rs2))>;
+def : Pat<(i32 (vector_extract PulpV4:$rs1, (i32 GPR:$rs2))),
+          (PV_SHUFFLE_B_GPR PulpV4:$rs1, (i32 GPR:$rs2))>;
 
 def : PatV2V2<dotup_h, PV_DOTUP_H>;
 
-def : Pat<(dotup_sc_h PulpV2:$rs1, (and GPR:$rs2, 65535)),
-          (PV_DOTUP_SC_H PulpV2:$rs1, GPR:$rs2)>;
+def : Pat<(dotup_sc_h PulpV2:$rs1, (and (i32 GPR:$rs2), 65535)),
+          (PV_DOTUP_SC_H PulpV2:$rs1, (i32 GPR:$rs2))>;
 
 def : Pat<(dotup_sc_h PulpV2:$rs1, uimm6:$sci),
           (PV_DOTUP_SCI_H PulpV2:$rs1, uimm6:$sci)>;
 
 def : PatV4V4<dotup_b, PV_DOTUP_B>;
 
-def : Pat<(dotup_sc_b PulpV4:$rs1, (and GPR:$rs2, 255)),
-          (PV_DOTUP_SC_B PulpV4:$rs1, GPR:$rs2)>;
+def : Pat<(dotup_sc_b PulpV4:$rs1, (and (i32 GPR:$rs2), 255)),
+          (PV_DOTUP_SC_B PulpV4:$rs1, (i32 GPR:$rs2))>;
 
 def : Pat<(dotup_sc_b PulpV4:$rs1, uimm6:$sci),
           (PV_DOTUP_SCI_B PulpV4:$rs1, uimm6:$sci)>;
@@ -1458,16 +1459,16 @@ def : Pat<(dotup_sc_b PulpV4:$rs1, uimm6:$sci),
 
 def : PatV2V2<dotusp_h , PV_DOTUSP_H>;
 
-def : Pat<(dotup_sc_h PulpV2:$rs1, (sext_inreg GPR:$rs2, i16)),
-          (PV_DOTUSP_SC_H PulpV2:$rs1, GPR:$rs2)>;
+def : Pat<(dotup_sc_h PulpV2:$rs1, (sext_inreg (i32 GPR:$rs2), i16)),
+          (PV_DOTUSP_SC_H PulpV2:$rs1, (i32 GPR:$rs2))>;
 
 def : Pat<(dotup_sc_h PulpV2:$rs1, simm6:$sci),
           (PV_DOTUSP_SCI_H PulpV2:$rs1, simm6:$sci)>;
 
 def : PatV4V4<dotusp_b, PV_DOTUSP_B>;
 
-def : Pat<(dotup_sc_b PulpV4:$rs1, (sext_inreg GPR:$rs2, i8)),
-          (PV_DOTUSP_SC_B PulpV4:$rs1, GPR:$rs2)>;
+def : Pat<(dotup_sc_b PulpV4:$rs1, (sext_inreg (i32 GPR:$rs2), i8)),
+          (PV_DOTUSP_SC_B PulpV4:$rs1, (i32 GPR:$rs2))>;
 
 def : Pat<(dotup_sc_b PulpV4:$rs1, simm6:$sci),
           (PV_DOTUSP_SCI_B PulpV4:$rs1, simm6:$sci)>;
@@ -1475,104 +1476,104 @@ def : Pat<(dotup_sc_b PulpV4:$rs1, simm6:$sci),
 
 def : PatV2V2<dotsp_h , PV_DOTSP_H>;
 
-def : Pat<(dotsp_sc_h PulpV2:$rs1, (sext_inreg GPR:$rs2, i16)),
-          (PV_DOTSP_SC_H PulpV2:$rs1, GPR:$rs2)>;
+def : Pat<(dotsp_sc_h PulpV2:$rs1, (sext_inreg (i32 GPR:$rs2), i16)),
+          (PV_DOTSP_SC_H PulpV2:$rs1, (i32 GPR:$rs2))>;
 
 def : Pat<(dotsp_sc_h PulpV2:$rs1, simm6:$sci),
           (PV_DOTSP_SCI_H PulpV2:$rs1, simm6:$sci)>;
 
 def : PatV4V4<dotsp_b, PV_DOTSP_B>;
 
-def : Pat<(dotsp_sc_b PulpV4:$rs1, (sext_inreg GPR:$rs2, i8)),
-          (PV_DOTSP_SC_B PulpV4:$rs1, GPR:$rs2)>;
+def : Pat<(dotsp_sc_b PulpV4:$rs1, (sext_inreg (i32 GPR:$rs2), i8)),
+          (PV_DOTSP_SC_B PulpV4:$rs1, (i32 GPR:$rs2))>;
 
 def : Pat<(dotsp_sc_b PulpV4:$rs1, simm6:$sci),
           (PV_DOTSP_SCI_B PulpV4:$rs1, simm6:$sci)>;
 
-def : Pat<(add GPR:$rd, (dotup_h PulpV2:$rs1, PulpV2:$rs2)),
-          (PV_SDOTUP_H GPR:$rd, PulpV2:$rs1, PulpV2:$rs2)>;
+def : Pat<(add (i32 GPR:$rd), (dotup_h PulpV2:$rs1, PulpV2:$rs2)),
+          (PV_SDOTUP_H (i32 GPR:$rd), PulpV2:$rs1, PulpV2:$rs2)>;
 
-def : Pat<(add GPR:$rd, (dotup_sc_h PulpV2:$rs1, (and GPR:$rs2, 65535))),
-          (PV_SDOTUP_SC_H GPR:$rd, PulpV2:$rs1, GPR:$rs2)>;
+def : Pat<(add (i32 GPR:$rd), (dotup_sc_h PulpV2:$rs1, (and (i32 GPR:$rs2), 65535))),
+          (PV_SDOTUP_SC_H (i32 GPR:$rd), PulpV2:$rs1, (i32 GPR:$rs2))>;
 
-def : Pat<(add GPR:$rd, (dotup_sc_h PulpV2:$rs1, uimm6:$sci)),
-          (PV_SDOTUP_SCI_H GPR:$rd, PulpV2:$rs1, uimm6:$sci)>;
+def : Pat<(add (i32 GPR:$rd), (dotup_sc_h PulpV2:$rs1, uimm6:$sci)),
+          (PV_SDOTUP_SCI_H (i32 GPR:$rd), PulpV2:$rs1, uimm6:$sci)>;
 
-def : Pat<(add GPR:$rd, (dotup_b PulpV4:$rs1, PulpV4:$rs2)),
-          (PV_SDOTUP_B GPR:$rd, PulpV4:$rs1, PulpV4:$rs2)>;
+def : Pat<(add (i32 GPR:$rd), (dotup_b PulpV4:$rs1, PulpV4:$rs2)),
+          (PV_SDOTUP_B (i32 GPR:$rd), PulpV4:$rs1, PulpV4:$rs2)>;
 
-def : Pat<(add GPR:$rd, (dotup_sc_b PulpV4:$rs1, (and GPR:$rs2, 255))),
-          (PV_SDOTUP_SC_B GPR:$rd, PulpV4:$rs1, GPR:$rs2)>;
+def : Pat<(add (i32 GPR:$rd), (dotup_sc_b PulpV4:$rs1, (and (i32 GPR:$rs2), 255))),
+          (PV_SDOTUP_SC_B (i32 GPR:$rd), PulpV4:$rs1, (i32 GPR:$rs2))>;
 
-def : Pat<(add GPR:$rd, (dotup_sc_b PulpV4:$rs1, uimm6:$sci)),
-          (PV_SDOTUP_SCI_B GPR:$rd, PulpV4:$rs1, uimm6:$sci)>;
+def : Pat<(add (i32 GPR:$rd), (dotup_sc_b PulpV4:$rs1, uimm6:$sci)),
+          (PV_SDOTUP_SCI_B (i32 GPR:$rd), PulpV4:$rs1, uimm6:$sci)>;
 
-def : Pat<(add GPR:$rd, (dotusp_h PulpV2:$rs1, PulpV2:$rs2)),
-          (PV_SDOTUSP_H GPR:$rd, PulpV2:$rs1, PulpV2:$rs2)>;
+def : Pat<(add (i32 GPR:$rd), (dotusp_h PulpV2:$rs1, PulpV2:$rs2)),
+          (PV_SDOTUSP_H (i32 GPR:$rd), PulpV2:$rs1, PulpV2:$rs2)>;
 
-def : Pat<(add GPR:$rd, (dotup_sc_h PulpV2:$rs1, (sext_inreg GPR:$rs2, i16))),
-          (PV_SDOTUSP_SC_H GPR:$rd, PulpV2:$rs1, GPR:$rs2)>;
+def : Pat<(add (i32 GPR:$rd), (dotup_sc_h PulpV2:$rs1, (sext_inreg (i32 GPR:$rs2), i16))),
+          (PV_SDOTUSP_SC_H (i32 GPR:$rd), PulpV2:$rs1, (i32 GPR:$rs2))>;
 
-def : Pat<(add GPR:$rd, (dotup_sc_h PulpV2:$rs1, simm6:$sci)),
-          (PV_SDOTUSP_SCI_H GPR:$rd, PulpV2:$rs1, simm6:$sci)>;
+def : Pat<(add (i32 GPR:$rd), (dotup_sc_h PulpV2:$rs1, simm6:$sci)),
+          (PV_SDOTUSP_SCI_H (i32 GPR:$rd), PulpV2:$rs1, simm6:$sci)>;
 
-def : Pat<(add GPR:$rd, (dotusp_b PulpV4:$rs1, PulpV4:$rs2)),
-          (PV_SDOTUSP_B GPR:$rd, PulpV4:$rs1, PulpV4:$rs2)>;
+def : Pat<(add (i32 GPR:$rd), (dotusp_b PulpV4:$rs1, PulpV4:$rs2)),
+          (PV_SDOTUSP_B (i32 GPR:$rd), PulpV4:$rs1, PulpV4:$rs2)>;
 
-def : Pat<(add GPR:$rd, (dotup_sc_b PulpV4:$rs1, (sext_inreg GPR:$rs2, i8))),
-          (PV_SDOTUSP_SC_B GPR:$rd, PulpV4:$rs1, GPR:$rs2)>;
+def : Pat<(add (i32 GPR:$rd), (dotup_sc_b PulpV4:$rs1, (sext_inreg (i32 GPR:$rs2), i8))),
+          (PV_SDOTUSP_SC_B (i32 GPR:$rd), PulpV4:$rs1, (i32 GPR:$rs2))>;
 
-def : Pat<(add GPR:$rd, (dotup_sc_b PulpV4:$rs1, simm6:$sci)),
-          (PV_SDOTUSP_SCI_B GPR:$rd, PulpV4:$rs1, simm6:$sci)>;
+def : Pat<(add (i32 GPR:$rd), (dotup_sc_b PulpV4:$rs1, simm6:$sci)),
+          (PV_SDOTUSP_SCI_B (i32 GPR:$rd), PulpV4:$rs1, simm6:$sci)>;
 
-def : Pat<(add GPR:$rd, (dotsp_h PulpV2:$rs1, PulpV2:$rs2)),
-          (PV_SDOTSP_H GPR:$rd, PulpV2:$rs1, PulpV2:$rs2)>;
+def : Pat<(add (i32 GPR:$rd), (dotsp_h PulpV2:$rs1, PulpV2:$rs2)),
+          (PV_SDOTSP_H (i32 GPR:$rd), PulpV2:$rs1, PulpV2:$rs2)>;
 
-def : Pat<(add GPR:$rd, (dotsp_sc_h PulpV2:$rs1, (sext_inreg GPR:$rs2, i16))),
-          (PV_SDOTSP_SC_H GPR:$rd, PulpV2:$rs1, GPR:$rs2)>;
+def : Pat<(add (i32 GPR:$rd), (dotsp_sc_h PulpV2:$rs1, (sext_inreg (i32 GPR:$rs2), i16))),
+          (PV_SDOTSP_SC_H (i32 GPR:$rd), PulpV2:$rs1, (i32 GPR:$rs2))>;
 
-def : Pat<(add GPR:$rd, (dotsp_sc_h PulpV2:$rs1, simm6:$sci)),
-          (PV_SDOTSP_SCI_H GPR:$rd, PulpV2:$rs1, simm6:$sci)>;
+def : Pat<(add (i32 GPR:$rd), (dotsp_sc_h PulpV2:$rs1, simm6:$sci)),
+          (PV_SDOTSP_SCI_H (i32 GPR:$rd), PulpV2:$rs1, simm6:$sci)>;
 
-def : Pat<(add GPR:$rd, (dotsp_b PulpV4:$rs1, PulpV4:$rs2)),
-          (PV_SDOTSP_B GPR:$rd, PulpV4:$rs1, PulpV4:$rs2)>;
+def : Pat<(add (i32 GPR:$rd), (dotsp_b PulpV4:$rs1, PulpV4:$rs2)),
+          (PV_SDOTSP_B (i32 GPR:$rd), PulpV4:$rs1, PulpV4:$rs2)>;
 
-def : Pat<(add GPR:$rd, (dotsp_sc_b PulpV4:$rs1, (sext_inreg GPR:$rs2, i8))),
-          (PV_SDOTSP_SC_B GPR:$rd, PulpV4:$rs1, GPR:$rs2)>;
+def : Pat<(add (i32 GPR:$rd), (dotsp_sc_b PulpV4:$rs1, (sext_inreg (i32 GPR:$rs2), i8))),
+          (PV_SDOTSP_SC_B (i32 GPR:$rd), PulpV4:$rs1, (i32 GPR:$rs2))>;
 
-def : Pat<(add GPR:$rd, (dotsp_sc_b PulpV4:$rs1, simm6:$sci)),
-          (PV_SDOTSP_SCI_B GPR:$rd, PulpV4:$rs1, simm6:$sci)>;
+def : Pat<(add (i32 GPR:$rd), (dotsp_sc_b PulpV4:$rs1, simm6:$sci)),
+          (PV_SDOTSP_SCI_B (i32 GPR:$rd), PulpV4:$rs1, simm6:$sci)>;
 
-def : Pat<(v2i16 (build_vector (i32 (vector_extract PulpV2:$rs1, GPR:$index0)),
-                               (i32 (vector_extract PulpV2:$rs1, GPR:$index1)))),
-          (PV_SHUFFLE_H PulpV2:$rs1, (PV_PACK_H GPR:$index1, GPR:$index0))>;
+def : Pat<(v2i16 (build_vector (i32 (vector_extract PulpV2:$rs1, (i32 GPR:$index0))),
+                               (i32 (vector_extract PulpV2:$rs1, (i32 GPR:$index1))))),
+          (PV_SHUFFLE_H PulpV2:$rs1, (PV_PACK_H (i32 GPR:$index1), (i32 GPR:$index0)))>;
 
-def : Pat<(v4i8 (build_vector (i32 (vector_extract PulpV4:$rs1, GPR:$index0)),
-                              (i32 (vector_extract PulpV4:$rs1, GPR:$index1)),
-                              (i32 (vector_extract PulpV4:$rs1, GPR:$index2)),
-                              (i32 (vector_extract PulpV4:$rs1, GPR:$index3)))),
-          (PV_SHUFFLE_B PulpV4:$rs1, (PV_PACKLO_B (PV_PACKHI_B_nowb GPR:$index3,
-                                     GPR:$index2), GPR:$index1, GPR:$index0))>;
+def : Pat<(v4i8 (build_vector (i32 (vector_extract PulpV4:$rs1, (i32 GPR:$index0))),
+                              (i32 (vector_extract PulpV4:$rs1, (i32 GPR:$index1))),
+                              (i32 (vector_extract PulpV4:$rs1, (i32 GPR:$index2))),
+                              (i32 (vector_extract PulpV4:$rs1, (i32 GPR:$index3))))),
+          (PV_SHUFFLE_B PulpV4:$rs1, (PV_PACKLO_B (PV_PACKHI_B_nowb (i32 GPR:$index3),
+                                     (i32 GPR:$index2)), (i32 GPR:$index1), (i32 GPR:$index0)))>;
 
 
-def : Pat<(v2i16 (build_vector GPR:$rs1, GPR:$rs2)),
-          (PV_PACK_H GPR:$rs2, GPR:$rs1)>;
-def : Pat<(v4i8 (build_vector GPR:$rs1, GPR:$rs2, GPR:$rs3, GPR:$rs4)),
-          (PV_PACKLO_B (PV_PACKHI_B_nowb GPR:$rs4, GPR:$rs3), GPR:$rs2, GPR:$rs1)>;
+def : Pat<(v2i16 (build_vector (i32 GPR:$rs1), (i32 GPR:$rs2))),
+          (PV_PACK_H (i32 GPR:$rs2), (i32 GPR:$rs1))>;
+def : Pat<(v4i8 (build_vector (i32 GPR:$rs1), (i32 GPR:$rs2), (i32 GPR:$rs3), (i32 GPR:$rs4))),
+          (PV_PACKLO_B (PV_PACKHI_B_nowb (i32 GPR:$rs4), (i32 GPR:$rs3)), (i32 GPR:$rs2), (i32 GPR:$rs1))>;
 
-def : Pat<(v2i16 (splat_vector GPR:$rs1)), (PV_PACK_H GPR:$rs1, GPR:$rs1)>;
-def : Pat<(v4i8 (splat_vector GPR:$rs1)), (PV_ADD_SC_B X0, GPR:$rs1)>;
+def : Pat<(v2i16 (splat_vector (i32 GPR:$rs1))), (PV_PACK_H (i32 GPR:$rs1), (i32 GPR:$rs1))>;
+def : Pat<(v4i8 (splat_vector (i32 GPR:$rs1))), (PV_ADD_SC_B (XLenVT X0), (i32 GPR:$rs1))>;
 
 
 // Pattern to map vector splat operations on pseudos
-def : Pat<(v2i16 (riscv_vmv_v_x_vl (v2i16 undef), GPR:$imm, VLOpFrag)),
-          (PseudoPV_ADD_SC_H_VL X0, GPR:$imm, $vl)>;
+def : Pat<(v2i16 (riscv_vmv_v_x_vl (v2i16 undef), (i32 GPR:$imm), VLOpFrag)),
+          (PseudoPV_ADD_SC_H_VL (XLenVT X0), (i32 GPR:$imm), $vl)>;
 def : Pat<(v2i16 (riscv_vmv_v_x_vl (v2i16 undef), simm6:$imm, VLOpFrag)),
-          (PseudoPV_ADD_SCI_H_VL X0, simm6:$imm, $vl)>;
-def : Pat<(v4i8 (riscv_vmv_v_x_vl (v4i8 undef), GPR:$imm, VLOpFrag)),
-          (PseudoPV_ADD_SC_B_VL X0, GPR:$imm, $vl)>;
+          (PseudoPV_ADD_SCI_H_VL (XLenVT X0), simm6:$imm, $vl)>;
+def : Pat<(v4i8 (riscv_vmv_v_x_vl (v4i8 undef), (i32 GPR:$imm), VLOpFrag)),
+          (PseudoPV_ADD_SC_B_VL (XLenVT X0), (i32 GPR:$imm), $vl)>;
 def : Pat<(v4i8 (riscv_vmv_v_x_vl (v4i8 undef), simm6:$imm, VLOpFrag)),
-          (PseudoPV_ADD_SCI_B_VL X0, simm6:$imm, $vl)>;
+          (PseudoPV_ADD_SCI_B_VL (XLenVT X0), simm6:$imm, $vl)>;
 
 
 defm : GeneralSVectorPattern<seteq, "CMPEQ">;
@@ -1586,77 +1587,77 @@ defm : GeneralUVectorPattern<setuge, "CMPGEU">;
 defm : GeneralUVectorPattern<setult, "CMPLTU">;
 defm : GeneralUVectorPattern<setule, "CMPLEU">;
 
-def : Pat<(v2i16 (bitconvert GPR:$rs1)), (v2i16 PulpV2:$rs1)>;
-def : Pat<(v4i8 (bitconvert GPR:$rs1)), (v4i8 PulpV4:$rs1)>;
-def : Pat<(i32 (bitconvert PulpV2:$rs1)), (i32 GPR:$rs1)>;
-def : Pat<(i32 (bitconvert PulpV4:$rs1)), (i32 GPR:$rs1)>;
+def : Pat<(v2i16 (bitconvert (i32 GPR:$rs1))), (v2i16 PulpV2:$rs1)>;
+def : Pat<(v4i8 (bitconvert (i32 GPR:$rs1))), (v4i8 PulpV4:$rs1)>;
+def : Pat<(i32 (bitconvert PulpV2:$rs1)), (i32 (i32 GPR:$rs1))>;
+def : Pat<(i32 (bitconvert PulpV4:$rs1)), (i32 (i32 GPR:$rs1))>;
 
 // Patterns for load/store instructions
 
 // post increment loads need custom selection, because tablegen can't deal with
 // multiple result values
 
-def : Pat<(sextloadi8 (add GPR:$base, GPR:$offset)),
-    (P_LB_rr GPR:$base, GPR:$offset)>;
-def : Pat<(zextloadi8 (add GPR:$base, GPR:$offset)),
-    (P_LBU_rr GPR:$base, GPR:$offset)>;
-def : Pat<(sextloadi16 (add GPR:$base, GPR:$offset)),
-    (P_LH_rr GPR:$base, GPR:$offset)>;
-def : Pat<(zextloadi16 (add GPR:$base, GPR:$offset)),
-    (P_LHU_rr GPR:$base, GPR:$offset)>;
-def : Pat<(load (add GPR:$base, GPR:$offset)),
-    (P_LW_rr GPR:$base, GPR:$offset)>;
+def : Pat<(sextloadi8 (add (i32 GPR:$base), (i32 GPR:$offset))),
+    (P_LB_rr (i32 GPR:$base), (i32 GPR:$offset))>;
+def : Pat<(zextloadi8 (add (i32 GPR:$base), (i32 GPR:$offset))),
+    (P_LBU_rr (i32 GPR:$base), (i32 GPR:$offset))>;
+def : Pat<(sextloadi16 (add (i32 GPR:$base), (i32 GPR:$offset))),
+    (P_LH_rr (i32 GPR:$base), (i32 GPR:$offset))>;
+def : Pat<(zextloadi16 (add (i32 GPR:$base), (i32 GPR:$offset))),
+    (P_LHU_rr (i32 GPR:$base), (i32 GPR:$offset))>;
+def : Pat<(load (add (i32 GPR:$base), (i32 GPR:$offset))),
+    (P_LW_rr (i32 GPR:$base), (i32 GPR:$offset))>;
 
-def : Pat<(post_truncsti8 GPR:$val, GPR:$base, simm12:$offset),
-    (P_SB_ri_PostIncrement GPR:$val, GPR:$base, simm12:$offset)>;
-def : Pat<(post_truncsti16 GPR:$val, GPR:$base, simm12:$offset),
-    (P_SH_ri_PostIncrement GPR:$val, GPR:$base, simm12:$offset)>;
-def : Pat<(post_store GPR:$val, GPR:$base, simm12:$offset),
-    (P_SW_ri_PostIncrement GPR:$val, GPR:$base, simm12:$offset)>;
+def : Pat<(post_truncsti8 (i32 GPR:$val), (i32 GPR:$base), simm12:$offset),
+    (P_SB_ri_PostIncrement (i32 GPR:$val), (i32 GPR:$base), simm12:$offset)>;
+def : Pat<(post_truncsti16 (i32 GPR:$val), (i32 GPR:$base), simm12:$offset),
+    (P_SH_ri_PostIncrement (i32 GPR:$val), (i32 GPR:$base), simm12:$offset)>;
+def : Pat<(post_store (i32 GPR:$val), (i32 GPR:$base), simm12:$offset),
+    (P_SW_ri_PostIncrement (i32 GPR:$val), (i32 GPR:$base), simm12:$offset)>;
 
-def : Pat<(post_truncsti8 GPR:$val, GPR:$base, GPR:$offset),
-    (P_SB_rr_PostIncrement GPR:$val, GPR:$base, GPR:$offset)>;
-def : Pat<(post_truncsti16 GPR:$val, GPR:$base, GPR:$offset),
-    (P_SH_rr_PostIncrement GPR:$val, GPR:$base, GPR:$offset)>;
-def : Pat<(post_store GPR:$val, GPR:$base, GPR:$offset),
-    (P_SW_rr_PostIncrement GPR:$val, GPR:$base, GPR:$offset)>;
+def : Pat<(post_truncsti8 (i32 GPR:$val), (i32 GPR:$base), (i32 GPR:$offset)),
+    (P_SB_rr_PostIncrement (i32 GPR:$val), (i32 GPR:$base), (i32 GPR:$offset))>;
+def : Pat<(post_truncsti16 (i32 GPR:$val), (i32 GPR:$base), (i32 GPR:$offset)),
+    (P_SH_rr_PostIncrement (i32 GPR:$val), (i32 GPR:$base), (i32 GPR:$offset))>;
+def : Pat<(post_store (i32 GPR:$val), (i32 GPR:$base), (i32 GPR:$offset)),
+    (P_SW_rr_PostIncrement (i32 GPR:$val), (i32 GPR:$base), (i32 GPR:$offset))>;
 
-def : Pat<(truncstorei8 GPR:$val, (add GPR:$base, GPR:$offset)),
-    (P_SB_rr GPR:$val, GPR:$base, GPR:$offset)>;
-def : Pat<(truncstorei16 GPR:$val, (add GPR:$base, GPR:$offset)),
-    (P_SH_rr GPR:$val, GPR:$base, GPR:$offset)>;
-def : Pat<(store GPR:$val, (add GPR:$base, GPR:$offset)),
-    (P_SW_rr GPR:$val, GPR:$base, GPR:$offset)>;
+def : Pat<(truncstorei8 (i32 GPR:$val), (add (i32 GPR:$base), (i32 GPR:$offset))),
+    (P_SB_rr (i32 GPR:$val), (i32 GPR:$base), (i32 GPR:$offset))>;
+def : Pat<(truncstorei16 (i32 GPR:$val), (add (i32 GPR:$base), (i32 GPR:$offset))),
+    (P_SH_rr (i32 GPR:$val), (i32 GPR:$base), (i32 GPR:$offset))>;
+def : Pat<(store (i32 GPR:$val), (add (i32 GPR:$base), (i32 GPR:$offset))),
+    (P_SW_rr (i32 GPR:$val), (i32 GPR:$base), (i32 GPR:$offset))>;
 
 //===----------------------------------------------------------------------===//
 // Pseudo-instructions and codegen patterns
 //===----------------------------------------------------------------------===//
 
-def : Pat<(int_riscv_pulp_event_unit_read GPR:$rs, simm12:$simm12),
-          (PULP_ELW GPR:$rs, simm12:$simm12)>;
-def : Pat<(int_riscv_pulp_event_unit_read GPR:$rs, GPR:$off),
-          (PULP_ELW (ADD GPR:$rs, GPR:$off), 0)>;
-def : Pat<(int_riscv_pulp_bitinsert GPR:$rd, GPR:$rs1, uimm5:$ls2, uimm5:$ls3),
-          (P_INSERT GPR:$rd, GPR:$rs1, uimm5:$ls2, uimm5:$ls3)>;
+def : Pat<(int_riscv_pulp_event_unit_read (i32 GPR:$rs), simm12:$simm12),
+          (PULP_ELW (i32 GPR:$rs), simm12:$simm12)>;
+def : Pat<(int_riscv_pulp_event_unit_read (i32 GPR:$rs), (i32 GPR:$off)),
+          (PULP_ELW (ADD (i32 GPR:$rs), (i32 GPR:$off)), 0)>;
+def : Pat<(int_riscv_pulp_bitinsert (i32 GPR:$rd), (i32 GPR:$rs1), uimm5:$ls2, uimm5:$ls3),
+          (P_INSERT (i32 GPR:$rd), (i32 GPR:$rs1), uimm5:$ls2, uimm5:$ls3)>;
 
 class UnaryBuiltin<Intrinsic intrinsic, Instruction instruction>
-      : Pat<(intrinsic GPR:$rs1), (instruction GPR:$rs1)>;
+      : Pat<(intrinsic (i32 GPR:$rs1)), (instruction (i32 GPR:$rs1))>;
 
 def : UnaryBuiltin<int_riscv_pulp_fl1, P_FL1>;
 def : UnaryBuiltin<int_riscv_pulp_ff1, P_FF1>;
 def : UnaryBuiltin<int_riscv_pulp_clb, P_CLB>;
 def : UnaryBuiltin<int_riscv_pulp_cnt, P_CNT>;
-def : Pat<(int_riscv_pulp_parity GPR:$rs1), (P_BCLR (P_CNT GPR:$rs1), 30, 1)>;
+def : Pat<(int_riscv_pulp_parity (i32 GPR:$rs1)), (P_BCLR (P_CNT (i32 GPR:$rs1)), 30, 1)>;
 def : UnaryBuiltin<int_riscv_pulp_abs, P_ABS>;
 
-def : Pat<(int_riscv_pulp_mac GPR:$rs1, GPR:$rs2, GPR:$rd), (P_MAC GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(int_riscv_pulp_msu GPR:$rs1, GPR:$rs2, GPR:$rd), (P_MSU GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(int_riscv_pulp_mac (i32 GPR:$rs1), (i32 GPR:$rs2), (i32 GPR:$rd)), (P_MAC (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2))>;
+def : Pat<(int_riscv_pulp_msu (i32 GPR:$rs1), (i32 GPR:$rs2), (i32 GPR:$rd)), (P_MSU (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2))>;
 
-def : Pat<(int_riscv_pulp_macs GPR:$rs1, GPR:$rs2, GPR:$rd), (P_MACS GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(int_riscv_pulp_macu GPR:$rs1, GPR:$rs2, GPR:$rd), (P_MACU GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(int_riscv_pulp_macs (i32 GPR:$rs1), (i32 GPR:$rs2), (i32 GPR:$rd)), (P_MACS (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2))>;
+def : Pat<(int_riscv_pulp_macu (i32 GPR:$rs1), (i32 GPR:$rs2), (i32 GPR:$rd)), (P_MACU (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2))>;
 
-def : Pat<(int_riscv_pulp_machhs GPR:$rs1, GPR:$rs2, GPR:$rd), (P_MACHHS GPR:$rd, GPR:$rs1, GPR:$rs2)>;
-def : Pat<(int_riscv_pulp_machhu GPR:$rs1, GPR:$rs2, GPR:$rd), (P_MACHHU GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(int_riscv_pulp_machhs (i32 GPR:$rs1), (i32 GPR:$rs2), (i32 GPR:$rd)), (P_MACHHS (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2))>;
+def : Pat<(int_riscv_pulp_machhu (i32 GPR:$rs1), (i32 GPR:$rs2), (i32 GPR:$rd)), (P_MACHHU (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2))>;
 
 def : PatGprGpr<int_riscv_pulp_rotr, P_ROR>;
 
@@ -1689,49 +1690,49 @@ defm : BinaryVectorBuiltin<"sra",  "SRA">;
 defm : BinaryVectorBuiltin<"sll",  "SLL">;
 def : Pat<(int_riscv_pulp_abs2 PulpV2:$rs1), (PV_ABS_H PulpV2:$rs1)>;
 def : Pat<(int_riscv_pulp_abs4 PulpV4:$rs1), (PV_ABS_B PulpV4:$rs1)>;
-def : Pat<(int_riscv_pulp_neg2 PulpV2:$rs1), (PV_SUB_H X0, PulpV2:$rs1)>;
-def : Pat<(int_riscv_pulp_neg4 PulpV4:$rs1), (PV_SUB_B X0, PulpV4:$rs1)>;
+def : Pat<(int_riscv_pulp_neg2 PulpV2:$rs1), (PV_SUB_H (XLenVT X0), PulpV2:$rs1)>;
+def : Pat<(int_riscv_pulp_neg4 PulpV4:$rs1), (PV_SUB_B (XLenVT X0), PulpV4:$rs1)>;
 
 class PatV2V2GPR<SDPatternOperator op, Instruction instr>
-    : Pat<(op PulpV2:$rs1, PulpV2:$rs2, GPR:$rd),
-          (instr GPR:$rd, PulpV2:$rs1, PulpV2:$rs2)>;
+    : Pat<(op PulpV2:$rs1, PulpV2:$rs2, (i32 GPR:$rd)),
+          (instr (i32 GPR:$rd), PulpV2:$rs1, PulpV2:$rs2)>;
 
 class PatV2GPRGPR<SDPatternOperator op, Instruction instr>
-    : Pat<(op PulpV2:$rs1, GPR:$rs2, GPR:$rd),
-          (instr GPR:$rd, PulpV2:$rs1, GPR:$rs2)>;
+    : Pat<(op PulpV2:$rs1, (i32 GPR:$rs2), (i32 GPR:$rd)),
+          (instr (i32 GPR:$rd), PulpV2:$rs1, (i32 GPR:$rs2))>;
 
 class PatV4V4GPR<SDPatternOperator op, Instruction instr>
-    : Pat<(op PulpV4:$rs1, PulpV4:$rs2, GPR:$rd),
-          (instr GPR:$rd, PulpV4:$rs1, PulpV4:$rs2)>;
+    : Pat<(op PulpV4:$rs1, PulpV4:$rs2, (i32 GPR:$rd)),
+          (instr (i32 GPR:$rd), PulpV4:$rs1, PulpV4:$rs2)>;
 
 class PatV4GPRGPR<SDPatternOperator op, Instruction instr>
-    : Pat<(op PulpV4:$rs1, GPR:$rs2, GPR:$rd),
-          (instr GPR:$rd, PulpV4:$rs1, GPR:$rs2)>;
+    : Pat<(op PulpV4:$rs1, (i32 GPR:$rs2), (i32 GPR:$rd)),
+          (instr (i32 GPR:$rd), PulpV4:$rs1, (i32 GPR:$rs2))>;
 
 multiclass DotproductBuiltin<string intrin, string instr> {
   def : PatV2V2<!cast<Intrinsic>("int_riscv_pulp_dot" # intrin # "p2"),
                 !cast<RVInst>("PV_DOT" # instr # "P_H")>;
 
-  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_dot" # intrin # "psc2") PulpV2:$rs1, GPR:$rs2),
-            (!cast<RVInst>("PV_DOT" # instr # "P_SC_H") PulpV2:$rs1, GPR:$rs2)>;
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_dot" # intrin # "psc2") PulpV2:$rs1, (i32 GPR:$rs2)),
+            (!cast<RVInst>("PV_DOT" # instr # "P_SC_H") PulpV2:$rs1, (i32 GPR:$rs2))>;
 
   def : PatV4V4<!cast<Intrinsic>("int_riscv_pulp_dot" # intrin # "p4"),
                 !cast<RVInst>("PV_DOT" # instr # "P_B")>;
 
-  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_dot" # intrin # "psc4") PulpV4:$rs1, GPR:$rs2),
-            (!cast<RVInst>("PV_DOT" # instr # "P_SC_B") PulpV4:$rs1, GPR:$rs2)>;
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_dot" # intrin # "psc4") PulpV4:$rs1, (i32 GPR:$rs2)),
+            (!cast<RVInst>("PV_DOT" # instr # "P_SC_B") PulpV4:$rs1, (i32 GPR:$rs2))>;
 
-  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_sdot" # intrin # "p2") PulpV2:$rs1, PulpV2:$rs2, GPR:$rd),
-            (!cast<RVInst>("PV_SDOT" # instr # "P_H") GPR:$rd, PulpV2:$rs1, PulpV2:$rs2)>;
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_sdot" # intrin # "p2") PulpV2:$rs1, PulpV2:$rs2, (i32 GPR:$rd)),
+            (!cast<RVInst>("PV_SDOT" # instr # "P_H") (i32 GPR:$rd), PulpV2:$rs1, PulpV2:$rs2)>;
 
-  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_sdot" # intrin # "psc2") PulpV2:$rs1, GPR:$rs2, GPR:$rd),
-            (!cast<RVInst>("PV_SDOT" # instr # "P_SC_H") GPR:$rd, PulpV2:$rs1, GPR:$rs2)>;
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_sdot" # intrin # "psc2") PulpV2:$rs1, (i32 GPR:$rs2), (i32 GPR:$rd)),
+            (!cast<RVInst>("PV_SDOT" # instr # "P_SC_H") (i32 GPR:$rd), PulpV2:$rs1, (i32 GPR:$rs2))>;
 
-  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_sdot" # intrin # "p4") PulpV4:$rs1, PulpV4:$rs2, GPR:$rd),
-            (!cast<RVInst>("PV_SDOT" # instr # "P_B") GPR:$rd, PulpV4:$rs1, PulpV4:$rs2)>;
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_sdot" # intrin # "p4") PulpV4:$rs1, PulpV4:$rs2, (i32 GPR:$rd)),
+            (!cast<RVInst>("PV_SDOT" # instr # "P_B") (i32 GPR:$rd), PulpV4:$rs1, PulpV4:$rs2)>;
 
-  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_sdot" # intrin # "psc4") PulpV4:$rs1, GPR:$rs2, GPR:$rd),
-            (!cast<RVInst>("PV_SDOT" # instr # "P_SC_B") GPR:$rd, PulpV4:$rs1, GPR:$rs2)>;
+  def : Pat<(!cast<Intrinsic>("int_riscv_pulp_sdot" # intrin # "psc4") PulpV4:$rs1, (i32 GPR:$rs2), (i32 GPR:$rd)),
+            (!cast<RVInst>("PV_SDOT" # instr # "P_SC_B") (i32 GPR:$rd), PulpV4:$rs1, (i32 GPR:$rs2))>;
 
 }
 
@@ -1752,24 +1753,24 @@ defm : int_mul_mac_N_RN<"hhu", "HHU">;
 multiclass int_N_RN_r<string intrin, string instr> {
   // <op>N: op with normalization factor as immediate
   def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "N")
-              GPR:$rs1, GPR:$rs2, tuimm5:$shift),
+              (i32 GPR:$rs1), (i32 GPR:$rs2), tuimm5:$shift),
             (!cast<RVInst>("P_" # instr # "N")
-              GPR:$rs1, GPR:$rs2, tuimm5:$shift)>;
+              (i32 GPR:$rs1), (i32 GPR:$rs2), tuimm5:$shift)>;
   // <op>N_r: op with normalization factor
   def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "N_r")
-              GPR:$rd, GPR:$rs1, GPR:$rs2),
+              (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2)),
             (!cast<RVInst>("P_" # instr # "NR")
-              GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+              (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2))>;
   // <op>RN: op with normalization and rounding factors as immediates
   def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "RN")
-              GPR:$rs1, GPR:$rs2, tuimm5:$shift, timm),
+              (i32 GPR:$rs1), (i32 GPR:$rs2), tuimm5:$shift, timm),
             (!cast<RVInst>("P_" # instr # "RN")
-              GPR:$rs1, GPR:$rs2, tuimm5:$shift)>;
+              (i32 GPR:$rs1), (i32 GPR:$rs2), tuimm5:$shift)>;
   // <op>RN_r: op with normalization and rounding factors
   def : Pat<(!cast<Intrinsic>("int_riscv_pulp_" # intrin # "RN_r")
-              GPR:$rd, GPR:$rs1, GPR:$rs2),
+              (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2)),
             (!cast<RVInst>("P_" # instr # "RNR")
-              GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+              (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2))>;
 }
 
 defm : int_N_RN_r<"add",  "ADD">;
@@ -1777,71 +1778,71 @@ defm : int_N_RN_r<"addu", "ADDU">;
 defm : int_N_RN_r<"sub",  "SUB">;
 defm : int_N_RN_r<"subu", "SUBU">;
 
-def : Pat<(int_riscv_pulp_pack2 GPR:$rs1, GPR:$rs2),
-          (PV_PACK_H GPR:$rs2, GPR:$rs1)>;
-def : Pat<(int_riscv_pulp_pack4 GPR:$rs1, GPR:$rs2, GPR:$rs3, GPR:$rs4),
-          (PV_PACKLO_B (PV_PACKHI_B_nowb GPR:$rs4, GPR:$rs3), GPR:$rs2, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_pack2 (i32 GPR:$rs1), (i32 GPR:$rs2)),
+          (PV_PACK_H (i32 GPR:$rs2), (i32 GPR:$rs1))>;
+def : Pat<(int_riscv_pulp_pack4 (i32 GPR:$rs1), (i32 GPR:$rs2), (i32 GPR:$rs3), (i32 GPR:$rs4)),
+          (PV_PACKLO_B (PV_PACKHI_B_nowb (i32 GPR:$rs4), (i32 GPR:$rs3)), (i32 GPR:$rs2), (i32 GPR:$rs1))>;
 def : PatV2V2<int_riscv_pulp_shuffleh, PV_SHUFFLE_H>;
 def : PatV4V4<int_riscv_pulp_shuffleb, PV_SHUFFLE_B>;
-def : Pat<(int_riscv_pulp_pack4_lo GPR:$rs2, GPR:$rs1, PulpV4:$rd),
-          (PV_PACKLO_B PulpV4:$rd, GPR:$rs2, GPR:$rs1)>;
-def : Pat<(int_riscv_pulp_pack4_hi GPR:$rs2, GPR:$rs1, PulpV4:$rd),
-          (PV_PACKHI_B PulpV4:$rd, GPR:$rs2, GPR:$rs1)>;
+def : Pat<(int_riscv_pulp_pack4_lo (i32 GPR:$rs2), (i32 GPR:$rs1), PulpV4:$rd),
+          (PV_PACKLO_B PulpV4:$rd, (i32 GPR:$rs2), (i32 GPR:$rs1))>;
+def : Pat<(int_riscv_pulp_pack4_hi (i32 GPR:$rs2), (i32 GPR:$rs1), PulpV4:$rd),
+          (PV_PACKHI_B PulpV4:$rd, (i32 GPR:$rs2), (i32 GPR:$rs1))>;
 def : Pat<(int_riscv_pulp_shuffle2h PulpV2:$rd, PulpV2:$rs1, PulpV2:$rs2),
           (PV_SHUFFLE2_H PulpV2:$rd, PulpV2:$rs1, PulpV2:$rs2)>;
 def : Pat<(int_riscv_pulp_shuffle4b PulpV4:$rd, PulpV4:$rs1, PulpV4:$rs2),
           (PV_SHUFFLE2_B PulpV4:$rd, PulpV4:$rs1, PulpV4:$rs2)>;
 
-def : Pat<(int_riscv_pulp_bclr GPR:$rs1, shiftedFlippedMask:$mask),
-          (P_BCLR GPR:$rs1, (flippedMaskWidthMinus1 imm:$mask), (trailing1s imm:$mask))>;
+def : Pat<(int_riscv_pulp_bclr (i32 GPR:$rs1), shiftedFlippedMask:$mask),
+          (P_BCLR (i32 GPR:$rs1), (flippedMaskWidthMinus1 imm:$mask), (trailing1s imm:$mask))>;
 def : PatGprGpr<int_riscv_pulp_bclr_r, P_BCLRR>;
 
-def : Pat<(int_riscv_pulp_bset GPR:$rs1, shiftedMask:$mask),
-          (P_BSET GPR:$rs1, (maskWidthMinus1 imm:$mask), (trailing0s imm:$mask))>;
+def : Pat<(int_riscv_pulp_bset (i32 GPR:$rs1), shiftedMask:$mask),
+          (P_BSET (i32 GPR:$rs1), (maskWidthMinus1 imm:$mask), (trailing0s imm:$mask))>;
 def : PatGprGpr<int_riscv_pulp_bset_r, P_BSETR>;
 
-def : Pat<(int_riscv_pulp_bextract GPR:$rs1, tuimm5:$size, tuimm5:$shift),
-          (P_EXTRACT GPR:$rs1, tuimm5:$size, tuimm5:$shift)>;
+def : Pat<(int_riscv_pulp_bextract (i32 GPR:$rs1), tuimm5:$size, tuimm5:$shift),
+          (P_EXTRACT (i32 GPR:$rs1), tuimm5:$size, tuimm5:$shift)>;
 def : PatGprGpr<int_riscv_pulp_bextract_r, P_EXTRACTR>;
 
-def : Pat<(int_riscv_pulp_bextractu GPR:$rs1, tuimm5:$size, tuimm5:$shift),
-          (P_EXTRACTU GPR:$rs1, tuimm5:$size, tuimm5:$shift)>;
+def : Pat<(int_riscv_pulp_bextractu (i32 GPR:$rs1), tuimm5:$size, tuimm5:$shift),
+          (P_EXTRACTU (i32 GPR:$rs1), tuimm5:$size, tuimm5:$shift)>;
 def : PatGprGpr<int_riscv_pulp_bextractu_r, P_EXTRACTUR>;
 
-def : Pat<(int_riscv_pulp_binsert GPR:$rd, shiftedFlippedMask,
-                                  GPR:$rs1, shiftedMask:$srcMask, tuimm5:$shift),
-          (P_INSERT GPR:$rd, GPR:$rs1, (maskWidthMinus1 imm:$srcMask), tuimm5:$shift)>;
-def : Pat<(int_riscv_pulp_binsert_r GPR:$rd, GPR:$rs1, GPR:$rs2),
-          (P_INSERTR GPR:$rd, GPR:$rs1, GPR:$rs2)>;
+def : Pat<(int_riscv_pulp_binsert (i32 GPR:$rd), shiftedFlippedMask,
+                                  (i32 GPR:$rs1), shiftedMask:$srcMask, tuimm5:$shift),
+          (P_INSERT (i32 GPR:$rd), (i32 GPR:$rs1), (maskWidthMinus1 imm:$srcMask), tuimm5:$shift)>;
+def : Pat<(int_riscv_pulp_binsert_r (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2)),
+          (P_INSERTR (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2))>;
 
-def : Pat<(int_riscv_pulp_clip GPR:$rs1, negativePowerOf2:$lowerBound,
+def : Pat<(int_riscv_pulp_clip (i32 GPR:$rs1), negativePowerOf2:$lowerBound,
                                powerOf2Minus1),
-          (P_CLIP GPR:$rs1, (trailing0s imm:$lowerBound))>;
+          (P_CLIP (i32 GPR:$rs1), (trailing0s imm:$lowerBound))>;
 def : PatGprGpr<int_riscv_pulp_clip_r, P_CLIPR>;
 
-def : Pat<(int_riscv_pulp_clipu GPR:$rs1, 0, powerOf2Minus1:$upperBound),
-          (P_CLIPU GPR:$rs1, (trailing1sPlus1 imm:$upperBound))>;
+def : Pat<(int_riscv_pulp_clipu (i32 GPR:$rs1), 0, powerOf2Minus1:$upperBound),
+          (P_CLIPU (i32 GPR:$rs1), (trailing1sPlus1 imm:$upperBound))>;
 def : PatGprGpr<int_riscv_pulp_clipu_r, P_CLIPUR>;
 
-def : Pat<(int_riscv_pulp_OffsetedRead GPR:$rs1, GPR:$rs2), (P_LW_rr GPR:$rs1, GPR:$rs2)>;
-def : Pat<(int_riscv_pulp_OffsetedReadHalf GPR:$rs1, GPR:$rs2), (P_LH_rr GPR:$rs1, GPR:$rs2)>;
-def : Pat<(int_riscv_pulp_OffsetedReadByte GPR:$rs1, GPR:$rs2), (P_LB_rr GPR:$rs1, GPR:$rs2)>;
+def : Pat<(int_riscv_pulp_OffsetedRead (i32 GPR:$rs1), (i32 GPR:$rs2)), (P_LW_rr (i32 GPR:$rs1), (i32 GPR:$rs2))>;
+def : Pat<(int_riscv_pulp_OffsetedReadHalf (i32 GPR:$rs1), (i32 GPR:$rs2)), (P_LH_rr (i32 GPR:$rs1), (i32 GPR:$rs2))>;
+def : Pat<(int_riscv_pulp_OffsetedReadByte (i32 GPR:$rs1), (i32 GPR:$rs2)), (P_LB_rr (i32 GPR:$rs1), (i32 GPR:$rs2))>;
 
-def : Pat<(int_riscv_pulp_OffsetedWrite GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SW_rr GPR:$rs2, GPR:$rs1, GPR:$rs3)>;
-def : Pat<(int_riscv_pulp_OffsetedWriteHalf GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SH_rr GPR:$rs2, GPR:$rs1, GPR:$rs3)>;
-def : Pat<(int_riscv_pulp_OffsetedWriteByte GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SB_rr GPR:$rs2, GPR:$rs1, GPR:$rs3)>;
+def : Pat<(int_riscv_pulp_OffsetedWrite (i32 GPR:$rs2), (i32 GPR:$rs1), (i32 GPR:$rs3)), (P_SW_rr (i32 GPR:$rs2), (i32 GPR:$rs1), (i32 GPR:$rs3))>;
+def : Pat<(int_riscv_pulp_OffsetedWriteHalf (i32 GPR:$rs2), (i32 GPR:$rs1), (i32 GPR:$rs3)), (P_SH_rr (i32 GPR:$rs2), (i32 GPR:$rs1), (i32 GPR:$rs3))>;
+def : Pat<(int_riscv_pulp_OffsetedWriteByte (i32 GPR:$rs2), (i32 GPR:$rs1), (i32 GPR:$rs3)), (P_SB_rr (i32 GPR:$rs2), (i32 GPR:$rs1), (i32 GPR:$rs3))>;
 
-def : Pat<(int_riscv_pulp_read_base_off GPR:$rs1, GPR:$rs2), (P_LW_rr GPR:$rs1, GPR:$rs2)>;
-def : Pat<(int_riscv_pulp_write_base_off GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SW_rr GPR:$rs2, GPR:$rs1, GPR:$rs3)>;
+def : Pat<(int_riscv_pulp_read_base_off (i32 GPR:$rs1), (i32 GPR:$rs2)), (P_LW_rr (i32 GPR:$rs1), (i32 GPR:$rs2))>;
+def : Pat<(int_riscv_pulp_write_base_off (i32 GPR:$rs2), (i32 GPR:$rs1), (i32 GPR:$rs3)), (P_SW_rr (i32 GPR:$rs2), (i32 GPR:$rs1), (i32 GPR:$rs3))>;
 
 def : Pat<(int_riscv_pulp_spr_read tuimm12:$csr),
-          (CSRRS csr_sysreg:$csr, X0)>;
+          (CSRRS csr_sysreg:$csr, (XLenVT X0))>;
 def : Pat<(int_riscv_pulp_spr_read_vol tuimm12:$csr),
-          (CSRRS csr_sysreg:$csr, X0)>;
-def : Pat<(int_riscv_pulp_spr_write tuimm12:$csr, GPR:$rd),
-          (CSRRW csr_sysreg:$csr, GPR:$rd)>;
-def : Pat<(int_riscv_pulp_read_then_spr_write tuimm12:$csr, GPR:$rs1),
-          (CSRRW csr_sysreg:$csr, GPR:$rs1)>;
+          (CSRRS csr_sysreg:$csr, (XLenVT X0))>;
+def : Pat<(int_riscv_pulp_spr_write tuimm12:$csr, (i32 GPR:$rd)),
+          (CSRRW csr_sysreg:$csr, (i32 GPR:$rd))>;
+def : Pat<(int_riscv_pulp_read_then_spr_write tuimm12:$csr, (i32 GPR:$rs1)),
+          (CSRRW csr_sysreg:$csr, (i32 GPR:$rs1))>;
 def : Pat<(int_riscv_pulp_spr_bit_set tuimm12:$csr, tuimm5:$offset),
           (CSRRSI csr_sysreg:$csr, tuimm5:$offset)>;
 def : Pat<(int_riscv_pulp_spr_bit_clr tuimm12:$csr, tuimm5:$offset),
@@ -1852,15 +1853,15 @@ def : Pat<(int_riscv_pulp_read_then_spr_bit_clr tuimm12:$csr, tuimm5:$offset),
           (CSRRCI csr_sysreg:$csr, tuimm5:$offset)>;
 
 // TODO the *_v versions should have side effects
-def : Pat<(int_riscv_pulp_read_base_off_v GPR:$rs1, GPR:$rs2), (P_LW_rr GPR:$rs1, GPR:$rs2)>;
-def : Pat<(int_riscv_pulp_write_base_off_v GPR:$rs2, GPR:$rs1, GPR:$rs3), (P_SW_rr GPR:$rs2, GPR:$rs1, GPR:$rs3)>;
+def : Pat<(int_riscv_pulp_read_base_off_v (i32 GPR:$rs1), (i32 GPR:$rs2)), (P_LW_rr (i32 GPR:$rs1), (i32 GPR:$rs2))>;
+def : Pat<(int_riscv_pulp_write_base_off_v (i32 GPR:$rs2), (i32 GPR:$rs1), (i32 GPR:$rs3)), (P_SW_rr (i32 GPR:$rs2), (i32 GPR:$rs1), (i32 GPR:$rs3))>;
 
-def : Pat<(int_riscv_pulp_CoreId), (ANDI (CSRRS MHARTID.Encoding, X0), 0b1111)>;
+def : Pat<(int_riscv_pulp_CoreId), (ANDI (CSRRS MHARTID.Encoding, (XLenVT X0)), 0b1111)>;
 def : Pat<(int_riscv_pulp_CoreCount), (ANDI (LW (LUI 0x1A103), 0), 0x12)>;
-def : Pat<(int_riscv_pulp_ClusterId), (SRLI (ANDI (CSRRS MHARTID.Encoding, X0), 0b11111100000), 5)>;
-def : Pat<(int_riscv_pulp_IsFc), (SRLI (ANDI (CSRRS MHARTID.Encoding, X0), 0b10000000000), 10)>;
+def : Pat<(int_riscv_pulp_ClusterId), (SRLI (ANDI (CSRRS MHARTID.Encoding, (XLenVT X0)), 0b11111100000), 5)>;
+def : Pat<(int_riscv_pulp_IsFc), (SRLI (ANDI (CSRRS MHARTID.Encoding, (XLenVT X0)), 0b10000000000), 10)>;
 // Symbols below must be provided by the platform, no CSR involved
 // Note: GCC lowers HasFc to zero immediate
-def : Pat<(int_riscv_pulp_HasFc), (ANDI X0, 0)>;
+def : Pat<(int_riscv_pulp_HasFc), (ANDI (XLenVT X0), 0)>;
 
 } // Predicates = [IsRV32, HasPULPExtV2]

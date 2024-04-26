@@ -77,7 +77,7 @@ let TargetPrefix = "riscv" in {
                            list<IntrinsicProperty> intr_properties> {
 
     def int_riscv_pulp_ #NAME
-        : GCCBuiltin<"__builtin_pulp_" #NAME>,
+        : ClangBuiltin<"__builtin_pulp_" #NAME>,
           Intrinsic<ret_types, param_types, intr_properties>;
   }
 
@@ -276,29 +276,29 @@ let TargetPrefix = "riscv" in {
 
   // PULP Memory Intrinsics
 
-  multiclass PulpReadMemIntrinsic<LLVMType element_type>
+  multiclass PulpReadMemIntrinsic
       : PulpIntrinsic<[llvm_i32_ty],
-                      [LLVMPointerType<element_type>, llvm_i32_ty],
+                      [llvm_ptr_ty, llvm_i32_ty],
                       [IntrReadMem, ReadOnly<ArgIndex<0>>,
                       NoCapture<ArgIndex<0>>]>;
 
-  defm OffsetedRead : PulpReadMemIntrinsic<llvm_i32_ty>;
-  defm OffsetedReadHalf : PulpReadMemIntrinsic<llvm_i16_ty>;
-  defm OffsetedReadByte : PulpReadMemIntrinsic<llvm_i8_ty>;
-  defm read_base_off : PulpReadMemIntrinsic<llvm_i32_ty>;
-  defm read_base_off_v : PulpReadMemIntrinsic<llvm_i32_ty>;
+  defm OffsetedRead : PulpReadMemIntrinsic;
+  defm OffsetedReadHalf : PulpReadMemIntrinsic;
+  defm OffsetedReadByte : PulpReadMemIntrinsic;
+  defm read_base_off : PulpReadMemIntrinsic;
+  defm read_base_off_v : PulpReadMemIntrinsic;
 
-  multiclass PulpWriteMemIntrinsic<LLVMType element_type>
+  multiclass PulpWriteMemIntrinsic
       : PulpIntrinsic<[],
-                      [llvm_i32_ty, LLVMPointerType<element_type>, llvm_i32_ty],
+                      [llvm_i32_ty, llvm_ptr_ty, llvm_i32_ty],
                       [IntrWriteMem, WriteOnly<ArgIndex<1>>,
                       NoCapture<ArgIndex<1>>]>;
 
-  defm OffsetedWrite : PulpWriteMemIntrinsic<llvm_i32_ty>;
-  defm OffsetedWriteHalf : PulpWriteMemIntrinsic<llvm_i16_ty>;
-  defm OffsetedWriteByte : PulpWriteMemIntrinsic<llvm_i8_ty>;
-  defm write_base_off : PulpWriteMemIntrinsic<llvm_i32_ty>;
-  defm write_base_off_v : PulpWriteMemIntrinsic<llvm_i32_ty>;
+  defm OffsetedWrite : PulpWriteMemIntrinsic;
+  defm OffsetedWriteHalf : PulpWriteMemIntrinsic;
+  defm OffsetedWriteByte : PulpWriteMemIntrinsic;
+  defm write_base_off : PulpWriteMemIntrinsic;
+  defm write_base_off_v : PulpWriteMemIntrinsic;
 
   // PULP SPR Intrinsics
 
@@ -2101,13 +2101,13 @@ def int_riscv_sm3p1      : ScalarCryptoGprIntrinsic32;
 
 // FIXME: should probably need a llvm_anyptr_ty here, but that does not work
 def int_riscv_pulp_event_unit_read
-    : GCCBuiltin<"__builtin_pulp_event_unit_read">,
+    : ClangBuiltin<"__builtin_pulp_event_unit_read">,
       Intrinsic<[llvm_i32_ty],
-                [LLVMPointerType<llvm_i32_ty>, llvm_i32_ty],
+                [llvm_ptr_ty, llvm_i32_ty],
                 [IntrHasSideEffects]>;
 
 def int_riscv_pulp_bitinsert
-    : GCCBuiltin<"__builtin_bitinsert">, // NOTE: GCC has no pulp here
+    : ClangBuiltin<"__builtin_bitinsert">, // NOTE: GCC has no pulp here
       Intrinsic<[llvm_i32_ty],
                 [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
                 [IntrNoMem]>;
@@ -2124,38 +2124,38 @@ class RISCVSSRIntrinsic {
 let TargetPrefix = "riscv" in {
 
   def int_riscv_ssr_setup_1d_r
-      : GCCBuiltin<"__builtin_ssr_setup_1d_r">,
+      : ClangBuiltin<"__builtin_ssr_setup_1d_r">,
         Intrinsic<[],
                   [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty],
                   [IntrHasSideEffects, ImmArg<ArgIndex<0>>]>,
         RISCVSSRIntrinsic;
   def int_riscv_ssr_setup_1d_w
-      : GCCBuiltin<"__builtin_ssr_setup_1d_w">,
+      : ClangBuiltin<"__builtin_ssr_setup_1d_w">,
         Intrinsic<[],
                   [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty],
                   [IntrHasSideEffects, ImmArg<ArgIndex<0>>]>,
         RISCVSSRIntrinsic;
   def int_riscv_ssr_read
-      : GCCBuiltin<"__builtin_ssr_read">,
+      : ClangBuiltin<"__builtin_ssr_read">,
         Intrinsic<[],
                   [llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty],
                   [IntrHasSideEffects]>,
         RISCVSSRIntrinsic;
   def int_riscv_ssr_write
-      : GCCBuiltin<"__builtin_ssr_write">,
+      : ClangBuiltin<"__builtin_ssr_write">,
         Intrinsic<[],
                   [llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty],
                   [IntrHasSideEffects]>,
         RISCVSSRIntrinsic;
   def int_riscv_ssr_read_imm
-      : GCCBuiltin<"__builtin_ssr_read_imm">,
+      : ClangBuiltin<"__builtin_ssr_read_imm">,
         /* RetTypes, ParamTypes, Properties */
         Intrinsic<[],
                   [llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty],
                   [IntrHasSideEffects, ImmArg<ArgIndex<0>>, ImmArg<ArgIndex<1>>]>,
         RISCVSSRIntrinsic;
   def int_riscv_ssr_write_imm
-      : GCCBuiltin<"__builtin_ssr_write_imm">,
+      : ClangBuiltin<"__builtin_ssr_write_imm">,
         /* RetTypes, ParamTypes, Properties */
         Intrinsic<[],
                   [llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty],
@@ -2166,42 +2166,42 @@ let TargetPrefix = "riscv" in {
   // by the LICM pass
   // TODO: Is there another way to do this?
   def int_riscv_ssr_push
-      : GCCBuiltin<"__builtin_ssr_push">,
+      : ClangBuiltin<"__builtin_ssr_push">,
         Intrinsic<[],
                   [llvm_i32_ty, llvm_double_ty],
                   [IntrWriteMem, IntrHasSideEffects, Throws, ImmArg<ArgIndex<0>>]>,
         RISCVSSRIntrinsic;
   def int_riscv_ssr_pop
-      : GCCBuiltin<"__builtin_ssr_pop">,
+      : ClangBuiltin<"__builtin_ssr_pop">,
         Intrinsic<[llvm_double_ty],
                   [llvm_i32_ty],
                   [IntrReadMem, IntrHasSideEffects, Throws, ImmArg<ArgIndex<0>>]>,
         RISCVSSRIntrinsic;
 
   def int_riscv_ssr_enable
-      : GCCBuiltin<"__builtin_ssr_enable">,
+      : ClangBuiltin<"__builtin_ssr_enable">,
         Intrinsic<[], [], [IntrHasSideEffects]>,
         RISCVSSRIntrinsic;
   def int_riscv_ssr_disable
-      : GCCBuiltin<"__builtin_ssr_disable">,
+      : ClangBuiltin<"__builtin_ssr_disable">,
         Intrinsic<[], [], [IntrHasSideEffects]>,
         RISCVSSRIntrinsic;
   foreach dim = [1, 2, 3, 4] in {
     def int_riscv_ssr_setup_bound_stride_#dim#d
-        : GCCBuiltin<"__builtin_ssr_setup_bound_stride_"#dim#"d">,
+        : ClangBuiltin<"__builtin_ssr_setup_bound_stride_"#dim#"d">,
           Intrinsic<[], 
                     [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
                     [IntrHasSideEffects]>,
           RISCVSSRIntrinsic;
   }
   def int_riscv_ssr_setup_repetition
-      : GCCBuiltin<"__builtin_ssr_setup_repetition">,
+      : ClangBuiltin<"__builtin_ssr_setup_repetition">,
         Intrinsic<[],
                   [llvm_i32_ty, llvm_i32_ty],
                   [IntrHasSideEffects]>,
         RISCVSSRIntrinsic;
   def int_riscv_ssr_barrier
-      : GCCBuiltin<"__builtin_ssr_barrier">,
+      : ClangBuiltin<"__builtin_ssr_barrier">,
         Intrinsic<[], [llvm_i32_ty], [IntrHasSideEffects, ImmArg<ArgIndex<0>>]>, RISCVSSRIntrinsic;
 
 } // TargetPrefix = "riscv"
@@ -2216,7 +2216,7 @@ class RISCVSDMAIntrinsic {
 
 let TargetPrefix = "riscv" in {
   def int_riscv_sdma_start_oned
-      : GCCBuiltin<"__builtin_sdma_start_oned">,
+      : ClangBuiltin<"__builtin_sdma_start_oned">,
         Intrinsic<[llvm_i32_ty],
                   [llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty],
                   [IntrHasSideEffects]>,
@@ -2230,7 +2230,7 @@ let TargetPrefix = "riscv" in {
         RISCVSDMAIntrinsic;
 
   def int_riscv_sdma_start_twod
-      : GCCBuiltin<"__builtin_sdma_start_twod">,
+      : ClangBuiltin<"__builtin_sdma_start_twod">,
         Intrinsic<[llvm_i32_ty],
                   [llvm_i64_ty, llvm_i64_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_i32_ty],
                   [IntrHasSideEffects]>,
@@ -2241,11 +2241,11 @@ let TargetPrefix = "riscv" in {
                   [IntrHasSideEffects]>,
         RISCVSDMAIntrinsic;
   def int_riscv_sdma_stat
-      : GCCBuiltin<"__builtin_sdma_stat">,
+      : ClangBuiltin<"__builtin_sdma_stat">,
         Intrinsic<[llvm_i32_ty], [llvm_i32_ty], [IntrHasSideEffects]>,
         RISCVSDMAIntrinsic;
   def int_riscv_sdma_wait_for_idle
-      : GCCBuiltin<"__builtin_sdma_wait_for_idle">,
+      : ClangBuiltin<"__builtin_sdma_wait_for_idle">,
         Intrinsic<[], [], [IntrHasSideEffects]>, RISCVSDMAIntrinsic;
 } // TargetPrefix = "riscv"
 

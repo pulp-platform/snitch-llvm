@@ -67,10 +67,10 @@ def : InstAlias<"fcvt.ah.l $rd, $rs1, $rm",   (FCVT_H_L FPR16:$rd, GPR:$rs1, frm
 def : InstAlias<"fcvt.ah.l $rd, $rs1",   (FCVT_H_L FPR16:$rd, GPR:$rs1, 0b111), 0>;
 def : InstAlias<"fcvt.ah.lu $rd, $rs1, $rm",   (FCVT_H_LU FPR16:$rd, GPR:$rs1, frmarg:$rm), 0>;
 def : InstAlias<"fcvt.ah.lu $rd, $rs1",   (FCVT_H_LU FPR16:$rd, GPR:$rs1, 0b111), 0>;
-def : InstAlias<"fcvt.s.ah $rd, $rs1",   (FCVT_S_H FPR32:$rd, FPR16:$rs1), 0>;
+def : InstAlias<"fcvt.s.ah $rd, $rs1",   (FCVT_S_H FPR32:$rd, FPR16:$rs1, 0b111), 0>;
 def : InstAlias<"fcvt.ah.s $rd, $rs1, $rm",   (FCVT_H_S FPR16:$rd, FPR32:$rs1, frmarg:$rm), 0>;
 def : InstAlias<"fcvt.ah.s $rd, $rs1",   (FCVT_H_S FPR16:$rd, FPR32:$rs1, 0b111), 0>;
-def : InstAlias<"fcvt.d.ah $rd, $rs1",   (FCVT_D_H FPR64:$rd, FPR16:$rs1), 0>;
+def : InstAlias<"fcvt.d.ah $rd, $rs1",   (FCVT_D_H FPR64:$rd, FPR16:$rs1, 0b111), 0>;
 def : InstAlias<"fcvt.ah.d $rd, $rs1, $rm",   (FCVT_H_D FPR16:$rd, FPR64:$rs1, frmarg:$rm), 0>;
 def : InstAlias<"fcvt.ah.d $rd, $rs1",   (FCVT_H_D FPR16:$rd, FPR64:$rs1, 0b111), 0>;
 def : InstAlias<"fcvt.ah.h $rd, $rs1, $rm",   (FCVT_H_H FPR16:$rd, FPR16:$rs1, frmarg:$rm), 0>;

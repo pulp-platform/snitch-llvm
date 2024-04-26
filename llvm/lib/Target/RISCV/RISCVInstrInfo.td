@@ -204,18 +204,6 @@ def uimmlog2xlen : RISCVOp, ImmLeaf<XLenVT, [{
   let OperandType = "OPERAND_UIMMLOG2XLEN";
 }
 
-def simm5 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isInt<5>(Imm);}]> {
-  let ParserMatchClass = SImmAsmOperand<5>;
-  let EncoderMethod = "getImmOpValue";
-  let DecoderMethod = "decodeSImmOperand<5>";
-  let MCOperandPredicate = [{
-    int64_t Imm;
-    if (MCOp.evaluateAsConstantImm(Imm))
-      return isInt<5>(Imm);
-    return MCOp.isBareSymbolRef();
-  }];
-}
-
 def InsnDirectiveOpcode : AsmOperandClass {
   let Name = "InsnDirectiveOpcode";
   let ParserMethod = "parseInsnDirectiveOpcode";
@@ -302,21 +290,6 @@ def uimm12m1 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isInt<12>(Imm);}]> {
     int64_t Imm;
     if (MCOp.evaluateAsConstantImm(Imm))
       return isInt<12>(Imm) && Imm > 0;
-    return MCOp.isBareSymbolRef();
-  }];
-}
-
-// an unsigned 4bit immediate
-def uimm4 : Operand<XLenVT>, ImmLeaf<XLenVT, [{return isUInt<4>(Imm);}]> {
-  let ParserMatchClass = UImmAsmOperand<4>;
-  let EncoderMethod = "getImmOpValue";
-  let DecoderMethod = "decodeUImmOperand<4>";
-  let OperandType = "OPERAND_UIMM4";
-  let OperandNamespace = "RISCVOp";
-  let MCOperandPredicate = [{
-    int64_t Imm;
-    if (MCOp.evaluateAsConstantImm(Imm))
-      return isUInt<4>(Imm);
     return MCOp.isBareSymbolRef();
   }];
 }

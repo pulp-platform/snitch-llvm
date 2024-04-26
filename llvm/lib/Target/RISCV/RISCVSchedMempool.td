@@ -21,7 +21,7 @@ def MempoolModel : SchedMachineModel {
   let UnsupportedFeatures = [HasStdExtZbkb, HasStdExtZbkc, HasStdExtZbkx,
                              HasStdExtZknd, HasStdExtZkne, HasStdExtZknh,
                              HasStdExtZksed, HasStdExtZksh, HasStdExtZkr,
-                             HasStdExtZbe, HasVInstructionsAnyF];
+                             HasStdExtZbs, HasVInstructionsAnyF];
 }
 
 //===----------------------------------------------------------------------===//
@@ -44,7 +44,6 @@ let SchedModel = MempoolModel in {
 def : WriteRes<WriteJmp, [MempoolUnitSnitch]>;
 def : WriteRes<WriteJal, [MempoolUnitSnitch]>;
 def : WriteRes<WriteJalr, [MempoolUnitSnitch]>;
-def : WriteRes<WriteJmpReg, [MempoolUnitSnitch]>;
 
 def : WriteRes<WriteIALU, [MempoolUnitSnitch]>;
 def : WriteRes<WriteShiftImm, [MempoolUnitSnitch]>;
@@ -54,11 +53,11 @@ def : WriteRes<WriteShiftReg32, [MempoolUnitSnitch]>;
 // Multiplies on Snitch are pipelines and take four cycles
 def : WriteRes<WriteIMul, [MempoolUnitSnitch, MempoolUnitIMulDiv]> {
 let Latency = 3;
-let ResourceCycles = [1, 1];
+let ReleaseAtCycles = [1, 1];
 }
 def : WriteRes<WriteIDiv, [MempoolUnitSnitch, MempoolUnitIMulDiv]> {
 let Latency = 16;
-let ResourceCycles = [1, 14];
+let ReleaseAtCycles = [1, 14];
 }
 
 // Memory
@@ -82,18 +81,18 @@ def : WriteRes<WriteNop, []>;
 def : InstRW<[WriteIALU], (instrs COPY)>;
 
 let Unsupported = 1 in {
+def : WriteRes<WriteBREV8, []>;  
 def : WriteRes<WriteIALU32, []>;
 def : WriteRes<WriteShiftImm32, []>;
 def : WriteRes<WriteIMul32, []>;
 def : WriteRes<WriteIDiv32, []>;
+def : WriteRes<WriteSFB, []>;
 def : WriteRes<WriteSTD, []>;
-def : WriteRes<WriteLDWU, []>;
 def : WriteRes<WriteLDD, []>;
 def : WriteRes<WriteAtomicD, []>;
 def : WriteRes<WriteAtomicLDD, []>;
 def : WriteRes<WriteAtomicSTD, []>;
-def : WriteRes<WriteFALU32, []>;
-def : WriteRes<WriteFALU64, []>;
+def : WriteRes<WriteFAdd32, []>;
 def : WriteRes<WriteFMul32, []>;
 def : WriteRes<WriteFMA32, []>;
 def : WriteRes<WriteFMul64, []>;
@@ -102,6 +101,7 @@ def : WriteRes<WriteFDiv32, []>;
 def : WriteRes<WriteFDiv64, []>;
 def : WriteRes<WriteFSqrt32, []>;
 def : WriteRes<WriteFSqrt64, []>;
+def : WriteRes<WriteFAdd64, []>;
 def : WriteRes<WriteFCvtI32ToF32, []>;
 def : WriteRes<WriteFCvtI32ToF64, []>;
 def : WriteRes<WriteFCvtI64ToF32, []>;
@@ -124,15 +124,26 @@ def : WriteRes<WriteFMovF32ToI32, []>;
 def : WriteRes<WriteFMovI32ToF32, []>;
 def : WriteRes<WriteFMovF64ToI64, []>;
 def : WriteRes<WriteFMovI64ToF64, []>;
+def : WriteRes<WriteFLI16, []>;
+def : WriteRes<WriteFLI32, []>;
 def : WriteRes<WriteFLD32, []>;
 def : WriteRes<WriteFLD64, []>;
 def : WriteRes<WriteFST32, []>;
 def : WriteRes<WriteFST64, []>;
+def : WriteRes<WriteFLI64, []>;
+def : WriteRes<WriteFRoundF16, []>;
+def : WriteRes<WriteFRoundF32, []>;
+def : WriteRes<WriteFRoundF64, []>;
+def : WriteRes<WritePACK, []>;
+def : WriteRes<WritePACK32, []>;
+def : WriteRes<WriteZIP, []>;
+def : WriteRes<WriteXPERM, []>;
 }
 
 //===----------------------------------------------------------------------===//
 // Subtarget-specific SchedRead types with cycles.
 // Dummy definitions for MempoolCore.
+def : ReadAdvance<ReadBREV8, 0>;
 def : ReadAdvance<ReadJmp, 0>;
 def : ReadAdvance<ReadJalr, 0>;
 def : ReadAdvance<ReadCSR, 0>;
@@ -144,6 +155,8 @@ def : ReadAdvance<ReadShiftImm, 0>;
 def : ReadAdvance<ReadShiftImm32, 0>;
 def : ReadAdvance<ReadShiftReg, 0>;
 def : ReadAdvance<ReadShiftReg32, 0>;
+def : ReadAdvance<ReadSFBJmp, 0>;
+def : ReadAdvance<ReadSFBALU, 0>;
 def : ReadAdvance<ReadIDiv, 0>;
 def : ReadAdvance<ReadIDiv32, 0>;
 def : ReadAdvance<ReadIMul, 0>;
@@ -157,16 +170,18 @@ def : ReadAdvance<ReadAtomicLDD, 0>;
 def : ReadAdvance<ReadAtomicSTW, 0>;
 def : ReadAdvance<ReadAtomicSTD, 0>;
 def : ReadAdvance<ReadFMemBase, 0>;
-def : ReadAdvance<ReadFALU32, 0>;
-def : ReadAdvance<ReadFALU64, 0>;
+def : ReadAdvance<ReadFAdd32, 0>;
 def : ReadAdvance<ReadFMul32, 0>;
 def : ReadAdvance<ReadFMA32, 0>;
+def : ReadAdvance<ReadFMA32Addend, 0>;
 def : ReadAdvance<ReadFMul64, 0>;
 def : ReadAdvance<ReadFDiv32, 0>;
 def : ReadAdvance<ReadFDiv64, 0>;
 def : ReadAdvance<ReadFMA64, 0>;
+def : ReadAdvance<ReadFMA64Addend, 0>;
 def : ReadAdvance<ReadFSqrt32, 0>;
 def : ReadAdvance<ReadFSqrt64, 0>;
+def : ReadAdvance<ReadFAdd64, 0>;
 def : ReadAdvance<ReadFCmp32, 0>;
 def : ReadAdvance<ReadFCmp64, 0>;
 def : ReadAdvance<ReadFSGNJ32, 0>;
@@ -189,6 +204,14 @@ def : ReadAdvance<ReadFMovF64ToI64, 0>;
 def : ReadAdvance<ReadFMovI64ToF64, 0>;
 def : ReadAdvance<ReadFClass32, 0>;
 def : ReadAdvance<ReadFClass64, 0>;
+def : ReadAdvance<ReadFRoundF16, 0>;
+def : ReadAdvance<ReadFRoundF32, 0>;
+def : ReadAdvance<ReadFRoundF64, 0>;
+def : ReadAdvance<ReadFStoreData, 0>;
+def : ReadAdvance<ReadPACK, 0>;
+def : ReadAdvance<ReadPACK32, 0>;
+def : ReadAdvance<ReadZIP, 0>;
+def : ReadAdvance<ReadXPERM, 0>;
 
 //===----------------------------------------------------------------------===//
 // Unsupported extensions
@@ -197,13 +220,5 @@ defm : UnsupportedSchedZba;
 defm : UnsupportedSchedZbb;
 defm : UnsupportedSchedZbc;
 defm : UnsupportedSchedZbs;
-defm : UnsupportedSchedZbe;
-defm : UnsupportedSchedZbf;
 defm : UnsupportedSchedZfh;
-defm : UnsupportedSchedZbm;
-
-defm : UnsupportedSchedZbp;
-defm : UnsupportedSchedZbr;
-defm : UnsupportedSchedZbt;
-
 }

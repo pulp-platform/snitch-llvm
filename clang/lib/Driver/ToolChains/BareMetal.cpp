@@ -78,7 +78,7 @@ static bool findRISCVMultilibs(const Driver &D,
     MultilibBuilder Imafd = MultilibBuilder("/rv32imafd/ilp32d")
                                 .flag("-march=rv32imafd")
                                 .flag("-mabi=ilp32d");
-    MultilibBuilder Imfcxpulpv2 = MultilibBuilder("/rv32imfcxpulpv2/ilp32f", 2)
+    MultilibBuilder Imfcxpulpv2 = MultilibBuilder("/rv32imfcxpulpv2/ilp32f")
                                 .flag("-march=rv32imfcxpulpv2")
                                 .flag("-mabi=ilp32f");
 

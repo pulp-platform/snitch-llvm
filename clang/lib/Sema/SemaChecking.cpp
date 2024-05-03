@@ -5341,12 +5341,12 @@ bool Sema::CheckRISCVBuiltinFunctionCall(const TargetInfo &TI,
     return static_cast<int>(Result.getSExtValue());
   };
   // Indicate, if present, the position of well-known immediate arguments.
-  Optional<int> RoundArgNum;
-  Optional<int> NormArgNum;
-  Optional<int> NegPow2ArgNum;
-  Optional<int> Pow2ComplArgNum;
-  Optional<int> MaskArgNum;
-  Optional<int> NegMaskArgNum;
+  std::optional<int> RoundArgNum;
+  std::optional<int> NormArgNum;
+  std::optional<int> NegPow2ArgNum;
+  std::optional<int> Pow2ComplArgNum;
+  std::optional<int> MaskArgNum;
+  std::optional<int> NegMaskArgNum;
   // For intrinsics which take an immediate value as part of the instruction,
   // range check them here.
 
@@ -6066,7 +6066,7 @@ bool Sema::CheckRISCVBuiltinFunctionCall(const TargetInfo &TI,
   case RISCVVector::BI__builtin_rvv_vfwnmsac_vf_rm_mu:
     return SemaBuiltinConstantArgRange(TheCall, 4, 0, 4);
   case RISCV::BI__builtin_riscv_ntl_load:
-  case RISCV::BI__builtin_riscv_ntl_store:
+  case RISCV::BI__builtin_riscv_ntl_store: {
     DeclRefExpr *DRE =
         cast<DeclRefExpr>(TheCall->getCallee()->IgnoreParenCasts());
     assert((BuiltinID == RISCV::BI__builtin_riscv_ntl_store ||
@@ -6128,6 +6128,7 @@ bool Sema::CheckRISCVBuiltinFunctionCall(const TargetInfo &TI,
     TheCall->setArg(1, ValArg.get());
     TheCall->setType(Context.VoidTy);
     return false;
+  }
   case RISCV::BI__builtin_pulp_addRN:
   case RISCV::BI__builtin_pulp_adduRN:
   case RISCV::BI__builtin_pulp_subRN:

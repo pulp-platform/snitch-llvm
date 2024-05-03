@@ -1001,18 +1001,18 @@ class vec_avg<ValueType vectype, SDNode shiftOp>
 
 
 def sbextract : PatFrag<(ops node:$vector, node:$index),
-                        (sext_inreg (vector_extract (v4i8 node:$vector), node:$index), i8)>;
+                        (i32 (sext_inreg (vector_extract (v4i8 node:$vector), node:$index), i8))>;
 def ubextract : PatFrag<(ops node:$vector, node:$index),
-                        (and (vector_extract (v4i8 node:$vector), node:$index), 255)>;
+                        (and (vector_extract (v4i8 node:$vector), node:$index), (i32 255))>;
 def shextract : PatFrag<(ops node:$vector, node:$index),
-                        (sext_inreg (vector_extract (v2i16 node:$vector), node:$index), i16)>;
+                        (i32 (sext_inreg (vector_extract (v2i16 node:$vector), node:$index), i16))>;
 def uhextract : PatFrag<(ops node:$vector, node:$index),
-                        (and (vector_extract (v2i16 node:$vector), node:$index), 65535)>;
+                        (and (vector_extract (v2i16 node:$vector), node:$index), (i32 65535))>;
 
 class dotp_h<PatFrag extractOp1, PatFrag extractOp2>
     : PatFrag<(ops node:$rs1, node:$rs2),
-              (add (mul (extractOp1 node:$rs1, 0), (extractOp2 node:$rs2, 0)),
-                   (mul (extractOp1 node:$rs1, 1), (extractOp2 node:$rs2, 1)))>;
+              (add (mul (extractOp1 node:$rs1, (i32 0)), (extractOp2 node:$rs2, (i32 0))),
+                   (mul (extractOp1 node:$rs1, (i32 1)), (extractOp2 node:$rs2, (i32 1))))>;
 
 def dotup_h  : dotp_h<uhextract, uhextract>;
 def dotusp_h : dotp_h<uhextract, shextract>;
@@ -1020,7 +1020,7 @@ def dotsp_h  : dotp_h<shextract, shextract>;
 
 class dotp_sc_h<PatFrag extractOp>
     : PatFrag<(ops node:$rs1, node:$sc),
-              (mul (add (extractOp node:$rs1, 0), (extractOp node:$rs1, 1)), node:$sc)>;
+              (mul (add (extractOp node:$rs1, (i32 0)), (extractOp node:$rs1, (i32 1))), node:$sc)>;
 
 def dotup_sc_h : dotp_sc_h<uhextract>;
 def dotsp_sc_h : dotp_sc_h<shextract>;
@@ -1035,10 +1035,10 @@ def sum4 : PatFrags<(ops node:$a, node:$b, node:$c, node:$d),
 
 class dotp_b<PatFrag extractOp1, PatFrag extractOp2>
     : PatFrag<(ops node:$rs1, node:$rs2),
-              (sum4 (mul (extractOp1 node:$rs1, 0), (extractOp2 node:$rs2, 0)),
-                    (mul (extractOp1 node:$rs1, 1), (extractOp2 node:$rs2, 1)),
-                    (mul (extractOp1 node:$rs1, 2), (extractOp2 node:$rs2, 2)),
-                    (mul (extractOp1 node:$rs1, 3), (extractOp2 node:$rs2, 3)))>;
+              (sum4 (mul (extractOp1 node:$rs1, (i32 0)), (extractOp2 node:$rs2, (i32 0))),
+                    (mul (extractOp1 node:$rs1, (i32 1)), (extractOp2 node:$rs2, (i32 1))),
+                    (mul (extractOp1 node:$rs1, (i32 2)), (extractOp2 node:$rs2, (i32 2))),
+                    (mul (extractOp1 node:$rs1, (i32 3)), (extractOp2 node:$rs2, (i32 3))))>;
 
 def dotup_b  : dotp_b<ubextract, ubextract>;
 def dotusp_b : dotp_b<ubextract, sbextract>;
@@ -1046,10 +1046,10 @@ def dotsp_b  : dotp_b<sbextract, sbextract>;
 
 class dotp_sc_b<PatFrag extractOp>
     : PatFrag<(ops node:$rs1, node:$sc),
-              (mul (sum4 (extractOp node:$rs1, 0),
-                         (extractOp node:$rs1, 1),
-                         (extractOp node:$rs1, 2),
-                         (extractOp node:$rs1, 3)), node:$sc)>;
+              (mul (sum4 (extractOp node:$rs1, (i32 0)),
+                         (extractOp node:$rs1, (i32 1)),
+                         (extractOp node:$rs1, (i32 2)),
+                         (extractOp node:$rs1, (i32 3))), node:$sc)>;
 
 def dotup_sc_b : dotp_sc_b<ubextract>;
 def dotsp_sc_b : dotp_sc_b<sbextract>;
@@ -1339,7 +1339,7 @@ def : Pat<(ushiftRound (machhu (i32 GPR:$rd), (i32 GPR:$rs1), (i32 GPR:$rs2)), u
 
 // Patterns for vectorial ALU operations
 class PatV2V2<SDPatternOperator OpNode, RVInst Inst>
-    : Pat<(OpNode (i32 PulpV2:$rs1), (i32 PulpV2:$rs2)), (Inst (i32 PulpV2:$rs1), (i32 PulpV2:$rs2))>;
+    : Pat<(OpNode PulpV2:$rs1, PulpV2:$rs2), (Inst PulpV2:$rs1, PulpV2:$rs2)>;
 
 class PatV4V4<SDPatternOperator OpNode, RVInst Inst>
     : Pat<(OpNode PulpV4:$rs1, PulpV4:$rs2), (Inst PulpV4:$rs1, PulpV4:$rs2)>;
@@ -1562,7 +1562,7 @@ def : Pat<(v4i8 (build_vector (i32 GPR:$rs1), (i32 GPR:$rs2), (i32 GPR:$rs3), (i
           (PV_PACKLO_B (PV_PACKHI_B_nowb (i32 GPR:$rs4), (i32 GPR:$rs3)), (i32 GPR:$rs2), (i32 GPR:$rs1))>;
 
 def : Pat<(v2i16 (splat_vector (i32 GPR:$rs1))), (PV_PACK_H (i32 GPR:$rs1), (i32 GPR:$rs1))>;
-def : Pat<(v4i8 (splat_vector (i32 GPR:$rs1))), (PV_ADD_SC_B (XLenVT X0), (i32 GPR:$rs1))>;
+def : Pat<(v4i8 (splat_vector (i32 GPR:$rs1))), (PV_ADD_SC_B X0, (i32 GPR:$rs1))>;
 
 
 // Pattern to map vector splat operations on pseudos
@@ -1597,15 +1597,15 @@ def : Pat<(i32 (bitconvert PulpV4:$rs1)), (i32 (i32 GPR:$rs1))>;
 // post increment loads need custom selection, because tablegen can't deal with
 // multiple result values
 
-def : Pat<(sextloadi8 (add (i32 GPR:$base), (i32 GPR:$offset))),
+def : Pat<(i32 (sextloadi8 (add (i32 GPR:$base), (i32 GPR:$offset)))),
     (P_LB_rr (i32 GPR:$base), (i32 GPR:$offset))>;
-def : Pat<(zextloadi8 (add (i32 GPR:$base), (i32 GPR:$offset))),
+def : Pat<(i32 (zextloadi8 (add (i32 GPR:$base), (i32 GPR:$offset)))),
     (P_LBU_rr (i32 GPR:$base), (i32 GPR:$offset))>;
-def : Pat<(sextloadi16 (add (i32 GPR:$base), (i32 GPR:$offset))),
+def : Pat<(i32 (sextloadi16 (add (i32 GPR:$base), (i32 GPR:$offset)))),
     (P_LH_rr (i32 GPR:$base), (i32 GPR:$offset))>;
-def : Pat<(zextloadi16 (add (i32 GPR:$base), (i32 GPR:$offset))),
+def : Pat<(i32 (zextloadi16 (add (i32 GPR:$base), (i32 GPR:$offset)))),
     (P_LHU_rr (i32 GPR:$base), (i32 GPR:$offset))>;
-def : Pat<(load (add (i32 GPR:$base), (i32 GPR:$offset))),
+def : Pat<(i32 (load (add (i32 GPR:$base), (i32 GPR:$offset)))),
     (P_LW_rr (i32 GPR:$base), (i32 GPR:$offset))>;
 
 def : Pat<(post_truncsti8 (i32 GPR:$val), (i32 GPR:$base), simm12:$offset),
@@ -1690,8 +1690,8 @@ defm : BinaryVectorBuiltin<"sra",  "SRA">;
 defm : BinaryVectorBuiltin<"sll",  "SLL">;
 def : Pat<(int_riscv_pulp_abs2 PulpV2:$rs1), (PV_ABS_H PulpV2:$rs1)>;
 def : Pat<(int_riscv_pulp_abs4 PulpV4:$rs1), (PV_ABS_B PulpV4:$rs1)>;
-def : Pat<(int_riscv_pulp_neg2 PulpV2:$rs1), (PV_SUB_H (XLenVT X0), PulpV2:$rs1)>;
-def : Pat<(int_riscv_pulp_neg4 PulpV4:$rs1), (PV_SUB_B (XLenVT X0), PulpV4:$rs1)>;
+def : Pat<(int_riscv_pulp_neg2 PulpV2:$rs1), (PV_SUB_H X0, PulpV2:$rs1)>;
+def : Pat<(int_riscv_pulp_neg4 PulpV4:$rs1), (PV_SUB_B X0, PulpV4:$rs1)>;
 
 class PatV2V2GPR<SDPatternOperator op, Instruction instr>
     : Pat<(op PulpV2:$rs1, PulpV2:$rs2, (i32 GPR:$rd)),

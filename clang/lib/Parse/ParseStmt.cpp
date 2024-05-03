@@ -516,8 +516,9 @@ Retry:
     return StmtEmpty();
 
   case tok::annot_pragma_frep:
-    ProhibitAttributes(Attrs);
-    return ParsePragmaFrep(Stmts, StmtCtx, TrailingElseLoc, Attrs);
+    ProhibitAttributes(CXX11Attrs);
+    ProhibitAttributes(GNUAttrs);
+    return ParsePragmaFrep(Stmts, StmtCtx, TrailingElseLoc, CXX11Attrs);
 
   }
 
@@ -2504,9 +2505,9 @@ StmtResult Parser::ParsePragmaLoopHint(StmtVector &Stmts,
 StmtResult Parser::ParsePragmaFrep(StmtVector &Stmts,
                                        ParsedStmtContext StmtCtx,
                                        SourceLocation *TrailingElseLoc,
-                                       ParsedAttributesWithRange &Attrs) {
+                                       ParsedAttributes &Attrs) {
   // Create temporary attribute list.
-  ParsedAttributesWithRange TempAttrs(AttrFactory);
+  ParsedAttributes TempAttrs(AttrFactory);
   while (Tok.is(tok::annot_pragma_frep)) {
     FrepHint Hint;
     if (!HandlePragmaFrep(Hint))
@@ -2515,15 +2516,18 @@ StmtResult Parser::ParsePragmaFrep(StmtVector &Stmts,
       ArgsUnion ArgHints[] = {Hint.PragmaNameLoc, Hint.OptionLoc};
       TempAttrs.addNew(Hint.PragmaNameLoc->Ident, Hint.Range, nullptr,
                      Hint.PragmaNameLoc->Loc, ArgHints, 2,
-                     ParsedAttr::AS_Pragma);
+                     ParsedAttr::Form::Pragma());
     } else {
       printf("Error, no valid option in ParseStmt\n");
     }
   }
   // Get the next statement.
   MaybeParseCXX11Attributes(Attrs);
+  
+  ParsedAttributes EmptyDeclSpecAttrs(AttrFactory);
   StmtResult S = ParseStatementOrDeclarationAfterAttributes(
-      Stmts, StmtCtx, TrailingElseLoc, Attrs);
+      Stmts, StmtCtx, TrailingElseLoc, Attrs, EmptyDeclSpecAttrs);
+  
   Attrs.takeAllFrom(TempAttrs);
   return S;
 

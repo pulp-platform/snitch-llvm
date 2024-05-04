@@ -278,19 +278,20 @@ static DecodeStatus decodeUImmOperand(MCInst &Inst, uint32_t Imm,
 
 static DecodeStatus DecodePulpV2RegisterClass(MCInst &Inst, uint64_t RegNo,
                                                uint64_t Address,
-                                               const void *Decoder) {
+                                               const MCDisassembler *Decoder) {
   return DecodeGPRRegisterClass(Inst, RegNo, Address, Decoder);
 }
 
 static DecodeStatus DecodePulpV4RegisterClass(MCInst &Inst, uint64_t RegNo,
                                                uint64_t Address,
-                                               const void *Decoder) {
+                                               const MCDisassembler *Decoder) {
   return DecodeGPRRegisterClass(Inst, RegNo, Address, Decoder);
 }
 
 template <unsigned N>
 static DecodeStatus decodeUImmMinus1Operand(MCInst &Inst, uint64_t Imm,
-                                            int64_t Address, const void *Decoder) {
+                                            int64_t Address,
+                                            const MCDisassembler *Decoder) {
   return decodeUImmOperand<N>(Inst, Imm + 1, Address, Decoder);
 }
 

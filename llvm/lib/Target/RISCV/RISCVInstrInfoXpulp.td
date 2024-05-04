@@ -77,7 +77,7 @@ def shiftedFlippedMask  : TImmLeaf<XLenVT, [{ return isShiftedMask_32(~Imm); }]>
 
 def trailing1sPlus1 : SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant(
-                          countTrailingOnes<uint32_t>(N->getSExtValue()) + 1,
+                          countr_one<uint32_t>(N->getSExtValue()) + 1,
                           SDLoc(N), N->getValueType(0));
 }]>;
 
@@ -94,27 +94,27 @@ def extractOffset : SDNodeXForm<sra, [{
 
 def trailing1s : SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant(
-                          countTrailingOnes<uint32_t>(N->getSExtValue()),
+                          countr_one<uint32_t>(N->getSExtValue()),
                           SDLoc(N), N->getValueType(0));
 }]>;
 
 def flippedMaskWidthMinus1 : SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant(31
-                          - countLeadingOnes<uint32_t>(N->getSExtValue())
-                          - countTrailingOnes<uint32_t>(N->getSExtValue()),
+                          - countl_one<uint32_t>(N->getSExtValue())
+                          - countr_one<uint32_t>(N->getSExtValue()),
                           SDLoc(N), N->getValueType(0));
 }]>;
 
 def trailing0s : SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant(
-                          countTrailingZeros<uint32_t>(N->getSExtValue()),
+                          countr_zero<uint32_t>(N->getSExtValue()),
                           SDLoc(N), N->getValueType(0));
 }]>;
 
 def maskWidthMinus1 : SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant(31
-                          - countLeadingZeros<uint32_t>(N->getSExtValue())
-                          - countTrailingZeros<uint32_t>(N->getSExtValue()),
+                          - countl_zero<uint32_t>(N->getSExtValue())
+                          - countr_zero<uint32_t>(N->getSExtValue()),
                           SDLoc(N), N->getValueType(0));
 }]>;
 
@@ -948,7 +948,7 @@ def insert : PatFrag<(ops node:$dest, node:$value, node:$mask, node:$shift),
   uint32_t destMask = (uint32_t) maskedDest->getConstantOperandVal(1),
            mask     = (uint32_t) maskedVal->getConstantOperandVal(1),
            shift    = (uint32_t) maskedVal->getOperand(0)->getConstantOperandVal(1);
-  return (mask == ~destMask) && (countTrailingZeros(mask) == shift);
+  return (mask == ~destMask) && (countr_zero<uint32_t>(mask) == shift);
 }]>;
 
 def maskFromRegs : PatFrag<(ops node:$widthMinus1, node:$shift),
@@ -960,7 +960,7 @@ def shiftedFlippedMask_shiftImmediate : PatFrag<(ops node:$widthMinus1, node:$ma
                                            node:$mask), [{
   uint32_t flippedMask = (uint32_t) N->getOperand(0)->getConstantOperandVal(0);
   uint32_t mask = (uint32_t) N->getConstantOperandVal(1);
-  return countTrailingZeros(flippedMask) == (countTrailingOnes(mask) + 1);
+  return countr_zero<uint32_t>(flippedMask) == (countr_one<uint32_t>(mask) + 1);
 }]>;
 
 def shiftedMask_shiftImmediate : PatFrag<(ops node:$widthMinus1, node:$flippedMask),
@@ -968,7 +968,7 @@ def shiftedMask_shiftImmediate : PatFrag<(ops node:$widthMinus1, node:$flippedMa
                                               node:$flippedMask), [{
   uint32_t shiftedBit = (uint32_t) N->getOperand(0)->getConstantOperandVal(0);
   uint32_t flippedMask = (uint32_t) N->getConstantOperandVal(1);
-  return (2U << countTrailingZeros(flippedMask)) == shiftedBit;
+  return (2U << countr_zero<uint32_t>(flippedMask)) == shiftedBit;
 }]>;
 
 // Pattern templates for multiply operations

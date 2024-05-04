@@ -14710,7 +14710,7 @@ static SDValue tryFoldSelectIntoOp(SDNode *N, SelectionDAG &DAG,
   EVT VT = N->getValueType(0);
   SDLoc DL(N);
   SDValue OtherOp = TrueVal.getOperand(1 - OpToFold);
-  EVT OtherOpVT = OtherOp->getValueType(0);
+  EVT OtherOpVT = OtherOp.getValueType();
   SDValue IdentityOperand =
       DAG.getNeutralElement(Opc, DL, OtherOpVT, N->getFlags());
   if (!Commutative)
@@ -19816,6 +19816,24 @@ bool RISCVTargetLowering::getPostIndexedAddressParts(SDNode *N, SDNode *Op,
     return false;
 
   AM = ISD::POST_INC;
+  
+  // PULP
+  if (Subtarget.hasPULPExtV2() && Op->getOpcode() == ISD::ADD) {
+    // PULPv2 supports i8, i16, and i32 post-increments only.
+    if (!(VT == MVT::i8 || VT == MVT::i16 || VT == MVT::i32)) {
+      return false;
+    }
+
+    // If this is an immediate (constant), it must fit within 12 bits signed.
+    if (ConstantSDNode *ConstOffset = dyn_cast<ConstantSDNode>(Offset)) {
+      uint64_t imm = ConstOffset->getZExtValue();
+      if (!isInt<12>(imm)) {
+        return false;
+      }
+    }
+  }
+  // PULP
+
   return true;
 }
 
@@ -20414,51 +20432,6 @@ RISCVTargetLowering::EmitKCFICheck(MachineBasicBlock &MBB,
       .addReg(Target.getReg())
       .addImm(MBBI->getCFIType())
       .getInstr();
-}
-
-bool RISCVTargetLowering::getPostIndexedAddressParts(SDNode *N, SDNode *Op,
-                                                     SDValue &Base,
-                                                     SDValue &Offset,
-                                                     ISD::MemIndexedMode &AM,
-                                                     SelectionDAG &DAG) const {
-  SDValue BaseFromLDST;
-  EVT VT;
-  if (LoadSDNode *LD = dyn_cast<LoadSDNode>(N)) {
-    BaseFromLDST = LD->getBasePtr();
-    VT = LD->getMemoryVT();
-  } else if (StoreSDNode *ST = dyn_cast<StoreSDNode>(N)) {
-    BaseFromLDST = ST->getBasePtr();
-    VT = ST->getMemoryVT();
-  } else {
-    return false;
-  }
-
-  if (Op->getOpcode() == ISD::ADD) {
-    // If this is an add, just take the numbers. Reverse operands to add if
-    // necessary.
-    AM = ISD::POST_INC;
-    Base = Op->getOperand(0);
-    Offset = Op->getOperand(1);
-    if (BaseFromLDST != Base && BaseFromLDST == Offset) {
-      std::swap(Base, Offset);
-    }
-
-    // PULPv2 supports i8, i16, and i32 post-increments only.
-    if (!(VT == MVT::i8 || VT == MVT::i16 || VT == MVT::i32)) {
-      return false;
-    }
-
-    // If this is an immediate (constant), it must fit within 12 bits signed.
-    if (ConstantSDNode *ConstOffset = dyn_cast<ConstantSDNode>(Offset)) {
-      uint64_t imm = ConstOffset->getZExtValue();
-      if (!isInt<12>(imm)) {
-        return false;
-      }
-    }
-
-    return BaseFromLDST == Base;
-  }
-  return false;
 }
 
 #define GET_REGISTER_MATCHER

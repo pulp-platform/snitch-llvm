@@ -131,9 +131,12 @@ BitVector RISCVRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   markSuperRegs(Reserved, RISCV::FFLAGS);
   
   // Mark SSR floating point registers as reserved.
-  for (unsigned n = 0; n != 8; ++n) {
-    if(RVFI->getUsedSSR() & (1<<n))
-      markSuperRegs(Reserved, RISCV::F0_D + n);
+  if(Subtarget.hasExtXssr()) {
+    const auto *RVFI = MF.getInfo<RISCVMachineFunctionInfo>();
+    for (unsigned n = 0; n != 8; ++n) {
+      if(RVFI->getUsedSSR() & (1<<n))
+        markSuperRegs(Reserved, RISCV::F0_D + n);
+    }
   }
 
   if (MF.getFunction().getCallingConv() == CallingConv::GRAAL) {

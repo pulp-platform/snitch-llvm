@@ -526,7 +526,7 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
   // Make sure the loop start always has a reference in the CFG.  We need
   // to create a BlockAddress operand to get this mechanism to work both the
   // MachineBasicBlock and BasicBlock objects need the flag set.
-  ControlBlock->setHasAddressTaken();
+  ControlBlock->setMachineBlockAddressTaken();
   ControlBlock->setLabelMustBeEmitted();
   // This line is needed to set the hasAddressTaken flag on the BasicBlock
   // object.

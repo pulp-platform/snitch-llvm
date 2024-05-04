@@ -1266,7 +1266,7 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
   // Make sure the loop start always has a reference in the CFG.  We need
   // to create a BlockAddress operand to get this mechanism to work both the
   // MachineBasicBlock and BasicBlock objects need the flag set.
-  ExitingBlock->setHasAddressTaken();
+  ExitingBlock->setMachineBlockAddressTaken();
   ExitingBlock->setLabelMustBeEmitted();
   // This line is needed to set the hasAddressTaken flag on the BasicBlock
   // object.

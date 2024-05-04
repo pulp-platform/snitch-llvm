@@ -631,7 +631,7 @@ bool PULPFixupHwLoops::fixupLoopInstrs(MachineFunction &MF) {
           LoopLen -= getMISize(*MII);
           offsetIncrease -= getMISize(*MII);
           // Take address for start block.
-          LoopStartMBB->setHasAddressTaken();
+          LoopStartMBB->setMachineBlockAddressTaken();
           LoopStartMBB->setLabelMustBeEmitted();
           // This line is needed to set the hasAddressTaken flag on the
           // BasicBlock object.

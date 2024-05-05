@@ -34,6 +34,7 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/MDBuilder.h"
 #include "llvm/Support/SaveAndRestore.h"
+#include "llvm/IR/IntrinsicsRISCV.h"
 #include <optional>
 
 using namespace clang;

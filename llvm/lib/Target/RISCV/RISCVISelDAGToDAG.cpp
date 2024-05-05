@@ -817,6 +817,114 @@ bool RISCVDAGToDAGISel::tryIndexedLoad(SDNode *Node) {
   return true;
 }
 
+bool RISCVDAGToDAGISel::tryPulpIndexedLoad(SDNode *Node) {
+  if (!Subtarget->hasPULPExtV2())
+    return false;
+  
+  LoadSDNode *Load = cast<LoadSDNode>(Node);
+  if (Load->getAddressingMode() == ISD::UNINDEXED)
+    return false;
+
+  SDLoc DL(Node);
+  MVT VT = Node->getSimpleValueType(0);
+
+  SDValue Chain = Node->getOperand(0);
+  SDValue Base = Node->getOperand(1);
+  SDValue Offset = Node->getOperand(2);
+
+  bool simm12 = false;
+  bool signExtend = Load->getExtensionType() == ISD::SEXTLOAD;
+
+  if(auto ConstantOffset = dyn_cast<ConstantSDNode>(Offset)) {
+    int ConstantVal = ConstantOffset->getSExtValue();
+    simm12 = isInt<12>(ConstantVal);
+    if (simm12)
+      Offset = CurDAG->getTargetConstant(ConstantVal, DL,
+                                          Offset.getValueType());
+  }
+
+  unsigned Opcode = 0;
+
+  switch (Load->getMemoryVT().getSimpleVT().SimpleTy) {
+    default:
+      return false;
+      break;
+    case MVT::i8:
+      if      ( simm12 &&  signExtend) Opcode = RISCV::P_LB_ri_PostIncrement;
+      else if ( simm12 && !signExtend) Opcode = RISCV::P_LBU_ri_PostIncrement;
+      else if (!simm12 &&  signExtend) Opcode = RISCV::P_LB_rr_PostIncrement;
+      else                             Opcode = RISCV::P_LBU_rr_PostIncrement;
+      break;
+    case MVT::i16:
+      if      ( simm12 &&  signExtend) Opcode = RISCV::P_LH_ri_PostIncrement;
+      else if ( simm12 && !signExtend) Opcode = RISCV::P_LHU_ri_PostIncrement;
+      else if (!simm12 &&  signExtend) Opcode = RISCV::P_LH_rr_PostIncrement;
+      else                             Opcode = RISCV::P_LHU_rr_PostIncrement;
+      break;
+    case MVT::i32:
+      if (simm12) Opcode = RISCV::P_LW_ri_PostIncrement;
+      else        Opcode = RISCV::P_LW_rr_PostIncrement;
+      break;
+  }
+
+  if (!Opcode) return false;
+
+  ReplaceNode(Node, CurDAG->getMachineNode(Opcode, DL, MVT::i32, MVT::i32,
+                                           Chain.getSimpleValueType(),
+                                           Base, Offset, Chain));
+  return true;
+}
+
+bool RISCVDAGToDAGISel::tryPulpVectorShuffle(SDNode *Node) {
+  if (!Subtarget->hasPULPExtV2())
+    return false;
+
+  SDLoc DL(Node);
+  MVT VT = Node->getSimpleValueType(0);
+
+  ShuffleVectorSDNode *Shuffle = cast<ShuffleVectorSDNode>(Node);
+  SDValue Vec0 = Shuffle->getOperand(0);
+  SDValue Vec1 = Shuffle->getOperand(1);
+  unsigned Opcode;
+  int imm;
+  if (Vec1->getOpcode() == ISD::UNDEF) {
+    if (VT == MVT::v2i16) {
+      Opcode = RISCV::PV_SHUFFLE_SCI_H;
+      imm = (Shuffle->getMaskElt(1) & 1) << 1;
+      imm |= Shuffle->getMaskElt(0) & 1;
+    } else {
+      switch (Shuffle->getMaskElt(3)) {
+        default:
+        case 0: Opcode = RISCV::PV_SHUFFLEI0_SCI_B; break;
+        case 1: Opcode = RISCV::PV_SHUFFLEI1_SCI_B; break;
+        case 2: Opcode = RISCV::PV_SHUFFLEI2_SCI_B; break;
+        case 3: Opcode = RISCV::PV_SHUFFLEI3_SCI_B; break;
+      }
+      imm = (Shuffle->getMaskElt(2) & 3) << 4;
+      imm |= (Shuffle->getMaskElt(1) & 3) << 2;
+      imm |= Shuffle->getMaskElt(0) & 3;
+    }
+    SDValue Imm = CurDAG->getTargetConstant(imm, SDLoc(Node), MVT::i32);
+    ReplaceNode(Node, CurDAG->getMachineNode(Opcode, DL, VT, Vec0, Imm));
+    return true;
+  }
+
+  if (VT == MVT::v2i16) {
+    Opcode = RISCV::PV_SHUFFLE2_H;
+    imm = (Shuffle->getMaskElt(1) & 1) << 16;
+    imm |= Shuffle->getMaskElt(0) & 1;
+  } else {
+    Opcode = RISCV::PV_SHUFFLE2_B;
+    imm  = (Shuffle->getMaskElt(3) & 3) << 24;
+    imm |= (Shuffle->getMaskElt(2) & 3) << 16;
+    imm |= (Shuffle->getMaskElt(1) & 3) << 8;
+    imm |=  Shuffle->getMaskElt(0) & 3;
+  }
+  SDValue Imm = SDValue(selectImm(CurDAG, DL, VT, imm, *Subtarget).getNode(), 0);
+  ReplaceNode(Node, CurDAG->getMachineNode(Opcode, DL, VT, Vec0, Vec1, Imm));
+  return true;
+}
+
 void RISCVDAGToDAGISel::Select(SDNode *Node) {
   // If we have a custom node, we have already selected.
   if (Node->isMachineOpcode()) {
@@ -1414,6 +1522,13 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
   }
   case ISD::LOAD: {
     if (tryIndexedLoad(Node))
+      return;
+    if (tryPulpIndexedLoad(Node))
+      return;
+    break;
+  }
+  case ISD::VECTOR_SHUFFLE: {
+    if (tryPulpVectorShuffle(Node))
       return;
     break;
   }
@@ -2185,97 +2300,6 @@ void RISCVDAGToDAGISel::Select(SDNode *Node) {
         MMO->setFlags(MONontemporalBit1);
     }
     break;
-  case ISD::LOAD: {
-    LoadSDNode *Load = cast<LoadSDNode>(Node);
-    if (Load->getAddressingMode() == ISD::UNINDEXED)
-      break;
-
-    SDValue Chain = Node->getOperand(0);
-    SDValue Base = Node->getOperand(1);
-    SDValue Offset = Node->getOperand(2);
-
-    bool simm12 = false;
-    bool signExtend = Load->getExtensionType() == ISD::SEXTLOAD;
-
-    if(auto ConstantOffset = dyn_cast<ConstantSDNode>(Offset)) {
-      int ConstantVal = ConstantOffset->getSExtValue();
-      simm12 = isInt<12>(ConstantVal);
-      if (simm12)
-        Offset = CurDAG->getTargetConstant(ConstantVal, DL,
-                                           Offset.getValueType());
-    }
-
-    unsigned Opcode = 0;
-
-    switch (Load->getMemoryVT().getSimpleVT().SimpleTy) {
-      default: break;
-      case MVT::i8:
-        if      ( simm12 &&  signExtend) Opcode = RISCV::P_LB_ri_PostIncrement;
-        else if ( simm12 && !signExtend) Opcode = RISCV::P_LBU_ri_PostIncrement;
-        else if (!simm12 &&  signExtend) Opcode = RISCV::P_LB_rr_PostIncrement;
-        else                             Opcode = RISCV::P_LBU_rr_PostIncrement;
-        break;
-      case MVT::i16:
-        if      ( simm12 &&  signExtend) Opcode = RISCV::P_LH_ri_PostIncrement;
-        else if ( simm12 && !signExtend) Opcode = RISCV::P_LHU_ri_PostIncrement;
-        else if (!simm12 &&  signExtend) Opcode = RISCV::P_LH_rr_PostIncrement;
-        else                             Opcode = RISCV::P_LHU_rr_PostIncrement;
-        break;
-      case MVT::i32:
-        if (simm12) Opcode = RISCV::P_LW_ri_PostIncrement;
-        else        Opcode = RISCV::P_LW_rr_PostIncrement;
-        break;
-    }
-
-    if (!Opcode) break;
-
-    ReplaceNode(Node, CurDAG->getMachineNode(Opcode, DL, MVT::i32, MVT::i32,
-                                             Chain.getSimpleValueType(),
-                                             Base, Offset, Chain));
-    return;
-  }
-  case ISD::VECTOR_SHUFFLE: {
-    ShuffleVectorSDNode *Shuffle = cast<ShuffleVectorSDNode>(Node);
-    SDValue Vec0 = Shuffle->getOperand(0);
-    SDValue Vec1 = Shuffle->getOperand(1);
-    unsigned Opcode;
-    int imm;
-    if (Vec1->getOpcode() == ISD::UNDEF) {
-      if (VT == MVT::v2i16) {
-        Opcode = RISCV::PV_SHUFFLE_SCI_H;
-        imm = (Shuffle->getMaskElt(1) & 1) << 1;
-        imm |= Shuffle->getMaskElt(0) & 1;
-      } else {
-        switch (Shuffle->getMaskElt(3)) {
-          default:
-          case 0: Opcode = RISCV::PV_SHUFFLEI0_SCI_B; break;
-          case 1: Opcode = RISCV::PV_SHUFFLEI1_SCI_B; break;
-          case 2: Opcode = RISCV::PV_SHUFFLEI2_SCI_B; break;
-          case 3: Opcode = RISCV::PV_SHUFFLEI3_SCI_B; break;
-        }
-        imm = (Shuffle->getMaskElt(2) & 3) << 4;
-        imm |= (Shuffle->getMaskElt(1) & 3) << 2;
-        imm |= Shuffle->getMaskElt(0) & 3;
-      }
-      SDValue Imm = CurDAG->getTargetConstant(imm, SDLoc(Node), MVT::i32);
-      ReplaceNode(Node, CurDAG->getMachineNode(Opcode, DL, VT, Vec0, Imm));
-      return;
-    }
-    if (VT == MVT::v2i16) {
-      Opcode = RISCV::PV_SHUFFLE2_H;
-      imm = (Shuffle->getMaskElt(1) & 1) << 16;
-      imm |= Shuffle->getMaskElt(0) & 1;
-    } else {
-      Opcode = RISCV::PV_SHUFFLE2_B;
-      imm  = (Shuffle->getMaskElt(3) & 3) << 24;
-      imm |= (Shuffle->getMaskElt(2) & 3) << 16;
-      imm |= (Shuffle->getMaskElt(1) & 3) << 8;
-      imm |=  Shuffle->getMaskElt(0) & 3;
-    }
-    SDValue Imm = SDValue(selectImm(CurDAG, DL, VT, imm, *Subtarget), 0);
-    ReplaceNode(Node, CurDAG->getMachineNode(Opcode, DL, VT, Vec0, Vec1, Imm));
-    return;
-  }
   }
 
   // Select the default instruction.

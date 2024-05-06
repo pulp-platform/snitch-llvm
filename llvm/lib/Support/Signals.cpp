@@ -32,6 +32,8 @@
 #include <array>
 #include <vector>
 
+#include <cstdint>
+
 //===----------------------------------------------------------------------===//
 //=== WARNING: Implementation here must contain only TRULY operating system
 //===          independent code.

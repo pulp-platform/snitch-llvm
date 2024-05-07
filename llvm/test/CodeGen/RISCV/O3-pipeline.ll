@@ -118,9 +118,14 @@
 ; CHECK-NEXT:       RISC-V Dead register definitions
 ; CHECK-NEXT:       RISC-V Insert Read/Write CSR Pass
 ; CHECK-NEXT:       RISC-V Insert Write VXRM Pass
+; CHECK-NEXT:       PULP pseudo instruction expansion pass
 ; CHECK-NEXT:       RISCV SDMA pseudo instruction expansion pass
 ; CHECK-NEXT:       RISCV SSR pseudo instruction expansion pass
+; CHECK-NEXT:       MachineDominator Tree Construction
+; CHECK-NEXT:       Machine Natural Loop Construction
 ; CHECK-NEXT:       Snitch frep loops
+; CHECK-NEXT:       MachineDominator Tree Construction
+; CHECK-NEXT:       Machine Natural Loop Construction
 ; CHECK-NEXT:       PULP Hardware Loops
 ; CHECK-NEXT:       Detect Dead Lanes
 ; CHECK-NEXT:       RISC-V init undef pass
@@ -200,6 +205,8 @@
 ; CHECK-NEXT:       RISC-V Zcmp move merging pass
 ; CHECK-NEXT:       RISC-V Zcmp Push/Pop optimization pass 
 ; CHECK-NEXT:       RISC-V pseudo instruction expansion pass
+; CHECK-NEXT:       MachineDominator Tree Construction
+; CHECK-NEXT:       Machine Natural Loop Construction
 ; CHECK-NEXT:       PULP Hardware Loop Fixup
 ; CHECK-NEXT:       RISC-V atomic pseudo instruction expansion pass
 ; CHECK-NEXT:       Unpack machine instruction bundles

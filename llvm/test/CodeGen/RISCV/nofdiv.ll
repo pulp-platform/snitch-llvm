@@ -1,7 +1,11 @@
-; RUN: llc -mtriple=riscv32 -mattr=+f -mattr=+nofdiv -verify-machineinstrs < %s | FileCheck %s --check-prefixes=CHECK,RVF
-; RUN: llc -mtriple=riscv32 -mattr=+d -mattr=+nofdiv -verify-machineinstrs < %s | FileCheck %s --check-prefixes=CHECK,RVD 
-; RUN: llc -mtriple=riscv64 -mattr=+f -mattr=+nofdiv -verify-machineinstrs < %s | FileCheck %s --check-prefixes=CHECK,RVF
-; RUN: llc -mtriple=riscv64 -mattr=+d -mattr=+nofdiv -verify-machineinstrs < %s | FileCheck %s --check-prefixes=CHECK,RVD
+; RUN: llc -mtriple=riscv32 -mattr=+f -mattr=+nofdiv -verify-machineinstrs < %s | \
+; RUN:   FileCheck %s --check-prefixes=CHECK,RVF
+; RUN: llc -mtriple=riscv32 -mattr=+d -mattr=+nofdiv -verify-machineinstrs < %s | \
+; RUN:   FileCheck %s --check-prefixes=CHECK,RVD 
+; RUN: llc -mtriple=riscv64 -mattr=+f -mattr=+nofdiv -verify-machineinstrs < %s | \
+; RUN:   FileCheck %s --check-prefixes=CHECK,RVF
+; RUN: llc -mtriple=riscv64 -mattr=+d -mattr=+nofdiv -verify-machineinstrs < %s | \
+; RUN:   FileCheck %s --check-prefixes=CHECK,RVD
 
 define float @fdiv_s(float %a, float %b) {
 ; CHECK-LABEL: fdiv_s:

@@ -1,7 +1,7 @@
 # RUN: llvm-mc %s -triple=riscv32 --mattr=xfrep -riscv-no-aliases -show-encoding \
 # RUN:     | FileCheck -check-prefixes=CHECK-ASM,CHECK-ASM-AND-OBJ %s
 # RUN: llvm-mc %s -filetype=obj -triple=riscv32  --mattr=xfrep \
-# RUN:     | llvm-objdump -M no-aliases -d -r --mattr=xfrep - \
+# RUN:     | llvm-objdump -M no-aliases -d -r --mattr=xfrep --no-print-imm-hex - \
 # RUN:     | FileCheck -check-prefixes=CHECK-DISASM %s
 
 # CHECK-ASM-AND-OBJ: frep.o t3, 4, 0, 0

@@ -1,7 +1,7 @@
 # RUN: llvm-mc %s -triple=riscv32 --mattr=xssr -riscv-no-aliases -show-encoding \
 # RUN:     | FileCheck -check-prefixes=CHECK-ASM,CHECK-ASM-AND-OBJ %s
 # RUN: llvm-mc %s -filetype=obj -triple=riscv32  --mattr=xssr \
-# RUN:     | llvm-objdump -M no-aliases -d -r --mattr=xssr - \
+# RUN:     | llvm-objdump -M no-aliases -d -r --mattr=xssr --no-print-imm-hex - \
 # RUN:     | FileCheck -check-prefixes=CHECK-DISASM %s
 
 # CHECK-ASM-AND-OBJ: scfgri t0, 0

@@ -902,7 +902,7 @@ declare void @llvm.riscv.pulp.spr.bit.clr(i32, i32)
 define void @test_llvm_riscv_pulp_spr_bit_clr() {
 ; CHECK-LABEL: @test_llvm_riscv_pulp_spr_bit_clr
 ; CHECK:       # %bb.0:
-; CHECK:         csrrci {{a[0-9]+}}, mhartid, 8
+; CHECK:         csrci mhartid, 8
 ;
   call void @llvm.riscv.pulp.spr.bit.clr(i32 3860, i32 8)
   ret void
@@ -912,7 +912,7 @@ declare void @llvm.riscv.pulp.spr.bit.set(i32, i32)
 define void @test_llvm_riscv_pulp_spr_bit_set() {
 ; CHECK-LABEL: @test_llvm_riscv_pulp_spr_bit_set
 ; CHECK:       # %bb.0:
-; CHECK:         csrrsi {{a[0-9]+}}, mhartid, 8
+; CHECK:         csrsi mhartid, 8
 ;
   call void @llvm.riscv.pulp.spr.bit.set(i32 3860, i32 8)
   ret void
@@ -942,7 +942,7 @@ declare void @llvm.riscv.pulp.spr.write(i32, i32)
 define void @test_llvm_riscv_pulp_spr_write() {
 ; CHECK-LABEL: @test_llvm_riscv_pulp_spr_write
 ; CHECK:       # %bb.0:
-; CHECK:         csrrw [[REG:a[0-9]+]], mhartid, [[REG]]
+; CHECK:         csrw mhartid, [[REG]]
 ;
   call void @llvm.riscv.pulp.spr.write(i32 3860, i32 8)
   ret void

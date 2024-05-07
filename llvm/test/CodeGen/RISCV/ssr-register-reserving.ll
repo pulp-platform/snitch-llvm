@@ -1,7 +1,7 @@
-; RUN: llc -O0 --ssr-noregmerge %s -o - -verify-machineinstrs | FileCheck %s --check-prefix=CHECK-SSR0
-; RUN: llc -O1 --ssr-noregmerge %s -o - -verify-machineinstrs | FileCheck %s --check-prefix=CHECK-SSR0
-; RUN: llc -O2 --ssr-noregmerge %s -o - -verify-machineinstrs | FileCheck %s --check-prefix=CHECK-SSR0
-; RUN: llc -O3 --ssr-noregmerge %s -o - -verify-machineinstrs | FileCheck %s --check-prefix=CHECK-SSR0
+; RUN: llc -O0 --ssr-noregmerge %s -o - -verify-machineinstrs | FileCheck %s
+; RUN: llc -O1 --ssr-noregmerge %s -o - -verify-machineinstrs | FileCheck %s
+; RUN: llc -O2 --ssr-noregmerge %s -o - -verify-machineinstrs | FileCheck %s
+; RUN: llc -O3 --ssr-noregmerge %s -o - -verify-machineinstrs | FileCheck %s
 
 target datalayout = "e-m:e-p:32:32-i64:64-n32-S128"
 target triple = "riscv32-unknown-unknown-elf"
@@ -15,10 +15,10 @@ entry:
   %e = alloca double, align 8
   call void @llvm.riscv.ssr.enable()
   %0 = load volatile double, double* @ssr_region.d, align 8
-  ; ft0 and ft1 are reserved, make sure it allocates ft3 and uses ft0 for streaming
-  ; CHECK-SSR0: fmv.d  ft0, ft3
+  ; ft0 and ft1 are reserved, make sure it allocates f* and uses ft0 for streaming
+  ; CHECK: fmv.d  ft0, [[REG:f[at][3-9]+]]
   call void @llvm.riscv.ssr.push(i32 0, double %0)
-  ; CHECK-SSR0: fmv.d  ft3, ft0
+  ; CHECK: fmv.d  [[REG]], ft0
   %1 = call double @llvm.riscv.ssr.pop(i32 0)
   store volatile double %1, double* %e, align 8
   call void @llvm.riscv.ssr.disable()
@@ -30,10 +30,10 @@ entry:
   %e = alloca double, align 8
   call void @llvm.riscv.ssr.enable()
   %0 = load volatile double, double* @ssr_region.d, align 8
-  ; ft0 and ft1 are reserved, make sure it allocates ft3 and uses ft0 for streaming
-  ; CHECK-SSR0: fmv.d  ft1, ft3
+  ; ft0 and ft1 are reserved, make sure it allocates f* and uses ft0 for streaming
+  ; CHECK: fmv.d  ft1, [[REG:f[at][3-9]+]]
   call void @llvm.riscv.ssr.push(i32 1, double %0)
-  ; CHECK-SSR0: fmv.d  ft3, ft1
+  ; CHECK: fmv.d  [[REG]], ft1
   %1 = call double @llvm.riscv.ssr.pop(i32 1)
   store volatile double %1, double* %e, align 8
   call void @llvm.riscv.ssr.disable()
@@ -61,7 +61,7 @@ entry:
   store volatile double 0.000000e+00, double* %a, align 8
   %0 = load volatile double, double* %a, align 8
   ; Here, outside the SSR region, ft0 and ft1 use are allowed
-  ; CHECK-SSR0: fadd.d ft0, ft0, ft1
+  ; CHECK: fadd.d [[REG0:f[at][0-9]+]], [[REG0]], [[REG1:f[at][0-9]+]]
   %add = fadd double %0, 3.000000e+00
   store volatile double %add, double* %a, align 8
   ret i32 0

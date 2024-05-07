@@ -1,4 +1,4 @@
-//===-- RISCVExpandPseudoInsts.cpp - Expand pseudo instructions -----------===//
+//===-- PULPExpandPseudoInsts.cpp - Expand pseudo instructions -----------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file contains a pass that expands PULP-specific pseudo instructions into target
-// instructions.
+// This file contains a pass that expands PULP-specific pseudo instructions
+// into target instructions.
 //
 //===----------------------------------------------------------------------===//
 

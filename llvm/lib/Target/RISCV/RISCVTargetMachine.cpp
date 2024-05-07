@@ -129,6 +129,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeRISCVTarget() {
   initializeRISCVPushPopOptPass(*PR);
   
   initializeRISCVExpandSSRPass(*PR);
+  initializePULPExpandPseudoPass(*PR);
   initializeSNITCHFrepLoopsPass(*PR);
   initializeRISCVExpandSDMAPass(*PR);
   initializePULPHardwareLoopsPass(*PR);

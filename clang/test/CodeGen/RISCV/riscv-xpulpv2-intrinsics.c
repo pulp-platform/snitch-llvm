@@ -666,80 +666,80 @@ int32_t test_builtin_pulp_binsert_r(void) {
 }
 
 // CHECK-LABEL: @test_builtin_pulp_OffsetedRead(
-// CHECK:         [[PTR:%.*]] = load i32*, i32** %data.addr, align 4
-// CHECK:         [[RES:%.*]] = call i32 @llvm.riscv.pulp.OffsetedRead(i32* [[PTR]], i32 4)
+// CHECK:         [[PTR:%.*]] = load ptr, ptr %data.addr, align 4
+// CHECK:         [[RES:%.*]] = call i32 @llvm.riscv.pulp.OffsetedRead(ptr [[PTR]], i32 4)
 //
 int32_t test_builtin_pulp_OffsetedRead(int32_t *data) {
   return __builtin_pulp_OffsetedRead(data, 4);
 }
 
 // CHECK-LABEL: @test_builtin_pulp_OffsetedWrite(
-// CHECK:         [[PTR:%.*]] = load i32*, i32** %data.addr, align 4
-// CHECK:         call void @llvm.riscv.pulp.OffsetedWrite(i32 1, i32* [[PTR]], i32 4)
+// CHECK:         [[PTR:%.*]] = load ptr, ptr %data.addr, align 4
+// CHECK:         call void @llvm.riscv.pulp.OffsetedWrite(i32 1, ptr [[PTR]], i32 4)
 //
 void test_builtin_pulp_OffsetedWrite(int32_t *data) {
   __builtin_pulp_OffsetedWrite(1, data, 4);
 }
 
 // CHECK-LABEL: @test_builtin_pulp_OffsetedReadHalf(
-// CHECK:         [[PTR:%.*]] = load i16*, i16** %data.addr, align 4
-// CHECK:         [[RES:%.*]] = call i32 @llvm.riscv.pulp.OffsetedReadHalf(i16* [[PTR]], i32 4)
+// CHECK:         [[PTR:%.*]] = load ptr, ptr %data.addr, align 4
+// CHECK:         [[RES:%.*]] = call i32 @llvm.riscv.pulp.OffsetedReadHalf(ptr [[PTR]], i32 4)
 //
 int16_t test_builtin_pulp_OffsetedReadHalf(int16_t *data) {
   return __builtin_pulp_OffsetedReadHalf(data, 4);
 }
 
 // CHECK-LABEL: @test_builtin_pulp_OffsetedWriteHalf(
-// CHECK:         [[PTR:%.*]] = load i16*, i16** %data.addr, align 4
-// CHECK:         call void @llvm.riscv.pulp.OffsetedWriteHalf(i32 1, i16* [[PTR]], i32 4)
+// CHECK:         [[PTR:%.*]] = load ptr, ptr %data.addr, align 4
+// CHECK:         call void @llvm.riscv.pulp.OffsetedWriteHalf(i32 1, ptr [[PTR]], i32 4)
 //
 void test_builtin_pulp_OffsetedWriteHalf(int16_t *data) {
   __builtin_pulp_OffsetedWriteHalf(1, data, 4);
 }
 
 // CHECK-LABEL: @test_builtin_pulp_OffsetedReadByte(
-// CHECK:         [[PTR:%.*]] = load i8*, i8** %data.addr, align 4
-// CHECK:         [[RES:%.*]] = call i32 @llvm.riscv.pulp.OffsetedReadByte(i8* [[PTR]], i32 4)
+// CHECK:         [[PTR:%.*]] = load ptr, ptr %data.addr, align 4
+// CHECK:         [[RES:%.*]] = call i32 @llvm.riscv.pulp.OffsetedReadByte(ptr [[PTR]], i32 4)
 //
 char test_builtin_pulp_OffsetedReadByte(char *data) {
   return __builtin_pulp_OffsetedReadByte(data, 4);
 }
 
 // CHECK-LABEL: @test_builtin_pulp_OffsetedWriteByte(
-// CHECK:         [[PTR:%.*]] = load i8*, i8** %data.addr, align 4
-// CHECK:         call void @llvm.riscv.pulp.OffsetedWriteByte(i32 1, i8* [[PTR]], i32 4)
+// CHECK:         [[PTR:%.*]] = load ptr, ptr %data.addr, align 4
+// CHECK:         call void @llvm.riscv.pulp.OffsetedWriteByte(i32 1, ptr [[PTR]], i32 4)
 //
 void test_builtin_pulp_OffsetedWriteByte(char *data) {
   __builtin_pulp_OffsetedWriteByte(1, data, 4);
 }
 
 // CHECK-LABEL: @test_builtin_pulp_read_base_off(
-// CHECK:         [[PTR:%.*]] = load i32*, i32** %data.addr, align 4
-// CHECK:         call i32 @llvm.riscv.pulp.read.base.off(i32* [[PTR]], i32 15)
+// CHECK:         [[PTR:%.*]] = load ptr, ptr %data.addr, align 4
+// CHECK:         call i32 @llvm.riscv.pulp.read.base.off(ptr [[PTR]], i32 15)
 //
 int32_t test_builtin_pulp_read_base_off(int32_t* data) {
   return __builtin_pulp_read_base_off(data, 0xF);
 }
 
 // CHECK-LABEL: @test_builtin_pulp_write_base_off(
-// CHECK:         [[PTR:%.*]] = load i32*, i32** %data.addr, align 4
-// CHECK:         call void @llvm.riscv.pulp.write.base.off(i32 1, i32* [[PTR]], i32 15)
+// CHECK:         [[PTR:%.*]] = load ptr, ptr %data.addr, align 4
+// CHECK:         call void @llvm.riscv.pulp.write.base.off(i32 1, ptr [[PTR]], i32 15)
 //
 void test_builtin_pulp_write_base_off(int32_t* data) {
   __builtin_pulp_write_base_off(0x1, data, 0xF);
 }
 
 // CHECK-LABEL: @test_builtin_pulp_read_base_off_v(
-// CHECK:         [[PTR:%.*]] = load i32*, i32** %data.addr, align 4
-// CHECK:         call i32 @llvm.riscv.pulp.read.base.off.v(i32* [[PTR]], i32 15)
+// CHECK:         [[PTR:%.*]] = load ptr, ptr %data.addr, align 4
+// CHECK:         call i32 @llvm.riscv.pulp.read.base.off.v(ptr [[PTR]], i32 15)
 //
 int32_t test_builtin_pulp_read_base_off_v(int32_t* data) {
   return __builtin_pulp_read_base_off_v(data, 0xF);
 }
 
 // CHECK-LABEL: @test_builtin_pulp_write_base_off_v(
-// CHECK:         [[PTR:%.*]] = load i32*, i32** %data.addr, align 4
-// CHECK:         call void @llvm.riscv.pulp.write.base.off.v(i32 1, i32* [[PTR]], i32 15)
+// CHECK:         [[PTR:%.*]] = load ptr, ptr %data.addr, align 4
+// CHECK:         call void @llvm.riscv.pulp.write.base.off.v(i32 1, ptr [[PTR]], i32 15)
 //
 void test_builtin_pulp_write_base_off_v(int32_t* data) {
   __builtin_pulp_write_base_off_v(0x1, data, 0xF);
@@ -802,8 +802,8 @@ void test_builtin_pulp_spr_write() {
 }
 
 // CHECK-LABEL: @test_builtin_pulp_event_unit_read(
-// CHECK:         [[PTR:%.*]] = load i32*, i32** %data.addr, align 4
-// CHECK:         call i32 @llvm.riscv.pulp.event.unit.read(i32* [[PTR]], i32 8)
+// CHECK:         [[PTR:%.*]] = load ptr, ptr %data.addr, align 4
+// CHECK:         call i32 @llvm.riscv.pulp.event.unit.read(ptr [[PTR]], i32 8)
 //
 int32_t test_builtin_pulp_event_unit_read(int32_t* data) {
   return __builtin_pulp_event_unit_read(data, 0x8);

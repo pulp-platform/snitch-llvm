@@ -14,10 +14,25 @@ let Predicates = [HasExtXfalthalf] in {
 // Instructions
 let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 def FCVT_H_H : RVInstRFrm<0b0100010, RISCVOpcode<"FCVT_H_H", 0b1010011>,
-             (outs FPR16:$rd), (ins FPR16:$rs1, frmarg:$frm), "fcvt.h.h", "$rd, $rs1, $frm">, Sched<[]> {
-    let rs2 = 0b00010;
-  }
-def      : InstAlias<"fcvt.h.h $rd, $rs1", (FCVT_H_H FPR16:$rd, FPR16:$rs1, 0b111)>;
+               (outs FPR16:$rd), (ins FPR16:$rs1, frmarg:$frm), "fcvt.h.h", "$rd, $rs1, $frm">, Sched<[]> {
+  let rs2 = 0b00010;
+}
+
+// Beware: all instructions with ah destination
+// have frm/funct3 fixed to 0b101
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+def FCVT_AH_S : RVInstRFrm<0b0100010, RISCVOpcode<"FCVT_AH_S", 0b1010011>,
+                (outs FPR16:$rd), (ins FPR32:$rs1), "fcvt.ah.s", "$rd, $rs1">, Sched<[]> {
+    let rs2 = 0b00000;
+    let frm = 0b101;
+}
+
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+def FCVT_D_AH : RVInstRFrm<0b0100001, RISCVOpcode<"FCVT_D_AH", 0b1010011>,
+               (outs FPR64:$rd), (ins FPR16:$rs1), "fcvt.d.ah", "$rd, $rs1">, Sched<[]> {
+  let rs2 = 0b00110;
+  let frm = FRM_RNE;
+}
 
 // Pseudo instructions
 def : InstAlias<"flah $rd, ${imm12}(${rs1})",   (FLH FPR16:$rd, GPR:$rs1, simm12:$imm12), 0>;
@@ -67,18 +82,13 @@ def : InstAlias<"fcvt.ah.l $rd, $rs1, $rm",   (FCVT_H_L FPR16:$rd, GPR:$rs1, frm
 def : InstAlias<"fcvt.ah.l $rd, $rs1",   (FCVT_H_L FPR16:$rd, GPR:$rs1, 0b111), 0>;
 def : InstAlias<"fcvt.ah.lu $rd, $rs1, $rm",   (FCVT_H_LU FPR16:$rd, GPR:$rs1, frmarg:$rm), 0>;
 def : InstAlias<"fcvt.ah.lu $rd, $rs1",   (FCVT_H_LU FPR16:$rd, GPR:$rs1, 0b111), 0>;
-def : InstAlias<"fcvt.s.ah $rd, $rs1",   (FCVT_S_H FPR32:$rd, FPR16:$rs1, 0b111), 0>;
-def : InstAlias<"fcvt.ah.s $rd, $rs1, $rm",   (FCVT_H_S FPR16:$rd, FPR32:$rs1, frmarg:$rm), 0>;
-def : InstAlias<"fcvt.ah.s $rd, $rs1",   (FCVT_H_S FPR16:$rd, FPR32:$rs1, 0b111), 0>;
-def : InstAlias<"fcvt.d.ah $rd, $rs1",   (FCVT_D_H FPR64:$rd, FPR16:$rs1, 0b111), 0>;
+def : InstAlias<"fcvt.s.ah $rd, $rs1",   (FCVT_S_BF16 FPR32:$rd, FPR16:$rs1, FRM_RNE)>;
 def : InstAlias<"fcvt.ah.d $rd, $rs1, $rm",   (FCVT_H_D FPR16:$rd, FPR64:$rs1, frmarg:$rm), 0>;
 def : InstAlias<"fcvt.ah.d $rd, $rs1",   (FCVT_H_D FPR16:$rd, FPR64:$rs1, 0b111), 0>;
 def : InstAlias<"fcvt.ah.h $rd, $rs1, $rm",   (FCVT_H_H FPR16:$rd, FPR16:$rs1, frmarg:$rm), 0>;
 def : InstAlias<"fcvt.ah.h $rd, $rs1",   (FCVT_H_H FPR16:$rd, FPR16:$rs1, 0b111), 0>;
 def : InstAlias<"fcvt.h.ah $rd, $rs1, $rm",   (FCVT_H_H FPR16:$rd, FPR16:$rs1, frmarg:$rm), 0>;
 def : InstAlias<"fcvt.h.ah $rd, $rs1",   (FCVT_H_H FPR16:$rd, FPR16:$rs1, 0b111), 0>;
-def : InstAlias<"fcvt.ah.ah $rd, $rs1, $rm",   (FCVT_H_H FPR16:$rd, FPR16:$rs1, frmarg:$rm), 0>;
-def : InstAlias<"fcvt.ah.ah $rd, $rs1",   (FCVT_H_H FPR16:$rd, FPR16:$rs1, 0b111), 0>;
 } // let Predicates = [HasExtXfalthalf]
 
 

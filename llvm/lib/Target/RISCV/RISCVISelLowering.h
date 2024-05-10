@@ -776,6 +776,13 @@ public:
 
   bool isVScaleKnownToBeAPowerOfTwo() const override;
 
+  // PULP: while getIndexedAddressParts works for THead only, this
+  // is meant to do the same for Xpulp
+  bool getIndexedAddressPartsPulp(const SDNode *Op, SDValue &Base,
+                                  SDValue &Offset,
+                                  const ISD::MemIndexedMode &AM,
+                                  const SelectionDAG &DAG, EVT VT) const;
+
   bool getIndexedAddressParts(SDNode *Op, SDValue &Base, SDValue &Offset,
                               ISD::MemIndexedMode &AM, SelectionDAG &DAG) const;
   bool getPreIndexedAddressParts(SDNode *N, SDValue &Base, SDValue &Offset,

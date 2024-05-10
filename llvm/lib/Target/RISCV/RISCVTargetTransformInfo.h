@@ -366,7 +366,10 @@ public:
   }
 
   bool isLoweredToCall(const Function *F);
-  bool shouldFavorPostInc() const;
+
+  // Defined due to PULP subtarget preferring post-inc
+  TTI::AddressingModeKind
+    getPreferredAddressingMode(const Loop *L, ScalarEvolution *SE) const;
 };
 
 } // end namespace llvm

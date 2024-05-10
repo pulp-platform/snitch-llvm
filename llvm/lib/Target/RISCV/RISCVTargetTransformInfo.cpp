@@ -1517,6 +1517,12 @@ bool RISCVTTIImpl::isLoweredToCall(const Function *F) {
   return BaseT::isLoweredToCall(F);
 }
 
-bool RISCVTTIImpl::shouldFavorPostInc() const {
-  return ST->hasPULPExtV2();
+TTI::AddressingModeKind
+RISCVTTIImpl::getPreferredAddressingMode(const Loop *L,
+                                         ScalarEvolution *SE) const {
+  if (ST->hasPULPExtV2()) {
+    return TTI::AMK_PostIndexed;
+  }
+
+  return TTI::AMK_None;
 }

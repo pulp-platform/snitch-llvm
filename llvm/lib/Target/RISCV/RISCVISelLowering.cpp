@@ -19770,6 +19770,33 @@ bool RISCVTargetLowering::getIndexedAddressParts(SDNode *Op, SDValue &Base,
   return false;
 }
 
+bool RISCVTargetLowering::getIndexedAddressPartsPulp(
+    const SDNode *Op, SDValue &Base, SDValue &Offset,
+    const ISD::MemIndexedMode &AM, const SelectionDAG &DAG, EVT VT) const {
+
+  if (!Subtarget.hasPULPExtV2())
+    return false;
+
+  if (Op->getOpcode() != ISD::ADD)
+    return false;
+
+  // Xpulp supports i8, i16, and i32 post-increments only
+  if (!(VT == MVT::i8 || VT == MVT::i16 || VT == MVT::i32))
+    return false;
+
+  Base = Op->getOperand(0);
+  Offset = Op->getOperand(1);
+
+  // If offset is an immediate, it must fit within 12 bits signed
+  if (ConstantSDNode *ConstOffset = dyn_cast<ConstantSDNode>(Offset)) {
+    uint64_t Imm = ConstOffset->getZExtValue();
+    if (!isInt<12>(Imm))
+      return false;
+  }
+
+  return true;
+}
+
 bool RISCVTargetLowering::getPreIndexedAddressParts(SDNode *N, SDValue &Base,
                                                     SDValue &Offset,
                                                     ISD::MemIndexedMode &AM,
@@ -19808,31 +19835,21 @@ bool RISCVTargetLowering::getPostIndexedAddressParts(SDNode *N, SDNode *Op,
   } else
     return false;
 
-  if (!getIndexedAddressParts(Op, Base, Offset, AM, DAG))
-    return false;
+  if (Subtarget.hasPULPExtV2()) {
+    if (!getIndexedAddressPartsPulp(Op, Base, Offset, AM, DAG, VT))
+      return false;
+  } else {
+    if (!getIndexedAddressParts(Op, Base, Offset, AM, DAG))
+      return false;
+  }
+
   // Post-indexing updates the base, so it's not a valid transform
   // if that's not the same as the load's pointer.
-  if (Ptr != Base)
+  if (Ptr != Base) {
     return false;
+  }
 
   AM = ISD::POST_INC;
-  
-  // PULP
-  if (Subtarget.hasPULPExtV2() && Op->getOpcode() == ISD::ADD) {
-    // PULPv2 supports i8, i16, and i32 post-increments only.
-    if (!(VT == MVT::i8 || VT == MVT::i16 || VT == MVT::i32)) {
-      return false;
-    }
-
-    // If this is an immediate (constant), it must fit within 12 bits signed.
-    if (ConstantSDNode *ConstOffset = dyn_cast<ConstantSDNode>(Offset)) {
-      uint64_t imm = ConstOffset->getZExtValue();
-      if (!isInt<12>(imm)) {
-        return false;
-      }
-    }
-  }
-  // PULP
 
   return true;
 }

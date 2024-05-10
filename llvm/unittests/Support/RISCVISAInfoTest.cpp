@@ -769,11 +769,37 @@ R"(All available -march extensions for RISC-V
     xcvmac              1.0
     xcvmem              1.0
     xcvsimd             1.0
+    xdma                0.1
+    xfalthalf           0.1
+    xfaltquarter        0.1
+    xfauxalthalf        0.1
+    xfauxaltquarter     0.1
+    xfauxhalf           0.1
+    xfauxquarter        0.1
+    xfauxvecalthalf     0.1
+    xfauxvecaltquarter  0.1
+    xfauxvechalf        0.1
+    xfauxvecquarter     0.1
+    xfauxvecsingle      0.1
+    xfexpauxvecalthalf  0.1
+    xfexpauxvecaltquarter0.1
+    xfexpauxvechalf     0.1
+    xfexpauxvecquarter  0.1
+    xfquarter           0.1
+    xfrep               0.1
+    xfvecalthalf        0.1
+    xfvecaltquarter     0.1
+    xfvechalf           0.1
+    xfvecquarter        0.1
+    xfvecsingle         0.1
+    xmempool            0.1
+    xpulpv              2.0
     xsfvcp              1.0
     xsfvfnrclipxfqf     1.0
     xsfvfwmaccqqq       1.0
     xsfvqmaccdod        1.0
     xsfvqmaccqoq        1.0
+    xssr                0.1
     xtheadba            1.0
     xtheadbb            1.0
     xtheadbs            1.0

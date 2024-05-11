@@ -331,12 +331,14 @@ multiclass Pulp_Store<bits<2> funct2, string opcodestr> {
       : RVInstS<{0, funct2}, OPC_PULP_SPI, (outs GPR:$rs1_wb),
       (ins GPR:$rs2, GPR:$rs1, simm12:$imm12), opcodestr, "$rs2, ${imm12}(${rs1}!)">{
         let Constraints = "$rs1 = $rs1_wb";
+        let isAdd = 1;
       }
 
     def _rr_PostIncrement
       : RVInstR<0b0000000, {1, funct2}, OPC_PULP_SPI, (outs GPR:$rs1_wb),
       (ins GPR:$rs2, GPR:$rs1, GPR:$rd), opcodestr, "$rs2, ${rd}(${rs1}!)">{
         let Constraints = "$rs1 = $rs1_wb";
+        let isAdd = 1;
       }
 
     def _rr
@@ -351,12 +353,14 @@ multiclass Pulp_Load<bits<7> funct7, bits<3> funct3, string opcodestr> {
     : RVInstI<funct3, OPC_PULP_LPI, (outs GPR:$rd, GPR:$rs1_wb),
     (ins GPR:$rs1, simm12:$imm12), opcodestr, "$rd, ${imm12}(${rs1}!)">{
       let Constraints = "$rs1 = $rs1_wb";
+      let isAdd = 1;
     }
 
   def _rr_PostIncrement
     : RVInstR<funct7, 0b111, OPC_PULP_LPI, (outs GPR:$rd, GPR:$rs1_wb),
     (ins GPR:$rs1, GPR:$rs2), opcodestr, "$rd, ${rs2}(${rs1}!)">{
       let Constraints = "$rs1 = $rs1_wb";
+      let isAdd = 1;
     }
 
   def _rr

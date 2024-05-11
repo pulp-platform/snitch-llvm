@@ -52,6 +52,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <optional>
 
 using namespace llvm;
 
@@ -348,29 +349,95 @@ bool PULPHardwareLoops::runOnMachineFunction(MachineFunction &MF) {
   return Changed;
 }
 
-bool PULPHardwareLoops::findInductionRegister(MachineLoop *L,
-                                                 unsigned &Reg,
-                                                 int64_t &IVBump,
-                                                 MachineInstr *&IVOp
-                                                 ) const {
-  MachineBasicBlock *Preheader = MLI->findLoopPreheader(L, SpecPreheader);
+namespace {
+
+struct InductionUpdateOperands {
+  unsigned IndUpdate;
+  unsigned IndDef;
+  unsigned Bump;
+};
+
+auto getInductionUpdateParts(const MachineInstr *Update)
+    -> std::optional<InductionUpdateOperands> {
+  if (!Update->getDesc().isAdd())
+    return std::nullopt;
+
+  InductionUpdateOperands Result;
+
+  switch (Update->getOpcode()) {
+  default:
+    // %Rnext:gpr = ADDI %R:gpr, 4
+    //      ^               ^    ^
+    // 0: IndUpdate   1: IndDef 2: Bump
+    Result.IndUpdate = 0;
+    Result.IndDef = 1;
+    Result.Bump = 2;
+    break;
+  case RISCV::P_LW_ri_PostIncrement:
+  case RISCV::P_LW_rr_PostIncrement:
+    // %value:gpr, %Rnext:gpr = P_LW_ri_PostIncrement %R:gpr(tied-def 1), 4
+    //                ^                                   ^               ^
+    //           1: IndUpdate                         2: IndDef        3: Bump
+    Result.IndUpdate = 1;
+    Result.IndDef = 2;
+    Result.Bump = 3;
+    break;
+  }
+
+  return Result;
+}
+
+} // namespace
+
+/// Find the register that contains the loop controlling
+/// induction variable.
+/// If successful, it will return true and set the \p Reg, \p IVBump
+/// and \p IVOp arguments.  Otherwise it will return false.
+/// The returned induction register is the register R that follows the
+/// following induction pattern:
+/// loop:
+///   R = phi ..., [ R.next, LatchBlock ]
+///   R.next = R + #bump
+///   if (R.next < #N) goto loop
+/// IVBump is the immediate value added to R, and IVOp is the instruction
+/// "R.next = R + #bump".
+///
+/// Let's consider a loop where a post-increment load (p.lw) is the update
+/// instruction:
+///
+///  bb.3.for.body:
+///  ; predecessors: %bb.1.for.body.preheader, %bb.3.for.body
+///  %next:gpr = PHI %init:gpr, %bb.1.for.body.preheader, %cur:gpr, %bb.3.for.body
+///  %value:gpr, %cur:gpr = P_LW_ri_PostIncrement %next:gpr(tied-def 1), 4
+///  BEQ %cur:gpr, %0:gpr, %bb.2
+///  PseudoBR %bb.3
+///
+/// It will be analyzed as:
+/// 
+///  bb.loop:
+///    %R:gpr = PHI %latch:gpr, %bb.latch, %Rnext:gpr, %bb.loop
+///    %value:gpr, %Rnext:gpr = P_LW_ri_PostIncrement %R:gpr(tied-def 1), 4
+///    BEQ %Rnext:gpr, %N:gpr, %bb.end
+///    PseudoBR %bb.loop
+bool PULPHardwareLoops::findInductionRegister(MachineLoop *L, unsigned &Reg,
+                                              int64_t &IVBump,
+                                              MachineInstr *&IVOp) const {
   MachineBasicBlock *Header = L->getHeader();
+  MachineBasicBlock *Preheader = MLI->findLoopPreheader(L, SpecPreheader);
   MachineBasicBlock *Latch = L->getLoopLatch();
   MachineBasicBlock *ExitingBlock = L->findLoopControlBlock();
-
-  if (!Header || !Preheader || !Latch || !ExitingBlock) {
+  if (!Header || !Preheader || !Latch || !ExitingBlock)
     return false;
-  }
 
   // This pair represents an induction register together with an immediate
   // value that will be added to it in each loop iteration.
-  using RegisterBump = std::pair<unsigned, int64_t>;
+  using RegisterBump = std::pair<Register, int64_t>;
 
   // Mapping:  R.next -> (R, bump), where R, R.next and bump are derived
   // from an induction operation
   //   R.next = R + bump
   // where bump is an immediate value.
-  using InductionMap = std::map<unsigned, RegisterBump>;
+  using InductionMap = std::map<Register, RegisterBump>;
 
   InductionMap IndMap;
 
@@ -384,22 +451,37 @@ bool PULPHardwareLoops::findInductionRegister(MachineLoop *L,
     // latch block, and see if is a result of an addition of form "reg+imm",
     // where the "reg" is defined by the PHI node we are looking at.
     for (unsigned i = 1, n = Phi->getNumOperands(); i < n; i += 2) {
-      if (Phi->getOperand(i+1).getMBB() != Latch)
+      if (Phi->getOperand(i + 1).getMBB() != Latch)
         continue;
 
-      // If the PHI is the register operand to an ADDI, it corresponds to the
-      // induction pattern we are looking for.
-      unsigned PhiOpReg = Phi->getOperand(i).getReg();
+      Register PhiOpReg = Phi->getOperand(i).getReg();
       MachineInstr *DI = MRI->getVRegDef(PhiOpReg);
-      if (DI->getDesc().getOpcode() == RISCV::ADDI) {
-        unsigned IndReg = DI->getOperand(1).getReg();
-        MachineOperand &Opnd2 = DI->getOperand(2);
-        int64_t V;
-        if (MRI->getVRegDef(IndReg) == Phi && checkForImmediate(Opnd2, V)) {
-          unsigned UpdReg = DI->getOperand(0).getReg();
-          IndMap.insert(std::make_pair(UpdReg, std::make_pair(IndReg, V)));
-        }
-      }
+
+      auto OperandIndices = getInductionUpdateParts(DI);
+      if (!OperandIndices.has_value())
+        continue;
+
+      const MachineOperand &IndUpdate =
+          DI->getOperand(OperandIndices.value().IndUpdate);
+      const MachineOperand &IndDef =
+          DI->getOperand(OperandIndices.value().IndDef);
+      const MachineOperand &Bump = DI->getOperand(OperandIndices.value().Bump);
+
+      // If the register operand to the add is the PHI we're looking at, this
+      // meets the induction pattern.
+      Register IndReg = IndDef.getReg();
+      MachineInstr *IndRegDef = MRI->getVRegDef(IndReg);
+      int64_t V;
+      bool IsBumpImm = checkForImmediate(Bump, V);
+      // If the register operand to the update is the PHI we're looking at, this
+      // meets the induction pattern:
+      bool IndRegDefIsPhi = IndRegDef == Phi;
+
+      if (!IndRegDefIsPhi || !IsBumpImm)
+        continue;
+
+      Register UpdReg = IndUpdate.getReg();
+      IndMap.insert(std::make_pair(UpdReg, std::make_pair(IndReg, V)));
     }
   }
 
@@ -409,33 +491,33 @@ bool PULPHardwareLoops::findInductionRegister(MachineLoop *L,
   }
 
   MachineBasicBlock *TB = nullptr, *FB = nullptr;
-  SmallVector<MachineOperand,2> Cond;
+  SmallVector<MachineOperand, 2> Cond;
   // Check that the exit branch can be analyzed.
   // AnalyzeBranch returns true if it fails to analyze branch.
   bool NotAnalyzed = TII->analyzeBranch(*ExitingBlock, TB, FB, Cond, false);
   const auto Terminators = Latch->terminators();
   assert(!Terminators.empty());
-  const auto NumTerminators = std::distance(std::begin(Terminators), std::end(Terminators));
+  const auto NumTerminators =
+      std::distance(std::begin(Terminators), std::end(Terminators));
   if (NotAnalyzed
       // The rest of this function is based on the assumption that we have
       // at least 2x terminators, so bail out if this is not the case.
-      || NumTerminators < 2
-      || Cond.size() < 2) {
+      || NumTerminators < 2 || Cond.size() < 2) {
     return false;
   }
-  
+
   // We now know there are two terminators, one conditional and one
   // unconditional. If the order does not match what we expect, bail out.
   MachineInstr *condTerm = &(*std::begin(Terminators));
   MachineInstr *uncondTerm = &(*std::next(std::begin(Terminators)));
   if (!(condTerm->getDesc().isConditionalBranch() &&
-      uncondTerm->getDesc().isUnconditionalBranch())) {
+        uncondTerm->getDesc().isUnconditionalBranch())) {
     return false;
   }
 
   // Get the register numbers
-  unsigned CmpReg1 = Cond[1].isReg() ? (unsigned) Cond[1].getReg() : 0;
-  unsigned CmpReg2 = Cond[2].isReg() ? (unsigned) Cond[2].getReg() : 0;
+  unsigned CmpReg1 = Cond[1].isReg() ? (unsigned)Cond[1].getReg() : 0;
+  unsigned CmpReg2 = Cond[2].isReg() ? (unsigned)Cond[2].getReg() : 0;
 
   // Exactly one of the input registers to the comparison should be among
   // the induction registers.
@@ -449,20 +531,17 @@ bool PULPHardwareLoops::findInductionRegister(MachineLoop *L,
   if (CmpReg2 != 0) {
     InductionMap::iterator F2 = IndMap.find(CmpReg2);
     if (F2 != IndMapEnd) {
-      if (F != IndMapEnd) {
+      if (F != IndMapEnd)
         return false;
-      }
       F = F2;
     }
   }
-  if (F == IndMapEnd) {
+  if (F == IndMapEnd)
     return false;
-  }
 
   Reg = F->second.first;
   IVBump = F->second.second;
   IVOp = MRI->getVRegDef(F->first);
-
   return true;
 }
 
@@ -1165,7 +1244,7 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
   // Are we able to determine the trip count for the loop?
   CountValue *TripCount = getLoopTripCount(L, OldInsts);
   if (!TripCount) {
-    LLVM_DEBUG(dbgs() << "\nCannot convert to hwloop: cannot determine trip count";);
+    LLVM_DEBUG(dbgs() << "\nCannot convert to hwloop: cannot determine trip count\n";);
     return Changed;
   }
 

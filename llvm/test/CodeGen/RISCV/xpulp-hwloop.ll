@@ -34,14 +34,14 @@ for.body:
 
 ; 1x foor loop, induction variable = n-1..0
 ; FIXME: no post-decrement load
-; CHECK-LABEL:	for_1x_reverse:
-; CHECK-NEXT:	# %bb.0:
-; CHECK:			.p2align	2
-; CHECK:			lp.setup	x0, {{[ats][0-9]+}}, [[LABEL:\.LBB.+]]
-; CHECK:			lw	[[VALUE:[ats][0-9]+]], 0([[DATA:[ats][0-9]+]])
-; CHECK:			add	[[ACCUMULATOR:[ats][0-9]+]], [[ACCUMULATOR]], [[VALUE]]
-; CHECK:		[[LABEL]]:
-; CHECK:			addi	[[DATA:[ats][0-9]+]], [[DATA]], -4
+; CHECK-LABEL:  for_1x_reverse:
+; CHECK:          .p2align	2
+; CHECK-NEXT:     lp.setup	x0, {{[ats][0-9]+}}, [[LABEL:\.LBB.+]]
+; CHECK-NEXT:   {{\.LBB.+}}:
+; CHECK-NEXT:     lw	[[VALUE:[ats][0-9]+]], 0([[DATA:[ats][0-9]+]])
+; CHECK-NEXT:     add	[[ACCUMULATOR:[ats][0-9]+]], [[ACCUMULATOR]], [[VALUE]]
+; CHECK-NEXT:   [[LABEL]]:
+; CHECK-NEXT:      addi	[[DATA:[ats][0-9]+]], [[DATA]], -4
 define dso_local i32 @for_1x_reverse(i32* nocapture noundef readonly %va, i32 noundef %na) local_unnamed_addr #0 {
 entry:
   %cmp7 = icmp sgt i32 %na, 0
@@ -64,19 +64,20 @@ for.body:
 
 ; 2x foor loop nest, induction variables = 0..n-1
 ; FIXME: post-increment load for both DATAA and DATAB pointers
-; CHECK-LABEL:	for_2x:
-; CHECK-NEXT:		# %bb.0:
-; CHECK:	.p2align	2
-; CHECK:	lp.setup	x1, a2, [[A_LABEL:\.LBB.+]]
-; CHECK:	lw	[[VALUE_A:[ats][0-9]+]], 0({{[ats][0-9]+}})
-; CHECK:	.p2align	2
-; CHECK:	lp.setup	x0, {{[ats][0-9]+}}, [[B_LABEL:\.LBB.+]]
-; CHECK:	p.lw	[[DATA_B:[ats][0-9]+]], 4({{[ats][0-9]+}}!)
-; CHECK:	add	[[ACCUMULATOR:[ats][0-9]+]], [[ACCUMULATOR]], [[VALUE_A]]
-; CHECK:[[B_LABEL]]:
-; CHECK:	sub	[[ACCUMULATOR]], [[ACCUMULATOR]], [[DATA_B]]
-; CHECK:[[A_LABEL]]:
-; CHECK:	addi	{{[ats][0-9]+}}, {{[ats][0-9]+}}, 1
+; CHECK-LABEL:  for_2x:
+; CHECK:          .p2align	2
+; CHECK-NEXT:     lp.setup	x1, a2, [[A_LABEL:\.LBB.+]]
+; CHECK-NEXT:   {{\.LBB.+}}
+; CHECK:          lw	[[VALUE_A:[ats][0-9]+]], 0({{[ats][0-9]+}})
+; CHECK:          .p2align	2
+; CHECK-NEXT:     lp.setup	x0, {{[ats][0-9]+}}, [[B_LABEL:\.LBB.+]]
+; CHECK-NEXT:   {{\.LBB.+}}
+; CHECK-NEXT:     p.lw	[[DATA_B:[ats][0-9]+]], 4({{[ats][0-9]+}}!)
+; CHECK-NEXT:     add	[[ACCUMULATOR:[ats][0-9]+]], [[ACCUMULATOR]], [[VALUE_A]]
+; CHECK-NEXT:  [[B_LABEL]]:
+; CHECK-NEXT:    sub	[[ACCUMULATOR]], [[ACCUMULATOR]], [[DATA_B]]
+; CHECK:       [[A_LABEL]]:
+; CHECK:         addi	{{[ats][0-9]+}}, {{[ats][0-9]+}}, 1
 define dso_local i32 @for_2x(i32* nocapture noundef readonly %va, i32* nocapture noundef readonly %vb, i32 noundef %na, i32 noundef %nb) local_unnamed_addr #0 {
 entry:
   %cmp20 = icmp sgt i32 %na, 0
@@ -116,7 +117,6 @@ for.cond.cleanup:
 ; FIXME only the inner loop is lowered to lp.setup
 ; FIXME no post-increment loads with negative offset are emitted
 ; CHECK-LABEL:	for_2x_reverse:
-; CHECK-NEXT:		# %bb.0:
 ; CHECK:			lp.setup	x0, t2, [[LABEL:\.LBB.+]]
 ; CHECK:			lw	a5, 0(a1)
 ; CHECK:			add	a4, a4, t3
@@ -160,8 +160,7 @@ for.cond.cleanup:                                 ; preds = %for.cond2.for.cond.
 ; 3x foor loop nest, induction variables = 0..n-1
 ; FIXME post-increment loads are emitted only for inner loop
 ; CHECK-LABEL:	for_3x:
-; CHECK-NEXT:	# %bb.0:
-; CHECK:			bnez	{{[ats][0-9]+}}, [[A_LABEL:\.LBB.+]]
+; CHECK:			blez	{{[ats][0-9]+}}, [[A_LABEL:\.LBB.+]]
 ; CHECK:			.p2align	2
 ; CHECK:			lp.setup	x1, {{[ats][0-9]+}}, [[B_LABEL:\.LBB.+]]
 ; CHECK:			lw	{{[ats][0-9]+}}, 0({{[ats][0-9]+}})
@@ -222,8 +221,7 @@ for.cond.cleanup:                                 ; preds = %for.cond1.for.cond.
 }
 
 ; CHECK-LABEL:	for_3x_reverse:
-; CHECK-NEXT:	# %bb.0:
-; CHECK:			bnez	{{[ats][0-9]+}}, [[GUARD:\.LBB.+]]
+; CHECK:			blez	{{[ats][0-9]+}}, [[GUARD:\.LBB.+]]
 ; CHECK:		[[A_LABEL:\.LBB.+]]:
 ; CHECK:			lw	{{[ats][0-9]+}}, 0({{[ats][0-9]+}})
 ; CHECK:		[[B_LABEL:\.LBB.+]]:
@@ -289,7 +287,7 @@ for.cond.cleanup:                                 ; preds = %for.cond2.for.cond.
 ; While we know that inference fails here, we want to be sure
 ; that the inference pass doesn't crash on us.
 ; CHECK-LABEL:	strcmp:
-; CHECK-NEXT:	# %bb.0:
+; CHECK:          p.lbu   {{[ats][0-9]+}}, 1({{[ats][0-9]+}}!)
 define dso_local i32 @strcmp(i8* nocapture noundef readonly %s1, i8* nocapture noundef readonly %s2) local_unnamed_addr #0 {
 entry:
   %0 = load i8, i8* %s1, align 1

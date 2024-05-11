@@ -18,9 +18,6 @@
 #include "../RISCVInstrInfo.h"
 #include "../RISCVRegisterInfo.h"
 #include "../RISCVSubtarget.h"
-#include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/StringRef.h"
@@ -48,11 +45,11 @@
 #include <cstdlib>
 #include <iterator>
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
 #include <vector>
-#include <optional>
 
 using namespace llvm;
 
@@ -61,249 +58,246 @@ using namespace llvm;
 // Turn it off by default. If a preheader block is not created here, the
 // software pipeliner may be unable to find a block suitable to serve as
 // a preheader. In that case SWP will not run.
-static cl::opt<bool> SpecPreheader("pulp-hwloop-spec-preheader", cl::init(false),
-  cl::Hidden, cl::ZeroOrMore, cl::desc("Allow speculation of preheader "
-  "instructions"));
+static cl::opt<bool> SpecPreheader("pulp-hwloop-spec-preheader",
+                                   cl::init(false), cl::Hidden, cl::ZeroOrMore,
+                                   cl::desc("Allow speculation of preheader "
+                                            "instructions"));
 
 STATISTIC(NumHWLoops, "Number of loops converted to hardware loops");
 
 namespace llvm {
 
-  FunctionPass *createPULPHardwareLoops();
-  void initializePULPHardwareLoopsPass(PassRegistry&);
+FunctionPass *createPULPHardwareLoops();
+void initializePULPHardwareLoopsPass(PassRegistry &);
 
 } // end namespace llvm
 
 namespace {
 
-  class CountValue;
+class CountValue;
 
-  struct PULPHardwareLoops : public MachineFunctionPass {
-    MachineLoopInfo            *MLI;
-    MachineRegisterInfo        *MRI;
-    MachineDominatorTree       *MDT;
-    const RISCVInstrInfo     *TII;
-    const RISCVRegisterInfo  *TRI;
+struct PULPHardwareLoops : public MachineFunctionPass {
+  MachineLoopInfo *MLI;
+  MachineRegisterInfo *MRI;
+  MachineDominatorTree *MDT;
+  const RISCVInstrInfo *TII;
+  const RISCVRegisterInfo *TRI;
 
-    unsigned NumHWLoopsInternal = 0;
+  unsigned NumHWLoopsInternal = 0;
 
-  public:
-    static char ID;
+public:
+  static char ID;
 
-    PULPHardwareLoops() : MachineFunctionPass(ID) {}
+  PULPHardwareLoops() : MachineFunctionPass(ID) {}
 
-    bool runOnMachineFunction(MachineFunction &MF) override;
+  bool runOnMachineFunction(MachineFunction &MF) override;
 
-    StringRef getPassName() const override { return "PULP Hardware Loops"; }
+  StringRef getPassName() const override { return "PULP Hardware Loops"; }
 
-    void getAnalysisUsage(AnalysisUsage &AU) const override {
-      AU.addRequired<MachineDominatorTree>();
-      AU.addRequired<MachineLoopInfo>();
-      MachineFunctionPass::getAnalysisUsage(AU);
-    }
+  void getAnalysisUsage(AnalysisUsage &AU) const override {
+    AU.addRequired<MachineDominatorTree>();
+    AU.addRequired<MachineLoopInfo>();
+    MachineFunctionPass::getAnalysisUsage(AU);
+  }
 
-  private:
-    using LoopFeederMap = std::map<unsigned, MachineInstr *>;
-    std::set<const MachineInstr *> KnownHardwareLoops;
+private:
+  using LoopFeederMap = std::map<unsigned, MachineInstr *>;
+  std::set<const MachineInstr *> KnownHardwareLoops;
 
-    /// Kinds of comparisons in the compare instructions.
-    struct Comparison {
-      enum Kind {
-        EQ  = 0x01,
-        NE  = 0x02,
-        L   = 0x04,
-        G   = 0x08,
-        U   = 0x40,
-        LTs = L,
-        LEs = L | EQ,
-        GTs = G,
-        GEs = G | EQ,
-        LTu = L      | U,
-        LEu = L | EQ | U,
-        GTu = G      | U,
-        GEu = G | EQ | U
-      };
-
-      static Kind getSwappedComparison(Kind Cmp) {
-        assert ((!((Cmp & L) && (Cmp & G))) && "Malformed comparison operator");
-        if ((Cmp & L) || (Cmp & G))
-          return (Kind)(Cmp ^ (L|G));
-        return Cmp;
-      }
-
-      static Kind getNegatedComparison(Kind Cmp) {
-        if ((Cmp & L) || (Cmp & G))
-          return (Kind)((Cmp ^ (L | G)) ^ EQ);
-        if ((Cmp & NE) || (Cmp & EQ))
-          return (Kind)(Cmp ^ (EQ | NE));
-        return (Kind)0;
-      }
-
-      static bool isSigned(Kind Cmp) {
-        return (Cmp & (L | G) && !(Cmp & U));
-      }
-
-      static bool isUnsigned(Kind Cmp) {
-        return (Cmp & U);
-      }
+  /// Kinds of comparisons in the compare instructions.
+  struct Comparison {
+    enum Kind {
+      EQ = 0x01,
+      NE = 0x02,
+      L = 0x04,
+      G = 0x08,
+      U = 0x40,
+      LTs = L,
+      LEs = L | EQ,
+      GTs = G,
+      GEs = G | EQ,
+      LTu = L | U,
+      LEu = L | EQ | U,
+      GTu = G | U,
+      GEu = G | EQ | U
     };
 
-    /// Find the register that contains the loop controlling
-    /// induction variable.
-    /// If successful, it will return true and set the \p Reg, \p IVBump
-    /// and \p IVOp arguments.  Otherwise it will return false.
-    /// The returned induction register is the register R that follows the
-    /// following induction pattern:
-    /// loop:
-    ///   R = phi ..., [ R.next, LatchBlock ]
-    ///   R.next = R + #bump
-    ///   if (R.next < #N) goto loop
-    /// IVBump is the immediate value added to R, and IVOp is the instruction
-    /// "R.next = R + #bump".
-    bool findInductionRegister(MachineLoop *L, unsigned &Reg,
-                               int64_t &IVBump, MachineInstr *&IVOp) const;
+    static Kind getSwappedComparison(Kind Cmp) {
+      assert((!((Cmp & L) && (Cmp & G))) && "Malformed comparison operator");
+      if ((Cmp & L) || (Cmp & G))
+        return (Kind)(Cmp ^ (L | G));
+      return Cmp;
+    }
 
-    /// Return the comparison kind for the specified opcode.
-    Comparison::Kind getComparisonKind(unsigned CondOpc,
-                                       MachineOperand *InitialValue,
-                                       const MachineOperand *Endvalue,
-                                       int64_t IVBump) const;
-    
-    // Return the internal (used internally by this pass) comparison kind for
-    // the specified RISCV condition code.
-    Comparison::Kind getComparisonKindFromCC(unsigned CC,
-                                        MachineOperand *InitialValue,
-                                        const MachineOperand *EndValue,
-                                        int64_t IVBump) const;
+    static Kind getNegatedComparison(Kind Cmp) {
+      if ((Cmp & L) || (Cmp & G))
+        return (Kind)((Cmp ^ (L | G)) ^ EQ);
+      if ((Cmp & NE) || (Cmp & EQ))
+        return (Kind)(Cmp ^ (EQ | NE));
+      return (Kind)0;
+    }
 
-    /// Analyze the statements in a loop to determine if the loop
-    /// has a computable trip count and, if so, return a value that represents
-    /// the trip count expression.
-    CountValue *getLoopTripCount(MachineLoop *L,
-                                 SmallVectorImpl<MachineInstr *> &OldInsts);
+    static bool isSigned(Kind Cmp) { return (Cmp & (L | G) && !(Cmp & U)); }
 
-    /// Return the expression that represents the number of times
-    /// a loop iterates.  The function takes the operands that represent the
-    /// loop start value, loop end value, and induction value.  Based upon
-    /// these operands, the function attempts to compute the trip count.
-    /// If the trip count is not directly available (as an immediate value,
-    /// or a register), the function will attempt to insert computation of it
-    /// to the loop's preheader.
-    CountValue *computeCount(MachineLoop *Loop, const MachineOperand *Start,
-                             const MachineOperand *End, unsigned IVReg,
-                             int64_t IVBump, Comparison::Kind Cmp) const;
-
-    /// Return true if the instruction is not valid within a hardware
-    /// loop.
-    bool isInvalidLoopOperation(const MachineInstr *MI) const;
-
-    /// Return true if the loop contains an instruction that inhibits
-    /// using the hardware loop.
-    bool containsInvalidInstruction(MachineLoop *L) const;
-
-    /// Given a loop, check if we can convert it to a hardware loop.
-    /// If so, then perform the conversion and return true.
-    bool convertToHardwareLoop(MachineLoop *L, bool &L0used, bool &L1used);
-
-    /// Return true if the instruction is now dead.
-    bool isDead(const MachineInstr *MI,
-                SmallVectorImpl<MachineInstr *> &DeadPhis) const;
-
-    /// Remove the instruction if it is now dead.
-    void removeIfDead(MachineInstr *MI);
-
-    /// Return true if MO and MI pair is visited only once. If visited
-    /// more than once, this indicates there is recursion. In such a case,
-    /// return false.
-    bool isLoopFeeder(MachineLoop *L, MachineBasicBlock *A, MachineInstr *MI,
-                      const MachineOperand *MO,
-                      LoopFeederMap &LoopFeederPhi) const;
-
-    /// Return true if the Phi may generate a value that may underflow,
-    /// or may wrap.
-    bool phiMayWrapOrUnderflow(MachineInstr *Phi, const MachineOperand *EndVal,
-                               MachineBasicBlock *MBB, MachineLoop *L,
-                               LoopFeederMap &LoopFeederPhi) const;
-
-    /// Return true if the induction variable may underflow an unsigned
-    /// value in the first iteration.
-    bool loopCountMayWrapOrUnderFlow(const MachineOperand *InitVal,
-                                     const MachineOperand *EndVal,
-                                     MachineBasicBlock *MBB, MachineLoop *L,
-                                     LoopFeederMap &LoopFeederPhi) const;
-
-    /// Check if the given operand has a compile-time known constant
-    /// value. Return true if yes, and false otherwise. When returning true, set
-    /// Val to the corresponding constant value.
-    bool checkForImmediate(const MachineOperand &MO, int64_t &Val) const;
-
+    static bool isUnsigned(Kind Cmp) { return (Cmp & U); }
   };
 
-  char PULPHardwareLoops::ID = 0;
+  /// Find the register that contains the loop controlling
+  /// induction variable.
+  /// If successful, it will return true and set the \p Reg, \p IVBump
+  /// and \p IVOp arguments.  Otherwise it will return false.
+  /// The returned induction register is the register R that follows the
+  /// following induction pattern:
+  /// loop:
+  ///   R = phi ..., [ R.next, LatchBlock ]
+  ///   R.next = R + #bump
+  ///   if (R.next < #N) goto loop
+  /// IVBump is the immediate value added to R, and IVOp is the instruction
+  /// "R.next = R + #bump".
+  bool findInductionRegister(MachineLoop *L, unsigned &Reg, int64_t &IVBump,
+                             MachineInstr *&IVOp) const;
 
-  /// Abstraction for a trip count of a loop. A smaller version
-  /// of the MachineOperand class without the concerns of changing the
-  /// operand representation.
-  class CountValue {
-  public:
-    enum CountValueType {
-      CV_Register,
-      CV_Immediate
-    };
+  /// Return the comparison kind for the specified opcode.
+  Comparison::Kind getComparisonKind(unsigned CondOpc,
+                                     MachineOperand *InitialValue,
+                                     const MachineOperand *Endvalue,
+                                     int64_t IVBump) const;
 
-  private:
-    CountValueType Kind;
-    union Values {
-      struct {
-        unsigned Reg;
-        unsigned Sub;
-      } R;
-      unsigned ImmVal;
-    } Contents;
+  // Return the internal (used internally by this pass) comparison kind for
+  // the specified RISCV condition code.
+  Comparison::Kind getComparisonKindFromCC(unsigned CC,
+                                           MachineOperand *InitialValue,
+                                           const MachineOperand *EndValue,
+                                           int64_t IVBump) const;
 
-  public:
-    explicit CountValue(CountValueType t, unsigned v, unsigned u = 0) {
-      Kind = t;
-      if (Kind == CV_Register) {
-        Contents.R.Reg = v;
-        Contents.R.Sub = u;
-      } else {
-        Contents.ImmVal = v;
-      }
+  /// Analyze the statements in a loop to determine if the loop
+  /// has a computable trip count and, if so, return a value that represents
+  /// the trip count expression.
+  CountValue *getLoopTripCount(MachineLoop *L,
+                               SmallVectorImpl<MachineInstr *> &OldInsts);
+
+  /// Return the expression that represents the number of times
+  /// a loop iterates.  The function takes the operands that represent the
+  /// loop start value, loop end value, and induction value.  Based upon
+  /// these operands, the function attempts to compute the trip count.
+  /// If the trip count is not directly available (as an immediate value,
+  /// or a register), the function will attempt to insert computation of it
+  /// to the loop's preheader.
+  CountValue *computeCount(MachineLoop *Loop, const MachineOperand *Start,
+                           const MachineOperand *End, unsigned IVReg,
+                           int64_t IVBump, Comparison::Kind Cmp) const;
+
+  /// Return true if the instruction is not valid within a hardware
+  /// loop.
+  bool isInvalidLoopOperation(const MachineInstr *MI) const;
+
+  /// Return true if the loop contains an instruction that inhibits
+  /// using the hardware loop.
+  bool containsInvalidInstruction(MachineLoop *L) const;
+
+  /// Given a loop, check if we can convert it to a hardware loop.
+  /// If so, then perform the conversion and return true.
+  bool convertToHardwareLoop(MachineLoop *L, bool &L0used, bool &L1used);
+
+  /// Return true if the instruction is now dead.
+  bool isDead(const MachineInstr *MI,
+              SmallVectorImpl<MachineInstr *> &DeadPhis) const;
+
+  /// Remove the instruction if it is now dead.
+  void removeIfDead(MachineInstr *MI);
+
+  /// Return true if MO and MI pair is visited only once. If visited
+  /// more than once, this indicates there is recursion. In such a case,
+  /// return false.
+  bool isLoopFeeder(MachineLoop *L, MachineBasicBlock *A, MachineInstr *MI,
+                    const MachineOperand *MO,
+                    LoopFeederMap &LoopFeederPhi) const;
+
+  /// Return true if the Phi may generate a value that may underflow,
+  /// or may wrap.
+  bool phiMayWrapOrUnderflow(MachineInstr *Phi, const MachineOperand *EndVal,
+                             MachineBasicBlock *MBB, MachineLoop *L,
+                             LoopFeederMap &LoopFeederPhi) const;
+
+  /// Return true if the induction variable may underflow an unsigned
+  /// value in the first iteration.
+  bool loopCountMayWrapOrUnderFlow(const MachineOperand *InitVal,
+                                   const MachineOperand *EndVal,
+                                   MachineBasicBlock *MBB, MachineLoop *L,
+                                   LoopFeederMap &LoopFeederPhi) const;
+
+  /// Check if the given operand has a compile-time known constant
+  /// value. Return true if yes, and false otherwise. When returning true, set
+  /// Val to the corresponding constant value.
+  bool checkForImmediate(const MachineOperand &MO, int64_t &Val) const;
+};
+
+char PULPHardwareLoops::ID = 0;
+
+/// Abstraction for a trip count of a loop. A smaller version
+/// of the MachineOperand class without the concerns of changing the
+/// operand representation.
+class CountValue {
+public:
+  enum CountValueType { CV_Register, CV_Immediate };
+
+private:
+  CountValueType Kind;
+  union Values {
+    struct {
+      unsigned Reg;
+      unsigned Sub;
+    } R;
+    unsigned ImmVal;
+  } Contents;
+
+public:
+  explicit CountValue(CountValueType t, unsigned v, unsigned u = 0) {
+    Kind = t;
+    if (Kind == CV_Register) {
+      Contents.R.Reg = v;
+      Contents.R.Sub = u;
+    } else {
+      Contents.ImmVal = v;
     }
+  }
 
-    bool isReg() const { return Kind == CV_Register; }
-    bool isImm() const { return Kind == CV_Immediate; }
+  bool isReg() const { return Kind == CV_Register; }
+  bool isImm() const { return Kind == CV_Immediate; }
 
-    unsigned getReg() const {
-      assert(isReg() && "Wrong CountValue accessor");
-      return Contents.R.Reg;
+  unsigned getReg() const {
+    assert(isReg() && "Wrong CountValue accessor");
+    return Contents.R.Reg;
+  }
+
+  unsigned getSubReg() const {
+    assert(isReg() && "Wrong CountValue accessor");
+    return Contents.R.Sub;
+  }
+
+  unsigned getImm() const {
+    assert(isImm() && "Wrong CountValue accessor");
+    return Contents.ImmVal;
+  }
+
+  void print(raw_ostream &OS, const TargetRegisterInfo *TRI = nullptr) const {
+    if (isReg()) {
+      OS << printReg(Contents.R.Reg, TRI, Contents.R.Sub);
     }
-
-    unsigned getSubReg() const {
-      assert(isReg() && "Wrong CountValue accessor");
-      return Contents.R.Sub;
+    if (isImm()) {
+      OS << Contents.ImmVal;
     }
-
-    unsigned getImm() const {
-      assert(isImm() && "Wrong CountValue accessor");
-      return Contents.ImmVal;
-    }
-
-    void print(raw_ostream &OS, const TargetRegisterInfo *TRI = nullptr) const {
-      if (isReg()) { OS << printReg(Contents.R.Reg, TRI, Contents.R.Sub); }
-      if (isImm()) { OS << Contents.ImmVal; }
-    }
-  };
+  }
+};
 
 } // end anonymous namespace
 
-INITIALIZE_PASS_BEGIN(PULPHardwareLoops, "pulp-hwloops",
-                      "PULP Hardware Loops", false, false)
+INITIALIZE_PASS_BEGIN(PULPHardwareLoops, "pulp-hwloops", "PULP Hardware Loops",
+                      false, false)
 INITIALIZE_PASS_DEPENDENCY(MachineDominatorTree)
 INITIALIZE_PASS_DEPENDENCY(MachineLoopInfo)
-INITIALIZE_PASS_END(PULPHardwareLoops, "pulp-hwloops",
-                    "PULP Hardware Loops", false, false)
+INITIALIZE_PASS_END(PULPHardwareLoops, "pulp-hwloops", "PULP Hardware Loops",
+                    false, false)
 
 FunctionPass *llvm::createPULPHardwareLoops() {
   return new PULPHardwareLoops();
@@ -314,12 +308,13 @@ bool PULPHardwareLoops::runOnMachineFunction(MachineFunction &MF) {
 
   // We can only use hardware loops if we have the PULPv2 extension enabled.
   if (!MF.getSubtarget<RISCVSubtarget>().hasPULPExtV2()) {
-    LLVM_DEBUG(dbgs() << "No xPULP extension, skipping.\n");
+    LLVM_DEBUG(dbgs() << "No Xpulp extension, skipping.\n");
     return false;
   }
 
   if (skipFunction(MF.getFunction())) {
-    LLVM_DEBUG(dbgs() << "Machine function marked to be skipped, bailing out.\n");
+    LLVM_DEBUG(
+        dbgs() << "Machine function marked to be skipped, bailing out.\n");
     return false;
   }
 
@@ -344,8 +339,8 @@ bool PULPHardwareLoops::runOnMachineFunction(MachineFunction &MF) {
     }
 
   if (Changed) {
-    LLVM_DEBUG(dbgs() << "Created " << NumHWLoopsInternal << 
-               " hardware loops in " << MF.getName() << "\n";);
+    LLVM_DEBUG(dbgs() << "Created " << NumHWLoopsInternal
+                      << " hardware loops in " << MF.getName() << "\n";);
   }
 
   return Changed;
@@ -425,13 +420,12 @@ auto getInductionUpdateParts(const MachineInstr *Update)
 ///
 ///  bb.3.for.body:
 ///  ; predecessors: %bb.1.for.body.preheader, %bb.3.for.body
-///  %next:gpr = PHI %init:gpr, %bb.1.for.body.preheader, %cur:gpr, %bb.3.for.body
-///  %value:gpr, %cur:gpr = P_LW_ri_PostIncrement %next:gpr(tied-def 1), 4
-///  BEQ %cur:gpr, %0:gpr, %bb.2
-///  PseudoBR %bb.3
+///  %next:gpr = PHI %init:gpr, %bb.1.for.body.preheader, %cur:gpr,
+///  %bb.3.for.body %value:gpr, %cur:gpr = P_LW_ri_PostIncrement
+///  %next:gpr(tied-def 1), 4 BEQ %cur:gpr, %0:gpr, %bb.2 PseudoBR %bb.3
 ///
 /// It will be analyzed as:
-/// 
+///
 ///  bb.loop:
 ///    %R:gpr = PHI %latch:gpr, %bb.latch, %Rnext:gpr, %bb.loop
 ///    %value:gpr, %Rnext:gpr = P_LW_ri_PostIncrement %R:gpr(tied-def 1), 4
@@ -475,12 +469,15 @@ bool PULPHardwareLoops::findInductionRegister(MachineLoop *L, unsigned &Reg,
       Register PhiOpReg = Phi->getOperand(i).getReg();
       MachineInstr *DI = MRI->getVRegDef(PhiOpReg);
 
-      LLVM_DEBUG(dbgs() << "Induction PHI candidate: "; Phi->dump(); dbgs() << "\n");
-      LLVM_DEBUG(dbgs() << "Induction update candidate: "; DI->dump(); dbgs() << "\n");
+      LLVM_DEBUG(dbgs() << "Induction PHI candidate: "; Phi->dump();
+                 dbgs() << "\n");
+      LLVM_DEBUG(dbgs() << "Induction update candidate: "; DI->dump();
+                 dbgs() << "\n");
       auto OperandIndices = getInductionUpdateParts(DI);
       if (!OperandIndices.has_value())
         continue;
-      LLVM_DEBUG(dbgs() << "Elected induction update: "; DI->dump(); dbgs() << "\n");
+      LLVM_DEBUG(dbgs() << "Elected induction update: "; DI->dump();
+                 dbgs() << "\n");
 
       const MachineOperand &IndUpdate =
           DI->getOperand(OperandIndices.value().IndUpdate);
@@ -567,11 +564,9 @@ bool PULPHardwareLoops::findInductionRegister(MachineLoop *L, unsigned &Reg,
 }
 
 // Return the comparison kind for the specified opcode.
-PULPHardwareLoops::Comparison::Kind
-PULPHardwareLoops::getComparisonKind(unsigned CondOpc,
-                                        MachineOperand *InitialValue,
-                                        const MachineOperand *EndValue,
-                                        int64_t IVBump) const {
+PULPHardwareLoops::Comparison::Kind PULPHardwareLoops::getComparisonKind(
+    unsigned CondOpc, MachineOperand *InitialValue,
+    const MachineOperand *EndValue, int64_t IVBump) const {
 
   Comparison::Kind Cmp = (Comparison::Kind)0;
   switch (CondOpc) {
@@ -607,11 +602,9 @@ PULPHardwareLoops::getComparisonKind(unsigned CondOpc,
 
 // Return the internal (used internally by this pass) comparison kind for
 // the specified RISCV condition code.
-PULPHardwareLoops::Comparison::Kind
-PULPHardwareLoops::getComparisonKindFromCC(unsigned CC,
-                                        MachineOperand *InitialValue,
-                                        const MachineOperand *EndValue,
-                                        int64_t IVBump) const {
+PULPHardwareLoops::Comparison::Kind PULPHardwareLoops::getComparisonKindFromCC(
+    unsigned CC, MachineOperand *InitialValue, const MachineOperand *EndValue,
+    int64_t IVBump) const {
   Comparison::Kind Cmp = (Comparison::Kind)0;
   switch (CC) {
   default:
@@ -643,8 +636,9 @@ PULPHardwareLoops::getComparisonKindFromCC(unsigned CC,
 /// This function iterates over the phi nodes in the loop to check for
 /// induction variable patterns that are used in the calculation for
 /// the number of time the loop is executed.
-CountValue *PULPHardwareLoops::getLoopTripCount(MachineLoop *L,
-    SmallVectorImpl<MachineInstr *> &OldInsts) {
+CountValue *
+PULPHardwareLoops::getLoopTripCount(MachineLoop *L,
+                                    SmallVectorImpl<MachineInstr *> &OldInsts) {
 
   MachineBasicBlock *TopMBB = L->getTopBlock();
   MachineBasicBlock::pred_iterator PI = TopMBB->pred_begin();
@@ -655,7 +649,7 @@ CountValue *PULPHardwareLoops::getLoopTripCount(MachineLoop *L,
     return nullptr;
   }
   MachineBasicBlock *Incoming = *PI++;
-  if (PI != TopMBB->pred_end()) {  // multiple backedges?
+  if (PI != TopMBB->pred_end()) { // multiple backedges?
     return nullptr;
   }
 
@@ -693,17 +687,17 @@ CountValue *PULPHardwareLoops::getLoopTripCount(MachineLoop *L,
   MachineInstr *IV_Phi = MRI->getVRegDef(IVReg);
   MachineBasicBlock *Latch = L->getLoopLatch();
   for (unsigned i = 1, n = IV_Phi->getNumOperands(); i < n; i += 2) {
-    MachineBasicBlock *MBB = IV_Phi->getOperand(i+1).getMBB();
+    MachineBasicBlock *MBB = IV_Phi->getOperand(i + 1).getMBB();
     if (MBB == Preheader)
       InitialValue = &IV_Phi->getOperand(i);
     else if (MBB == Latch)
-      IVReg = IV_Phi->getOperand(i).getReg();  // Want IV reg after bump.
+      IVReg = IV_Phi->getOperand(i).getReg(); // Want IV reg after bump.
   }
   if (!InitialValue) {
     return nullptr;
   }
 
-  SmallVector<MachineOperand,2> Cond;
+  SmallVector<MachineOperand, 2> Cond;
   MachineBasicBlock *TB = nullptr, *FB = nullptr;
   bool NotAnalyzed = TII->analyzeBranch(*ExitingBlock, TB, FB, Cond, false);
   if (NotAnalyzed) {
@@ -714,10 +708,10 @@ CountValue *PULPHardwareLoops::getLoopTripCount(MachineLoop *L,
   // TB must be non-null.  If FB is also non-null, one of them must be
   // the header.  Otherwise, branch to TB could be exiting the loop, and
   // the fall through can go to the header.
-  assert (TB && "Exit block without a branch?");
+  assert(TB && "Exit block without a branch?");
   if (ExitingBlock != Latch && (TB == Latch || FB == Latch)) {
     MachineBasicBlock *LTB = nullptr, *LFB = nullptr;
-    SmallVector<MachineOperand,2> LCond;
+    SmallVector<MachineOperand, 2> LCond;
     bool NotAnalyzed = TII->analyzeBranch(*Latch, LTB, LFB, LCond, false);
     if (NotAnalyzed) {
       return nullptr;
@@ -725,25 +719,23 @@ CountValue *PULPHardwareLoops::getLoopTripCount(MachineLoop *L,
     if (TB == Latch)
       TB = (LTB == Header) ? LTB : LFB;
     else
-      FB = (LTB == Header) ? LTB: LFB;
+      FB = (LTB == Header) ? LTB : LFB;
   }
-  assert ((!FB || TB == Header || FB == Header) && "Branches not to header?");
+  assert((!FB || TB == Header || FB == Header) && "Branches not to header?");
   if (!TB || (FB && TB != Header && FB != Header)) {
     return nullptr;
   }
-  
-  // We now know there are two terminators, one conditional and one 
+
+  // We now know there are two terminators, one conditional and one
   // unconditional. Double check to be sure.
   MachineBasicBlock::iterator firstTerm = Latch->getFirstTerminator();
   MachineBasicBlock::iterator secondTerm = std::next(firstTerm);
-  if (!(firstTerm->getDesc().isConditionalBranch() && 
-      secondTerm->getDesc().isUnconditionalBranch())) {
+  if (!(firstTerm->getDesc().isConditionalBranch() &&
+        secondTerm->getDesc().isUnconditionalBranch())) {
     return nullptr;
   }
 
-
   unsigned CondOpc = Cond[0].getImm();
-
 
   // The comparison operator type determines how we compute the loop
   // trip count.
@@ -772,7 +764,7 @@ CountValue *PULPHardwareLoops::getLoopTripCount(MachineLoop *L,
   if (!EndValue) {
     return nullptr;
   }
-  
+
   Cmp = getComparisonKindFromCC(CondOpc, InitialValue, EndValue, IVBump);
   if (!Cmp) {
     return nullptr;
@@ -781,7 +773,7 @@ CountValue *PULPHardwareLoops::getLoopTripCount(MachineLoop *L,
     Cmp = Comparison::getSwappedComparison(Cmp);
 
   if (InitialValue->isReg()) {
-    unsigned R = InitialValue->getReg();
+    llvm::Register R = InitialValue->getReg();
     MachineBasicBlock *DefBB = MRI->getVRegDef(R)->getParent();
     if (!MDT->properlyDominates(DefBB, Header)) {
       int64_t V;
@@ -792,7 +784,7 @@ CountValue *PULPHardwareLoops::getLoopTripCount(MachineLoop *L,
     OldInsts.push_back(MRI->getVRegDef(R));
   }
   if (EndValue->isReg()) {
-    unsigned R = EndValue->getReg();
+    llvm::Register R = EndValue->getReg();
     MachineBasicBlock *DefBB = MRI->getVRegDef(R)->getParent();
     if (!MDT->properlyDominates(DefBB, Header)) {
       int64_t V;
@@ -811,15 +803,14 @@ CountValue *PULPHardwareLoops::getLoopTripCount(MachineLoop *L,
 /// represent the loop start value, loop end value, and induction value.
 /// Based upon these operands, the function attempts to compute the trip count.
 CountValue *PULPHardwareLoops::computeCount(MachineLoop *Loop,
-                                               const MachineOperand *Start,
-                                               const MachineOperand *End,
-                                               unsigned IVReg,
-                                               int64_t IVBump,
-                                               Comparison::Kind Cmp) const {
-    
+                                            const MachineOperand *Start,
+                                            const MachineOperand *End,
+                                            unsigned IVReg, int64_t IVBump,
+                                            Comparison::Kind Cmp) const {
+
   // Get the preheader
   MachineBasicBlock *PH = MLI->findLoopPreheader(Loop, SpecPreheader);
-  assert (PH && "Should have a preheader by now");
+  assert(PH && "Should have a preheader by now");
   MachineBasicBlock::iterator InsertPos = PH->getFirstTerminator();
   DebugLoc DL;
   if (InsertPos != PH->end())
@@ -831,8 +822,8 @@ CountValue *PULPHardwareLoops::computeCount(MachineLoop *Loop,
   startIsImm = checkForImmediate(*Start, immStart);
   endIsImm = checkForImmediate(*End, immEnd);
   if (endIsImm && !End->isImm()) {
-    if(immEnd == 0) {
-      unsigned VGPR = MRI->createVirtualRegister(IntRC);
+    if (immEnd == 0) {
+      llvm::Register VGPR = MRI->createVirtualRegister(IntRC);
       MachineInstrBuilder ZeroInit =
           BuildMI(*PH, InsertPos, DL, TII->get(TargetOpcode::COPY), VGPR);
       ZeroInit.addReg(RISCV::X0);
@@ -840,10 +831,10 @@ CountValue *PULPHardwareLoops::computeCount(MachineLoop *Loop,
     }
   }
 
-  bool CmpLess =     Cmp & Comparison::L;
-  bool CmpGreater =  Cmp & Comparison::G;
+  bool CmpLess = Cmp & Comparison::L;
+  bool CmpGreater = Cmp & Comparison::G;
   bool CmpHasEqual = Cmp & Comparison::EQ;
-  
+
   // Sanity check
   if (!Start->isReg() && !startIsImm) {
     return nullptr;
@@ -851,7 +842,7 @@ CountValue *PULPHardwareLoops::computeCount(MachineLoop *Loop,
   if (!End->isReg() && !endIsImm) {
     return nullptr;
   }
-  
+
   // Avoid certain wrap-arounds.  This doesn't detect all wrap-arounds.
   if (CmpLess && IVBump < 0) {
     // Loop going while iv is "less" with the iv value going down.  Must wrap.
@@ -869,7 +860,7 @@ CountValue *PULPHardwareLoops::computeCount(MachineLoop *Loop,
 
   if (startIsImm && endIsImm) {
 
-    if(!CmpHasEqual) {
+    if (!CmpHasEqual) {
       return nullptr;
     }
 
@@ -882,7 +873,7 @@ CountValue *PULPHardwareLoops::computeCount(MachineLoop *Loop,
     if (Cmp != Comparison::EQ) {
       return nullptr;
     }
-    
+
     bool Exact = (Dist % IVBump) == 0;
     if (!Exact) {
       return nullptr;
@@ -904,8 +895,10 @@ CountValue *PULPHardwareLoops::computeCount(MachineLoop *Loop,
   LoopFeederMap LoopFeederPhi;
 
   // PULP: when dealing with xPULP hwloops, the following doesn't apply.
-  // // Check if the initial value may be zero and can be decremented in the first
-  // // iteration. If the value is zero, the endloop instruction will not decrement
+  // // Check if the initial value may be zero and can be decremented in the
+  // first
+  // // iteration. If the value is zero, the endloop instruction will not
+  // decrement
   // // the loop counter, so we shouldn't generate a hardware loop in this case.
   // if (loopCountMayWrapOrUnderFlow(Start, End, Loop->getLoopPreheader(), Loop,
   //                                 LoopFeederPhi)) {
@@ -921,7 +914,6 @@ CountValue *PULPHardwareLoops::computeCount(MachineLoop *Loop,
   if (!isPowerOf2_64(std::abs(IVBump))) {
     return nullptr;
   }
-
 
   // If Start is an immediate and End is a register, the trip count
   // will be "reg - imm".  PULP's "subtract immediate" instruction
@@ -973,27 +965,26 @@ CountValue *PULPHardwareLoops::computeCount(MachineLoop *Loop,
     DistR = End->getReg();
     DistSR = End->getSubReg();
   } else {
-    const MCInstrDesc &SubD = RegToReg ? TII->get(RISCV::SUB) :
-                              (RegToImm ? TII->get(RISCV::SUB) /* TODO */ :
-                                          TII->get(RISCV::ADDI));
+    const MCInstrDesc &SubD = RegToReg
+                                  ? TII->get(RISCV::SUB)
+                                  : (RegToImm ? TII->get(RISCV::SUB) /* TODO */
+                                              : TII->get(RISCV::ADDI));
     if (RegToReg || RegToImm) {
-      unsigned SubR = MRI->createVirtualRegister(IntRC);
-      MachineInstrBuilder SubIB =
-        BuildMI(*PH, InsertPos, DL, SubD, SubR);
+      llvm::Register SubR = MRI->createVirtualRegister(IntRC);
+      MachineInstrBuilder SubIB = BuildMI(*PH, InsertPos, DL, SubD, SubR);
       if (RegToReg) {
         SubIB.addReg(End->getReg(), 0, End->getSubReg())
-          .addReg(Start->getReg(), 0, Start->getSubReg());
+            .addReg(Start->getReg(), 0, Start->getSubReg());
       } else {
         MachineBasicBlock::iterator ThisInsertPos = InsertPos;
         ThisInsertPos--;
 
-        unsigned ImmToRegReg = MRI->createVirtualRegister(IntRC);
-        MachineInstrBuilder ImmToReg = BuildMI(*PH, ThisInsertPos, DL,
-                                               TII->get(RISCV::ADDI),
-                                               ImmToRegReg);
+        llvm::Register ImmToRegReg = MRI->createVirtualRegister(IntRC);
+        MachineInstrBuilder ImmToReg =
+            BuildMI(*PH, ThisInsertPos, DL, TII->get(RISCV::ADDI), ImmToRegReg);
         ImmToReg.addReg(RISCV::X0).addImm(EndV);
         SubIB.addReg(ImmToReg->getOperand(0).getReg())
-          .addReg(Start->getReg(), 0, Start->getSubReg());
+            .addReg(Start->getReg(), 0, Start->getSubReg());
       }
       DistR = SubR;
     } else {
@@ -1006,11 +997,9 @@ CountValue *PULPHardwareLoops::computeCount(MachineLoop *Loop,
           EndValInstr->getOperand(2).getImm() == StartV) {
         DistR = EndValInstr->getOperand(1).getReg();
       } else {
-        unsigned SubR = MRI->createVirtualRegister(IntRC);
-        MachineInstrBuilder SubIB =
-          BuildMI(*PH, InsertPos, DL, SubD, SubR);
-        SubIB.addReg(End->getReg(), 0, End->getSubReg())
-             .addImm(-StartV);
+        llvm::Register SubR = MRI->createVirtualRegister(IntRC);
+        MachineInstrBuilder SubIB = BuildMI(*PH, InsertPos, DL, SubD, SubR);
+        SubIB.addReg(End->getReg(), 0, End->getSubReg()).addImm(-StartV);
         DistR = SubR;
       }
     }
@@ -1025,11 +1014,11 @@ CountValue *PULPHardwareLoops::computeCount(MachineLoop *Loop,
     AdjSR = DistSR;
   } else {
     // Generate CountR = ADD DistR, AdjVal
-    unsigned AddR = MRI->createVirtualRegister(IntRC);
+    llvm::Register AddR = MRI->createVirtualRegister(IntRC);
     MCInstrDesc const &AddD = TII->get(RISCV::ADDI);
     BuildMI(*PH, InsertPos, DL, AddD, AddR)
-      .addReg(DistR, 0, DistSR)
-      .addImm(AdjV);
+        .addReg(DistR, 0, DistSR)
+        .addImm(AdjV);
 
     AdjR = AddR;
     AdjSR = 0;
@@ -1046,11 +1035,11 @@ CountValue *PULPHardwareLoops::computeCount(MachineLoop *Loop,
     unsigned Shift = Log2_32(IVBump);
 
     // Generate NormR = LSR DistR, Shift.
-    unsigned LsrR = MRI->createVirtualRegister(IntRC);
+    llvm::Register LsrR = MRI->createVirtualRegister(IntRC);
     const MCInstrDesc &LsrD = TII->get(RISCV::SRLI);
     BuildMI(*PH, InsertPos, DL, LsrD, LsrR)
-      .addReg(AdjR, 0, AdjSR)
-      .addImm(Shift);
+        .addReg(AdjR, 0, AdjSR)
+        .addImm(Shift);
 
     CountR = LsrR;
     CountSR = 0;
@@ -1101,15 +1090,15 @@ bool PULPHardwareLoops::containsInvalidInstruction(MachineLoop *L) const {
 /// copied from DeadMachineInstructionElim::isDead, but with special cases
 /// for inline asm, physical registers and instructions with side effects
 /// removed.
-bool PULPHardwareLoops::isDead(const MachineInstr *MI,
-                              SmallVectorImpl<MachineInstr *> &DeadPhis) const {
+bool PULPHardwareLoops::isDead(
+    const MachineInstr *MI, SmallVectorImpl<MachineInstr *> &DeadPhis) const {
   // Examine each operand.
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
     const MachineOperand &MO = MI->getOperand(i);
     if (!MO.isReg() || !MO.isDef())
       continue;
 
-    unsigned Reg = MO.getReg();
+    llvm::Register Reg = MO.getReg();
     if (MRI->use_nodbg_empty(Reg))
       continue;
 
@@ -1129,10 +1118,10 @@ bool PULPHardwareLoops::isDead(const MachineInstr *MI,
       if (!OPO.isReg() || !OPO.isDef())
         continue;
 
-      unsigned OPReg = OPO.getReg();
+      llvm::Register OPReg = OPO.getReg();
       use_nodbg_iterator nextJ;
-      for (use_nodbg_iterator J = MRI->use_nodbg_begin(OPReg);
-           J != End; J = nextJ) {
+      for (use_nodbg_iterator J = MRI->use_nodbg_begin(OPReg); J != End;
+           J = nextJ) {
         nextJ = std::next(J);
         MachineOperand &Use = *J;
         MachineInstr *UseMI = Use.getParent();
@@ -1152,7 +1141,7 @@ bool PULPHardwareLoops::isDead(const MachineInstr *MI,
 void PULPHardwareLoops::removeIfDead(MachineInstr *MI) {
   // This procedure was essentially copied from DeadMachineInstructionElim.
 
-  SmallVector<MachineInstr*, 1> DeadPhis;
+  SmallVector<MachineInstr *, 1> DeadPhis;
   if (isDead(MI, DeadPhis)) {
     LLVM_DEBUG(dbgs() << "HW looping will remove: " << *MI);
 
@@ -1163,11 +1152,12 @@ void PULPHardwareLoops::removeIfDead(MachineInstr *MI) {
       const MachineOperand &MO = MI->getOperand(i);
       if (!MO.isReg() || !MO.isDef())
         continue;
-      unsigned Reg = MO.getReg();
+      llvm::Register Reg = MO.getReg();
       MachineRegisterInfo::use_iterator nextI;
       for (MachineRegisterInfo::use_iterator I = MRI->use_begin(Reg),
-           E = MRI->use_end(); I != E; I = nextI) {
-        nextI = std::next(I);  // I is invalidated by the setReg
+                                             E = MRI->use_end();
+           I != E; I = nextI) {
+        nextI = std::next(I); // I is invalidated by the setReg
         MachineOperand &Use = *I;
         MachineInstr *UseMI = I->getParent();
         if (UseMI == MI)
@@ -1192,9 +1182,8 @@ void PULPHardwareLoops::removeIfDead(MachineInstr *MI) {
 ///
 /// The code makes several assumptions about the representation of the loop
 /// in llvm.
-bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
-                                                 bool &RecL0used,
-                                                 bool &RecL1used) {
+bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L, bool &RecL0used,
+                                              bool &RecL1used) {
   // This is just for sanity.
   assert(L->getHeader() && "Loop without a header?");
 
@@ -1225,20 +1214,25 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
 
   // Does the loop contain any invalid instructions?
   if (containsInvalidInstruction(L)) {
-    LLVM_DEBUG(dbgs() << "Cannot convert to hwloop: illegal instructions in loop body\n");
+    LLVM_DEBUG(
+        dbgs()
+        << "Cannot convert to hwloop: illegal instructions in loop body\n");
     return Changed;
   }
 
   MachineBasicBlock *LastMBB = L->findLoopControlBlock();
   // Don't generate hw loop if the loop has more than one exit.
   if (!LastMBB) {
-    LLVM_DEBUG(dbgs() << "Cannot convert to hwloop: multiple loop exit blocks\n");
+    LLVM_DEBUG(
+        dbgs() << "Cannot convert to hwloop: multiple loop exit blocks\n");
     return Changed;
   }
 
   MachineBasicBlock::iterator LastI = LastMBB->getFirstTerminator();
   if (LastI == LastMBB->end()) {
-    LLVM_DEBUG(dbgs() << "Cannot convert to hwloop: loop exit block has no terminator\n");
+    LLVM_DEBUG(
+        dbgs()
+        << "Cannot convert to hwloop: loop exit block has no terminator\n");
     return Changed;
   }
 
@@ -1258,11 +1252,12 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
 
   MachineBasicBlock::iterator InsertPos = Preheader->getFirstTerminator();
 
-  SmallVector<MachineInstr*, 2> OldInsts;
+  SmallVector<MachineInstr *, 2> OldInsts;
   // Are we able to determine the trip count for the loop?
   CountValue *TripCount = getLoopTripCount(L, OldInsts);
   if (!TripCount) {
-    LLVM_DEBUG(dbgs() << "Cannot convert to hwloop: cannot determine trip count\n");
+    LLVM_DEBUG(
+        dbgs() << "Cannot convert to hwloop: cannot determine trip count\n");
     return Changed;
   }
 
@@ -1273,7 +1268,8 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
     MachineInstr *TCDef = MRI->getVRegDef(TripCount->getReg());
     MachineBasicBlock *BBDef = TCDef->getParent();
     if (!MDT->dominates(BBDef, Preheader)) {
-      LLVM_DEBUG(dbgs() << "Cannot convert to hwloop: induction register not available in preheader\n");
+      LLVM_DEBUG(dbgs() << "Cannot convert to hwloop: induction register not "
+                           "available in preheader\n");
       return Changed;
     }
   }
@@ -1283,7 +1279,7 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
   MachineBasicBlock *ExitingBlock = L->findLoopControlBlock();
   MachineBasicBlock *ExitBlock = L->getExitBlock();
   MachineBasicBlock *LoopStart = nullptr;
-  if (ExitingBlock !=  L->getLoopLatch()) {
+  if (ExitingBlock != L->getLoopLatch()) {
     MachineBasicBlock *TB = nullptr, *FB = nullptr;
     SmallVector<MachineOperand, 2> Cond;
     if (TII->analyzeBranch(*ExitingBlock, TB, FB, Cond, false)) {
@@ -1297,8 +1293,7 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
     else {
       return Changed;
     }
-  }
-  else {
+  } else {
     LoopStart = TopBlock;
   }
   assert(LoopStart != nullptr && "Didn't find loop start!");
@@ -1306,7 +1301,8 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
   // We need a single exit block to make sure that this loop can be simplified
   // to a fixed amount of loop iterations.
   if (!ExitBlock) {
-    LLVM_DEBUG(dbgs() << "Cannot convert to hwloop: multiple loop exit blocks\n");
+    LLVM_DEBUG(
+        dbgs() << "Cannot convert to hwloop: multiple loop exit blocks\n");
     return Changed;
   }
 
@@ -1318,11 +1314,13 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
   for (const MachineBasicBlock *LB : L->getBlocks()) {
     loopSize += instructionSize * LB->size();
     if (loopSize > 0xFFF) {
-      LLVM_DEBUG(dbgs() << "Cannot convert to hwloop: loop body doesn't fit into 12 bits\n");
+      LLVM_DEBUG(
+          dbgs()
+          << "Cannot convert to hwloop: loop body doesn't fit into 12 bits\n");
       return Changed;
     }
   }
-  
+
   // Convert the loop to a hardware loop.
   LLVM_DEBUG(dbgs() << "Change to hardware loop at "; L->dump());
   DebugLoc DL;
@@ -1331,12 +1329,13 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
 
   if (TripCount->isReg()) {
     // Create a copy of the loop count register.
-    unsigned CountReg = MRI->createVirtualRegister(&RISCV::GPRRegClass);
+    llvm::Register CountReg = MRI->createVirtualRegister(&RISCV::GPRRegClass);
     BuildMI(*Preheader, InsertPos, DL, TII->get(TargetOpcode::COPY), CountReg)
-      .addReg(TripCount->getReg(), 0, TripCount->getSubReg());
+        .addReg(TripCount->getReg(), 0, TripCount->getSubReg());
     // Add the Loop instruction to the beginning of the loop.
     auto hwloop = BuildMI(*Preheader, InsertPos, DL, TII->get(LOOP_r))
-      .addMBB(ExitingBlock).addReg(CountReg);
+                      .addMBB(ExitingBlock)
+                      .addReg(CountReg);
     KnownHardwareLoops.insert(hwloop.getInstr());
   } else {
     assert(TripCount->isImm() && "Expecting immediate value for trip count");
@@ -1346,15 +1345,18 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
     int64_t CountImm = TripCount->getImm();
     if (static_cast<uint64_t>(CountImm) >
         APInt::getMaxValue(12).getLimitedValue()) {
-      unsigned CountReg = MRI->createVirtualRegister(&RISCV::GPRRegClass);
+      llvm::Register CountReg = MRI->createVirtualRegister(&RISCV::GPRRegClass);
       BuildMI(*Preheader, InsertPos, DL, TII->get(RISCV::ADDI), CountReg)
-        .addReg(RISCV::X0).addImm(CountImm);
+          .addReg(RISCV::X0)
+          .addImm(CountImm);
       auto hwloop = BuildMI(*Preheader, InsertPos, DL, TII->get(LOOP_r))
-        .addMBB(ExitingBlock).addReg(CountReg);
+                        .addMBB(ExitingBlock)
+                        .addReg(CountReg);
       KnownHardwareLoops.insert(hwloop.getInstr());
     } else {
       auto hwloop = BuildMI(*Preheader, InsertPos, DL, TII->get(LOOP_i))
-        .addMBB(ExitingBlock).addImm(CountImm);
+                        .addMBB(ExitingBlock)
+                        .addImm(CountImm);
       KnownHardwareLoops.insert(hwloop.getInstr());
     }
   }
@@ -1395,9 +1397,8 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
 /// MachineInstruction only once. If we attempt to visit more than once, then
 /// there is recursion, and will return false.
 bool PULPHardwareLoops::isLoopFeeder(MachineLoop *L, MachineBasicBlock *A,
-                                        MachineInstr *MI,
-                                        const MachineOperand *MO,
-                                        LoopFeederMap &LoopFeederPhi) const {
+                                     MachineInstr *MI, const MachineOperand *MO,
+                                     LoopFeederMap &LoopFeederPhi) const {
   if (LoopFeederPhi.find(MO->getReg()) == LoopFeederPhi.end()) {
     LLVM_DEBUG(dbgs() << "\nhw_loop head, "
                       << printMBBReference(**L->block_begin()));
@@ -1409,9 +1410,9 @@ bool PULPHardwareLoops::isLoopFeeder(MachineLoop *L, MachineBasicBlock *A,
     MachineInstr *Def = MRI->getVRegDef(MO->getReg());
     LoopFeederPhi.insert(std::make_pair(MO->getReg(), Def));
     return true;
-  } else
-    // Already visited node.
-    return false;
+  }
+  // Already visited node.
+  return false;
 }
 
 /// Return true if a Phi may generate a value that can underflow.
@@ -1473,19 +1474,21 @@ bool PULPHardwareLoops::loopCountMayWrapOrUnderFlow(
 
   // If the initial value is a Phi or copy and the operands may not underflow,
   // then the definition cannot be underflow either.
-  if (Def->isPHI() && !phiMayWrapOrUnderflow(Def, EndVal, Def->getParent(),
-                                             L, LoopFeederPhi))
+  if (Def->isPHI() &&
+      !phiMayWrapOrUnderflow(Def, EndVal, Def->getParent(), L, LoopFeederPhi))
     return false;
-  if (Def->isCopy() && !loopCountMayWrapOrUnderFlow(&(Def->getOperand(1)),
-                                                    EndVal, Def->getParent(),
-                                                    L, LoopFeederPhi))
+  if (Def->isCopy() &&
+      !loopCountMayWrapOrUnderFlow(&(Def->getOperand(1)), EndVal,
+                                   Def->getParent(), L, LoopFeederPhi))
     return false;
 
   // Iterate over the uses of the initial value. If the initial value is used
   // in a compare, then we assume this is a range check that ensures the loop
   // doesn't underflow. This is not an exact test and should be improved.
-  for (MachineRegisterInfo::use_instr_nodbg_iterator I = MRI->use_instr_nodbg_begin(Reg),
-         E = MRI->use_instr_nodbg_end(); I != E; ++I) {
+  for (MachineRegisterInfo::use_instr_nodbg_iterator
+           I = MRI->use_instr_nodbg_begin(Reg),
+           E = MRI->use_instr_nodbg_end();
+       I != E; ++I) {
     MachineInstr *MI = &*I;
     Register CmpReg1 = 0, CmpReg2 = 0;
     int64_t CmpMask = 0, CmpValue = 0;
@@ -1502,8 +1505,8 @@ bool PULPHardwareLoops::loopCountMayWrapOrUnderFlow(
         getComparisonKind(MI->getOpcode(), nullptr, nullptr, 0);
     if (Cmp == 0)
       continue;
-    //if (TII->predOpcodeHasNot(Cond) ^ (TBB != MBB)) // TODO
-    //  Cmp = Comparison::getNegatedComparison(Cmp);
+    // if (TII->predOpcodeHasNot(Cond) ^ (TBB != MBB)) // TODO
+    //   Cmp = Comparison::getNegatedComparison(Cmp);
     if (CmpReg2 != 0 && CmpReg2 == Reg)
       Cmp = Comparison::getSwappedComparison(Cmp);
 
@@ -1528,7 +1531,7 @@ bool PULPHardwareLoops::loopCountMayWrapOrUnderFlow(
 }
 
 bool PULPHardwareLoops::checkForImmediate(const MachineOperand &MO,
-                                             int64_t &Val) const {
+                                          int64_t &Val) const {
 
   if (MO.isImm()) {
     Val = MO.getImm();
@@ -1555,41 +1558,37 @@ bool PULPHardwareLoops::checkForImmediate(const MachineOperand &MO,
   MachineInstr *DI = MRI->getVRegDef(R);
   unsigned DOpc = DI->getOpcode();
   switch (DOpc) {
-    case TargetOpcode::COPY:
-      // Call recursively to avoid an extra check whether operand(1) is
-      // indeed an immediate (it could be a global address, for example),
-      // plus we can handle COPY at the same time.
+  case TargetOpcode::COPY:
+    // Call recursively to avoid an extra check whether operand(1) is
+    // indeed an immediate (it could be a global address, for example),
+    // plus we can handle COPY at the same time.
+    if (!checkForImmediate(DI->getOperand(1), TV)) {
+      return false;
+    } else {
+      Val = TV;
+    }
+    break;
+  case RISCV::ADDI:
+    if (DI->getOperand(1).isReg() && DI->getOperand(1).getReg() == RISCV::X0) {
+      // Load an immediate into a register
+      if (!checkForImmediate(DI->getOperand(2), TV)) {
+        return false;
+      }
+      Val = TV;
+    } else if (DI->getOperand(2).isImm() && DI->getOperand(2).getImm() == 0) {
+      // Move a value from Op1 to Op0.
       if (!checkForImmediate(DI->getOperand(1), TV)) {
         return false;
-      } else {
-        Val = TV;
       }
-      break;
-    case RISCV::ADDI:
-      if (DI->getOperand(1).isReg() && 
-          DI->getOperand(1).getReg() == RISCV::X0) {
-        // Load an immediate into a register
-        if (!checkForImmediate(DI->getOperand(2), TV)) {
-          return false;
-        } else {
-          Val = TV;
-        }
-      } else if (DI->getOperand(2).isImm() && DI->getOperand(2).getImm() == 0) {
-        // Move a value from Op1 to Op0.
-        if (!checkForImmediate(DI->getOperand(1), TV)) {
-          return false;
-        } else {
-          Val = TV;
-        }
-      } else {
-        // This ADDI is not used to LOAD IMM or to MOVE a value.
-        return false;
-      }
-      break;
-    default:
+      Val = TV;
+    } else {
+      // This ADDI is not used to LOAD IMM or to MOVE a value.
       return false;
+    }
+    break;
+  default:
+    return false;
   }
 
   return true;
 }
-

@@ -323,6 +323,8 @@ bool PULPHardwareLoops::runOnMachineFunction(MachineFunction &MF) {
     return false;
   }
 
+  LLVM_DEBUG(dbgs() << "Analysing: \n"; MF.dump(); dbgs() << "\n");
+
   bool Changed = false;
   NumHWLoopsInternal = 0;
 
@@ -359,13 +361,21 @@ struct InductionUpdateOperands {
 
 auto getInductionUpdateParts(const MachineInstr *Update)
     -> std::optional<InductionUpdateOperands> {
-  if (!Update->getDesc().isAdd())
-    return std::nullopt;
+
+  // Note: Update->getDesc().isAdd() is not usable
+  // since it relies on machine instructions having the
+  // isAdd predicate correctly set. This is not the case
+  // for RISCV, so we need to enumerate instructions known
+  // to be additions.
 
   InductionUpdateOperands Result;
 
   switch (Update->getOpcode()) {
   default:
+    return std::nullopt;
+  case RISCV::ADD:
+  case RISCV::ADDI:
+  case RISCV::ADDW:
     // %Rnext:gpr = ADDI %R:gpr, 4
     //      ^               ^    ^
     // 0: IndUpdate   1: IndDef 2: Bump
@@ -375,6 +385,14 @@ auto getInductionUpdateParts(const MachineInstr *Update)
     break;
   case RISCV::P_LW_ri_PostIncrement:
   case RISCV::P_LW_rr_PostIncrement:
+  case RISCV::P_LBU_ri_PostIncrement:
+  case RISCV::P_LBU_rr_PostIncrement:
+  case RISCV::P_LB_ri_PostIncrement:
+  case RISCV::P_LB_rr_PostIncrement:
+  case RISCV::P_LHU_ri_PostIncrement:
+  case RISCV::P_LHU_rr_PostIncrement:
+  case RISCV::P_LH_ri_PostIncrement:
+  case RISCV::P_LH_rr_PostIncrement:
     // %value:gpr, %Rnext:gpr = P_LW_ri_PostIncrement %R:gpr(tied-def 1), 4
     //                ^                                   ^               ^
     //           1: IndUpdate                         2: IndDef        3: Bump
@@ -457,9 +475,12 @@ bool PULPHardwareLoops::findInductionRegister(MachineLoop *L, unsigned &Reg,
       Register PhiOpReg = Phi->getOperand(i).getReg();
       MachineInstr *DI = MRI->getVRegDef(PhiOpReg);
 
+      LLVM_DEBUG(dbgs() << "Induction PHI candidate: "; Phi->dump(); dbgs() << "\n");
+      LLVM_DEBUG(dbgs() << "Induction update candidate: "; DI->dump(); dbgs() << "\n");
       auto OperandIndices = getInductionUpdateParts(DI);
       if (!OperandIndices.has_value())
         continue;
+      LLVM_DEBUG(dbgs() << "Elected induction update: "; DI->dump(); dbgs() << "\n");
 
       const MachineOperand &IndUpdate =
           DI->getOperand(OperandIndices.value().IndUpdate);
@@ -752,7 +773,6 @@ CountValue *PULPHardwareLoops::getLoopTripCount(MachineLoop *L,
     return nullptr;
   }
   
-
   Cmp = getComparisonKindFromCC(CondOpc, InitialValue, EndValue, IVBump);
   if (!Cmp) {
     return nullptr;
@@ -1196,31 +1216,29 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
 
   // The instructions that are available to use at this level. If L0 is already
   // used we have to use L1.
-  unsigned LOOP_i;
-  unsigned LOOP_r;
+  unsigned LOOP_i = RISCV::LOOP0setupi;
+  unsigned LOOP_r = RISCV::LOOP0setup;
   if (L0Used) {
     LOOP_i = RISCV::LOOP1setupi;
     LOOP_r = RISCV::LOOP1setup;
-  } else {
-    LOOP_i = RISCV::LOOP0setupi;
-    LOOP_r = RISCV::LOOP0setup;
   }
 
   // Does the loop contain any invalid instructions?
   if (containsInvalidInstruction(L)) {
+    LLVM_DEBUG(dbgs() << "Cannot convert to hwloop: illegal instructions in loop body\n");
     return Changed;
   }
 
   MachineBasicBlock *LastMBB = L->findLoopControlBlock();
   // Don't generate hw loop if the loop has more than one exit.
   if (!LastMBB) {
-    LLVM_DEBUG(dbgs() << "\nCannot convert to hwloop: multiple loop exit blocks";);
+    LLVM_DEBUG(dbgs() << "Cannot convert to hwloop: multiple loop exit blocks\n");
     return Changed;
   }
 
   MachineBasicBlock::iterator LastI = LastMBB->getFirstTerminator();
   if (LastI == LastMBB->end()) {
-    LLVM_DEBUG(dbgs() << "\nCannot convert to hwloop: loop exit block has no terminator";);
+    LLVM_DEBUG(dbgs() << "Cannot convert to hwloop: loop exit block has no terminator\n");
     return Changed;
   }
 
@@ -1228,7 +1246,7 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
   // placed there.
   MachineBasicBlock *Preheader = MLI->findLoopPreheader(L, SpecPreheader);
   if (!Preheader) {
-    LLVM_DEBUG(dbgs() << "\nCannot convert to hwloop: loop has no preheader";);
+    LLVM_DEBUG(dbgs() << "Cannot convert to hwloop: loop has no preheader\n");
     // FIXME: The HEXAGON pass upon which this is based tried to create a new
     //        preheader for the loop here. Instead we just return false, as I am
     //        not sure how common this is on PULP. Perhaps it is better to
@@ -1244,7 +1262,7 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
   // Are we able to determine the trip count for the loop?
   CountValue *TripCount = getLoopTripCount(L, OldInsts);
   if (!TripCount) {
-    LLVM_DEBUG(dbgs() << "\nCannot convert to hwloop: cannot determine trip count\n";);
+    LLVM_DEBUG(dbgs() << "Cannot convert to hwloop: cannot determine trip count\n");
     return Changed;
   }
 
@@ -1255,7 +1273,7 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
     MachineInstr *TCDef = MRI->getVRegDef(TripCount->getReg());
     MachineBasicBlock *BBDef = TCDef->getParent();
     if (!MDT->dominates(BBDef, Preheader)) {
-      LLVM_DEBUG(dbgs() << "\nCannot convert to hwloop: induction register not available in preheader";);
+      LLVM_DEBUG(dbgs() << "Cannot convert to hwloop: induction register not available in preheader\n");
       return Changed;
     }
   }
@@ -1269,7 +1287,7 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
     MachineBasicBlock *TB = nullptr, *FB = nullptr;
     SmallVector<MachineOperand, 2> Cond;
     if (TII->analyzeBranch(*ExitingBlock, TB, FB, Cond, false)) {
-      LLVM_DEBUG(dbgs() << "\nCannot convert to hwloop: cannot analyze loop";);
+      LLVM_DEBUG(dbgs() << "Cannot convert to hwloop: cannot analyze loop\n");
       return Changed;
     }
     if (L->contains(TB))
@@ -1288,7 +1306,7 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
   // We need a single exit block to make sure that this loop can be simplified
   // to a fixed amount of loop iterations.
   if (!ExitBlock) {
-    LLVM_DEBUG(dbgs() << "\nCannot convert to hwloop: multiple loop exit blocks";);
+    LLVM_DEBUG(dbgs() << "Cannot convert to hwloop: multiple loop exit blocks\n");
     return Changed;
   }
 
@@ -1300,7 +1318,7 @@ bool PULPHardwareLoops::convertToHardwareLoop(MachineLoop *L,
   for (const MachineBasicBlock *LB : L->getBlocks()) {
     loopSize += instructionSize * LB->size();
     if (loopSize > 0xFFF) {
-      LLVM_DEBUG(dbgs() << "\nCannot convert to hwloop: loop body doesn't fit into 12 bits";);
+      LLVM_DEBUG(dbgs() << "Cannot convert to hwloop: loop body doesn't fit into 12 bits\n");
       return Changed;
     }
   }

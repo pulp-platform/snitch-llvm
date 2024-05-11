@@ -1,4 +1,4 @@
-; RUN: llc -march=riscv32 -mattr=+xpulpv < %s | FileCheck %s
+; RUN: llc --asm-verbose=0 -march=riscv32 -mattr=+xpulpv < %s | FileCheck %s
 
 ; TODO: add this form to the tests:
 ; for(int i = 0; i < v; ++i) {
@@ -6,12 +6,12 @@
 ; }
 
 ; 1x foor loop, induction variable = 0..n-1
-; CHECK-LABEL:	@for_1x
-;CHECK:			# %bb.1:
-;CHECK-NEXT:		lp.setup	x0, {{[ats][0-9]+}}, [[LABEL:\.LBB.+]]
-;CHECK:				p.lw	[[VALUE:[ats][0-9]+]], 4([[DATA:[ats][0-9]+]]!)
-;CHECK:			[[LABEL]]:
-;CHECK:				add	[[ACCUMULATOR:[ats][0-9]+]], [[ACCUMULATOR]], [[VALUE]]
+; CHECK-LABEL: for_1x
+; CHECK:         .p2align	2
+; CHECK-NEXT:		 lp.setup	x0, {{[ats][0-9]+}}, [[LABEL:\.LBB.+]]
+; CHECK:				 p.lw	[[VALUE:[ats][0-9]+]], 4([[DATA:[ats][0-9]+]]!)
+; CHECK-NEXT:  [[LABEL]]:
+; CHECK:         add	[[ACCUMULATOR:[ats][0-9]+]], [[ACCUMULATOR]], [[VALUE]]
 define dso_local i32 @for_1x(i32* nocapture noundef readonly %va, i32 noundef %na) local_unnamed_addr #0 {
 entry:
   %cmp6 = icmp sgt i32 %na, 0

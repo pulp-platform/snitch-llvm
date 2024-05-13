@@ -486,7 +486,14 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
   hero_dev_mbox_write(hd, num_miss_handler_threads);
 
   uint32_t ret[2];
-  while (hero_dev_mbox_read(hd, (unsigned int *)&ret[0], 1));
+  ret[0] = 0;
+  while(ret[0] != MBOX_DEVICE_DONE) {
+    while (hero_dev_mbox_read(hd, (unsigned int *)&ret[0], 1));
+    if(ret[0] == MBOX_DEVICE_PRINT) {
+      while (hero_dev_mbox_read(hd, (unsigned int *)&ret[0], 1));
+      printf("%c", ret[0]);
+    }
+  }
   assert(ret[0] == MBOX_DEVICE_DONE &&
          "Software mailbox protocol failure: Expected MBOX_DEVICE_DONE.");
   while (hero_dev_mbox_read(hd, (unsigned int *)&ret[1], 1));

@@ -8,13 +8,11 @@
 //===----------------------------------------------------------------------===//
 //
 // This pass identifies loops where we can generate the Snitch FPU hardware
-// floating point repetition instruction (frep).  The hardware loop can perform 
+// floating point repetition instruction (frep).  The hardware loop can perform
 // floating point instruction repetition with zero-cycle overhead
 //
 //  This file is based on the lib/Target/Hexagon/HexagonHardwareLoops.cpp file.
 //===----------------------------------------------------------------------===//
-
-
 
 #include "../RISCVInstrInfo.h"
 #include "../RISCVRegisterInfo.h"
@@ -22,6 +20,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineDominators.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -32,7 +31,6 @@
 #include "llvm/CodeGen/MachineOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
-#include "llvm/CodeGen/LivePhysRegs.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DebugLoc.h"
 #include "llvm/InitializePasses.h"
@@ -57,22 +55,24 @@ using namespace llvm;
 #define DEBUG_TYPE "snitch-freploops"
 #define SNITCH_FREP_LOOPS_NAME "Snitch frep loops"
 
-static cl::opt<bool> EnableFrepInference("snitch-frep-inference", cl::init(false),
-  cl::Hidden, cl::ZeroOrMore, cl::desc("Enable automatic inference of frep loops"));
+static cl::opt<bool>
+    EnableFrepInference("snitch-frep-inference", cl::init(false), cl::Hidden,
+                        cl::ZeroOrMore,
+                        cl::desc("Enable automatic inference of frep loops"));
 
 STATISTIC(NumFrepLoops, "Number of loops converted to frep loops");
 
 namespace {
-  class CountValue;
-  class FrepLoop;
+class CountValue;
+class FrepLoop;
 
 class SNITCHFrepLoops : public MachineFunctionPass {
-  MachineLoopInfo            *MLI;
-  MachineRegisterInfo        *MRI;
-  MachineDominatorTree       *MDT;
-  const RISCVInstrInfo       *TII;
-  const RISCVRegisterInfo    *TRI;
-  FrepLoop                   *FL;
+  MachineLoopInfo *MLI;
+  MachineRegisterInfo *MRI;
+  MachineDominatorTree *MDT;
+  const RISCVInstrInfo *TII;
+  const RISCVRegisterInfo *TRI;
+  FrepLoop *FL;
 
 public:
   static char ID;
@@ -95,25 +95,25 @@ private:
   /// Kinds of comparisons in the compare instructions.
   struct Comparison {
     enum Kind {
-      EQ  = 0x01,
-      NE  = 0x02,
-      L   = 0x04,
-      G   = 0x08,
-      U   = 0x40,
+      EQ = 0x01,
+      NE = 0x02,
+      L = 0x04,
+      G = 0x08,
+      U = 0x40,
       LTs = L,
       LEs = L | EQ,
       GTs = G,
       GEs = G | EQ,
-      LTu = L      | U,
+      LTu = L | U,
       LEu = L | EQ | U,
-      GTu = G      | U,
+      GTu = G | U,
       GEu = G | EQ | U
     };
 
     static Kind getSwappedComparison(Kind Cmp) {
-      assert ((!((Cmp & L) && (Cmp & G))) && "Malformed comparison operator");
+      assert((!((Cmp & L) && (Cmp & G))) && "Malformed comparison operator");
       if ((Cmp & L) || (Cmp & G))
-        return (Kind)(Cmp ^ (L|G));
+        return (Kind)(Cmp ^ (L | G));
       return Cmp;
     }
 
@@ -125,13 +125,9 @@ private:
       return (Kind)0;
     }
 
-    static bool isSigned(Kind Cmp) {
-      return (Cmp & (L | G) && !(Cmp & U));
-    }
+    static bool isSigned(Kind Cmp) { return (Cmp & (L | G) && !(Cmp & U)); }
 
-    static bool isUnsigned(Kind Cmp) {
-      return (Cmp & U);
-    }
+    static bool isUnsigned(Kind Cmp) { return (Cmp & U); }
   };
 
   /// speculatively search for preheader
@@ -146,16 +142,17 @@ private:
 
   /// Return number of freppable instructions of loop is freppable, zero
   /// if not
-  unsigned containsInvalidInstruction(MachineLoop *L, Register *IV, Register *ICV,
-    SmallVectorImpl<MachineInstr *> &FPPhis) const;
+  unsigned
+  containsInvalidInstruction(MachineLoop *L, Register *IV, Register *ICV,
+                             SmallVectorImpl<MachineInstr *> &FPPhis) const;
 
   /// Return true if the instruction is not valid within a hardware
   /// loop.
   bool isInvalidLoopOperation(const MachineInstr *MI) const;
 
-  /// Scan the loop body and search for a branch instruction that 
+  /// Scan the loop body and search for a branch instruction that
   /// leads to the induction variable and trip count
-  const MachineInstr * findBranchInstruction(MachineLoop *L);
+  const MachineInstr *findBranchInstruction(MachineLoop *L);
 
   /// Analyze the statements in a loop to determine if the loop
   /// has a computable trip count and, if so, return a value that represents
@@ -186,13 +183,13 @@ private:
                                      MachineOperand *InitialValue,
                                      const MachineOperand *Endvalue,
                                      int64_t IVBump) const;
-  
-   // Return the internal (used internally by this pass) comparison kind for
-   // the specified RISCV condition code.
-   Comparison::Kind getComparisonKindFromCC(unsigned CC,
-                                       MachineOperand *InitialValue,
-                                       const MachineOperand *EndValue,
-                                       int64_t IVBump) const;
+
+  // Return the internal (used internally by this pass) comparison kind for
+  // the specified RISCV condition code.
+  Comparison::Kind getComparisonKindFromCC(unsigned CC,
+                                           MachineOperand *InitialValue,
+                                           const MachineOperand *EndValue,
+                                           int64_t IVBump) const;
 
   /// Return the expression that represents the number of times
   /// a loop iterates.  The function takes the operands that represent the
@@ -218,7 +215,8 @@ private:
   /// check for any metadata that suggests that this loop should be frepped
   bool isMarkedForInference(MachineLoop *L);
 
-  void fixupPHIs(SmallVectorImpl<MachineInstr *> &FPPhis, MachineBasicBlock *FrepBlock);
+  void fixupPHIs(SmallVectorImpl<MachineInstr *> &FPPhis,
+                 MachineBasicBlock *FrepBlock);
 };
 
 /// Abstraction for a trip count of a loop. A smaller version
@@ -226,10 +224,7 @@ private:
 /// operand representation.
 class CountValue {
 public:
-  enum CountValueType {
-    CV_Register,
-    CV_Immediate
-  };
+  enum CountValueType { CV_Register, CV_Immediate };
 
 private:
   CountValueType Kind;
@@ -271,8 +266,13 @@ public:
   }
 
   void print(raw_ostream &OS, const TargetRegisterInfo *TRI = nullptr) const {
-    if (isReg()) { OS << "register: " << printReg(Contents.R.Reg, TRI, Contents.R.Sub) << '\n'; }
-    if (isImm()) { OS << "immediate: " << Contents.ImmVal << '\n'; }
+    if (isReg()) {
+      OS << "register: " << printReg(Contents.R.Reg, TRI, Contents.R.Sub)
+         << '\n';
+    }
+    if (isImm()) {
+      OS << "immediate: " << Contents.ImmVal << '\n';
+    }
   }
 };
 
@@ -292,13 +292,10 @@ public:
   MachineInstr *condTerm = nullptr;
   MachineInstr *uncondTerm = nullptr;
 
-  explicit FrepLoop(MachineLoop *ML) {
-    L = ML;
-  }
+  explicit FrepLoop(MachineLoop *ML) { L = ML; }
 };
 
 char SNITCHFrepLoops::ID = 0;
-
 
 bool SNITCHFrepLoops::runOnMachineFunction(MachineFunction &MF) {
   LLVM_DEBUG(dbgs() << "********* Snitch FREP Loops *********\n");
@@ -335,7 +332,7 @@ bool SNITCHFrepLoops::runOnMachineFunction(MachineFunction &MF) {
     MachineBasicBlock::iterator MBBI = MBB.begin(), E = MBB.end();
     while (MBBI != E) {
       MachineBasicBlock::iterator NMBBI = std::next(MBBI);
-      if(MBBI->getOpcode() == RISCV::PseudoFrepInfer)
+      if (MBBI->getOpcode() == RISCV::PseudoFrepInfer)
         MBBI->removeFromParent();
       MBBI = NMBBI;
     }
@@ -355,7 +352,7 @@ bool SNITCHFrepLoops::runOnMachineFunction(MachineFunction &MF) {
 bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
   // This is just for sanity.
   assert(L->getHeader() && "Loop without a header?");
-  
+
   bool changed = false;
 
   /// Convert all inner loops first
@@ -365,32 +362,34 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
   }
 
   // skip if not innermost loop (should be a redundant check)
-  if(!L->isInnermost()) return false;
-  
-  LLVM_DEBUG(dbgs()<<"-------------------\n");
-  LLVM_DEBUG(dbgs()<<"Running on\n");
+  if (!L->isInnermost())
+    return false;
+
+  LLVM_DEBUG(dbgs() << "-------------------\n");
+  LLVM_DEBUG(dbgs() << "Running on\n");
   LLVM_DEBUG(L->dump(););
-  LLVM_DEBUG(dbgs()<<"-------------------\n");
+  LLVM_DEBUG(dbgs() << "-------------------\n");
 
   // Check if marked for inference or global inference is enabled
-  if(!EnableFrepInference && !isMarkedForInference(L))
+  if (!EnableFrepInference && !isMarkedForInference(L))
     return changed;
 
-  SmallVector<MachineInstr*, 2> OldInsts, NewInsts;
+  SmallVector<MachineInstr *, 2> OldInsts, NewInsts;
   Register *IndReg, *IncReg;
 
   LLVM_DEBUG(dbgs() << ">>>>> in getLoopTripCount()\n");
   CountValue *TripCount = getLoopTripCount(L, OldInsts, IndReg, IncReg);
 
-  if(TripCount == nullptr) {
+  if (TripCount == nullptr) {
     LLVM_DEBUG(dbgs() << "trip count not found\n");
     return changed;
   }
-  LLVM_DEBUG(dbgs() << "getLoopTripCount found count "; TripCount->print(dbgs(), TRI));
+  LLVM_DEBUG(dbgs() << "getLoopTripCount found count ";
+             TripCount->print(dbgs(), TRI));
 
   // Does the loop contain any invalid instructions?
   LLVM_DEBUG(dbgs() << ">>>>> in containsInvalidInstruction()\n");
-  SmallVector<MachineInstr*, 2> FPPhis;
+  SmallVector<MachineInstr *, 2> FPPhis;
   unsigned nFlops = containsInvalidInstruction(L, IndReg, IncReg, FPPhis);
   if (nFlops == 0) {
     return changed;
@@ -402,7 +401,7 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
   if (!ControlBlock) {
     return changed;
   }
-  LLVM_DEBUG(dbgs()<<"ControlBlock: " << ControlBlock->getName() << "\n");
+  LLVM_DEBUG(dbgs() << "ControlBlock: " << ControlBlock->getName() << "\n");
 
   // malformed loop, we expect more than one terminators, one to the
   // loop latch, one out of the loop
@@ -435,38 +434,36 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
 
   // Determine the loop start.
   LLVM_DEBUG(dbgs() << ">>>>> find loop start\n");
-  MachineBasicBlock * TopBlock = L->getTopBlock();
-  MachineBasicBlock * ExitBlock = L->getExitBlock();
-  MachineBasicBlock * LoopStart = nullptr;
-  MachineBasicBlock * LoopSucc = nullptr;
-  MachineBasicBlock * LatchBlock = L->getLoopLatch();
-  MachineBasicBlock * Header = L->getHeader();
-  MachineBasicBlock * TB = nullptr, * FB = nullptr;
+  MachineBasicBlock *TopBlock = L->getTopBlock();
+  MachineBasicBlock *ExitBlock = L->getExitBlock();
+  MachineBasicBlock *LoopStart = nullptr;
+  MachineBasicBlock *LoopSucc = nullptr;
+  MachineBasicBlock *LatchBlock = L->getLoopLatch();
+  MachineBasicBlock *Header = L->getHeader();
+  MachineBasicBlock *TB = nullptr, *FB = nullptr;
   SmallVector<MachineOperand, 2> Cond;
-  LLVM_DEBUG(dbgs()<<"TopBlock: " << TopBlock->getName() << "\n");
+  LLVM_DEBUG(dbgs() << "TopBlock: " << TopBlock->getName() << "\n");
   bool branchNotFound = TII->analyzeBranch(*ControlBlock, TB, FB, Cond, false);
-  if (ControlBlock !=  LatchBlock) {
+  if (ControlBlock != LatchBlock) {
     if (branchNotFound) {
       return changed;
     }
     if (L->contains(TB)) {
       LoopStart = TB;
       LoopSucc = FB;
-    }
-    else if (L->contains(FB)) {
+    } else if (L->contains(FB)) {
       LoopStart = FB;
       LoopSucc = TB;
-    }
-    else {
+    } else {
       return changed;
     }
-  }
-  else {
+  } else {
     LoopStart = TopBlock;
     LoopSucc = L->contains(TB) ? FB : TB;
   }
   assert(LoopStart != nullptr && "Didn't find loop start!");
-  LLVM_DEBUG(dbgs()<<"LoopStart: " << LoopStart->getName()<<" LoopSucc: " << LoopSucc->getName() << "\n");
+  LLVM_DEBUG(dbgs() << "LoopStart: " << LoopStart->getName()
+                    << " LoopSucc: " << LoopSucc->getName() << "\n");
 
   // We need a single exit block to make sure that this loop can be simplified
   // to a fixed amount of loop iterations.
@@ -484,12 +481,13 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
   for (const MachineBasicBlock *LB : L->getBlocks()) {
     loopSize += instructionSize * LB->size();
     if (loopSize > 0xFFF) {
-      dbgs() << "loopsize exceeds limit: "<<loopSize<<"\n";
+      dbgs() << "loopsize exceeds limit: " << loopSize << "\n";
       return changed;
     }
   }
-  LLVM_DEBUG(dbgs() << "loopsize: "<<loopSize/instructionSize<<" instructions "<<nFlops<<" flops\n");
-  
+  LLVM_DEBUG(dbgs() << "loopsize: " << loopSize / instructionSize
+                    << " instructions " << nFlops << " flops\n");
+
   // Convert the loop to a hardware loop.
   LLVM_DEBUG(dbgs() << ">>>>> insert frep\n");
   MachineBasicBlock::iterator InsertPos = TopBlock->getFirstNonPHI();
@@ -502,25 +500,35 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
     // Create a copy of the loop count register.
     unsigned CountReg = MRI->createVirtualRegister(&RISCV::GPRRegClass);
     BuildMI(*TopBlock, InsertPos, DL, TII->get(TargetOpcode::COPY), CountReg)
-      .addReg(TripCount->getReg(), 0, TripCount->getSubReg());
+        .addReg(TripCount->getReg(), 0, TripCount->getSubReg());
     // wat tripcount-1 in the register
     BuildMI(*TopBlock, InsertPos, DL, TII->get(RISCV::ADDI))
-      .addReg(CountReg).addReg(CountReg).addImm(-1);
+        .addReg(CountReg)
+        .addReg(CountReg)
+        .addImm(-1);
     // Add the Loop instruction to the beginning of the loop.
     auto hwloop = BuildMI(*TopBlock, InsertPos, DL, TII->get(RISCV::FREP_O))
-      .addReg(CountReg).addImm(nFlops).addImm(0).addImm(0);
+                      .addReg(CountReg)
+                      .addImm(nFlops)
+                      .addImm(0)
+                      .addImm(0);
     KnownHardwareLoops.insert(hwloop.getInstr());
   } else {
-    assert(TripCount->isImm() && "Expecting immediate value for trip count if not register");
+    assert(TripCount->isImm() &&
+           "Expecting immediate value for trip count if not register");
     // Add the Loop immediate instruction to the beginning of the loop,
     // write the immediate to a register
     int64_t CountImm = TripCount->getImm();
     unsigned CountReg = MRI->createVirtualRegister(&RISCV::GPRRegClass);
     BuildMI(*TopBlock, InsertPos, DL, TII->get(RISCV::ADDI), CountReg)
-      .addReg(RISCV::X0).addImm(CountImm-1);
+        .addReg(RISCV::X0)
+        .addImm(CountImm - 1);
     auto hwloop = BuildMI(*TopBlock, InsertPos, DL, TII->get(RISCV::FREP_O))
-      .addReg(CountReg).addImm(nFlops).addImm(0).addImm(0);
-    KnownHardwareLoops.insert(hwloop.getInstr()); 
+                      .addReg(CountReg)
+                      .addImm(nFlops)
+                      .addImm(0)
+                      .addImm(0);
+    KnownHardwareLoops.insert(hwloop.getInstr());
   }
   delete TripCount;
 
@@ -543,26 +551,32 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
   // unneeded. If these are unneeded, then remove them.
   LLVM_DEBUG(dbgs() << ">>>>> cleanup\n");
 
-  // if the conditional branch target is true and header, replace it with a 
+  // if the conditional branch target is true and header, replace it with a
   // unconditional branch to the exit block
-  if(FL->isCondExit && LatchBlock==ControlBlock) {
-    assert(FL->condTerm != nullptr && "Expected a reference to the conditional term");
-    assert(LoopSucc != nullptr && "Expected a loop successor for unconditional branch");
-    LLVM_DEBUG(dbgs()<<"Change conditional exit branch to uncondition with target " << LoopSucc->getName() << "\n");
-    LLVM_DEBUG(dbgs()<<"  insert at"; FL->condTerm->dump());
-    NewInsts.push_back(BuildMI(*FL->condTerm->getParent(), FL->condTerm, FL->condTerm->getDebugLoc(),
-      TII->get(RISCV::PseudoBR)).addMBB(LoopSucc).getInstr());
+  if (FL->isCondExit && LatchBlock == ControlBlock) {
+    assert(FL->condTerm != nullptr &&
+           "Expected a reference to the conditional term");
+    assert(LoopSucc != nullptr &&
+           "Expected a loop successor for unconditional branch");
+    LLVM_DEBUG(
+        dbgs() << "Change conditional exit branch to uncondition with target "
+               << LoopSucc->getName() << "\n");
+    LLVM_DEBUG(dbgs() << "  insert at"; FL->condTerm->dump());
+    NewInsts.push_back(BuildMI(*FL->condTerm->getParent(), FL->condTerm,
+                               FL->condTerm->getDebugLoc(),
+                               TII->get(RISCV::PseudoBR))
+                           .addMBB(LoopSucc)
+                           .getInstr());
     FL->condTerm->removeFromParent();
-  }
-  else {
+  } else {
     OldInsts.push_back(FL->condTerm);
   }
 
   // original cleanup routine TWICE, becsue first migh remove some uses
-  for(unsigned j = 0; j < 2; ++j)
+  for (unsigned j = 0; j < 2; ++j)
     for (unsigned i = 0; i < OldInsts.size(); ++i) {
-      if(OldInsts[i] && OldInsts[i]->getParent()) {
-        LLVM_DEBUG(dbgs()<<"Check if can be removed:"; OldInsts[i]->dump());
+      if (OldInsts[i] && OldInsts[i]->getParent()) {
+        LLVM_DEBUG(dbgs() << "Check if can be removed:"; OldInsts[i]->dump());
         removeIfDead(OldInsts[i]);
       }
     }
@@ -571,44 +585,49 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
   for (MachineBasicBlock *MBB : L->getBlocks()) {
     MachineBasicBlock::iterator term = MBB->getFirstTerminator();
 
-    if(term == MBB->end())
+    if (term == MBB->end())
       continue;
 
     MachineBasicBlock::iterator nextTerm;
-    for(;term != MBB->end(); term = nextTerm) {
+    for (; term != MBB->end(); term = nextTerm) {
       nextTerm = std::next(term);
 
       // ignore if this instruction was added by this pass
       unsigned skip = 0;
-      for(unsigned p = 0; p < NewInsts.size(); ++p) {
-        if(NewInsts[p] == term) {
+      for (unsigned p = 0; p < NewInsts.size(); ++p) {
+        if (NewInsts[p] == term) {
           skip = 1;
-          LLVM_DEBUG(dbgs()<<"skip removal of terminator"; term->dump());
+          LLVM_DEBUG(dbgs() << "skip removal of terminator"; term->dump());
         }
-      } 
-      if(skip) continue;
+      }
+      if (skip)
+        continue;
 
       // unconditional branch from latch to header
-      if(term->isUnconditionalBranch() && 
-        term->getOperand(0).getMBB() == Header) {
-        LLVM_DEBUG(dbgs()<<"removing unconditional backedge to header "; term->dump());
+      if (term->isUnconditionalBranch() &&
+          term->getOperand(0).getMBB() == Header) {
+        LLVM_DEBUG(dbgs() << "removing unconditional backedge to header ";
+                   term->dump());
         // replace successors: remove header and add exit
-        if(!term->getParent()->isSuccessor(LoopSucc)) term->getParent()->addSuccessor(LoopSucc);
+        if (!term->getParent()->isSuccessor(LoopSucc))
+          term->getParent()->addSuccessor(LoopSucc);
         term->getParent()->removeSuccessor(Header);
         term->removeFromParent();
       }
       // unconditional branch from header to latch
-      else if(term->isUnconditionalBranch() && 
-        term->getOperand(0).getMBB() == LatchBlock) {
-        LLVM_DEBUG(dbgs()<<"removing unconditional backedge to latch "; term->dump());
+      else if (term->isUnconditionalBranch() &&
+               term->getOperand(0).getMBB() == LatchBlock) {
+        LLVM_DEBUG(dbgs() << "removing unconditional backedge to latch ";
+                   term->dump());
         // replace successors: remove header and add exit
         term->getParent()->removeSuccessor(LoopSucc);
         term->removeFromParent();
       }
       // unconditional branch from control to successor
-      else if(term->isUnconditionalBranch() && 
-        term->getOperand(0).getMBB() == LoopSucc) {
-        LLVM_DEBUG(dbgs()<<"removing unconditional branch to loop successor "; term->dump());
+      else if (term->isUnconditionalBranch() &&
+               term->getOperand(0).getMBB() == LoopSucc) {
+        LLVM_DEBUG(dbgs() << "removing unconditional branch to loop successor ";
+                   term->dump());
         // replace successors: remove header and add exit
         // term->getParent()->removeSuccessor(LoopSucc);
         term->removeFromParent();
@@ -616,72 +635,76 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
     }
   }
 
-  // Dead code from old PHI-merging approach where phi's are removed when no longer needed
-  // This caused problems with multiple frep loops in a single function
-  // Removing it fixed the problem. The phis get correctly eliminated in later stages
+  // Dead code from old PHI-merging approach where phi's are removed when no
+  // longer needed This caused problems with multiple frep loops in a single
+  // function Removing it fixed the problem. The phis get correctly eliminated
+  // in later stages
 
   // map which register to what new register
-//   LLVM_DEBUG(dbgs() << ">>>>> eliminate PHI\n");
-//   const MachineOperand * opRes, * opIn, * opOut;
-//   using MergeMap = std::map<Register, Register>;
-//   MergeMap mm;
-//   SmallVector<MachineInstr*, 2> OldPhis;
-//   for (MachineInstr &MI : *Header) {
-//     if(MI.isPHI()) {
-//       if(MI.getOperand(2).getMBB() == Preheader && MI.getOperand(4).getMBB() == LatchBlock) {
-//         opRes = &MI.getOperand(0);
-//         opIn = &MI.getOperand(1);
-//         opOut = &MI.getOperand(3);
-//       }
-//       else if(MI.getOperand(4).getMBB() == Preheader && MI.getOperand(2).getMBB() == LatchBlock) {
-//         opRes = &MI.getOperand(0);
-//         opIn = &MI.getOperand(3);
-//         opOut = &MI.getOperand(1);
-//       }
-//       else 
-//         continue;
-//       // insert the registers into the merge mapping
-//       mm.insert(std::make_pair(opRes->getReg(), opIn->getReg()));
-//       mm.insert(std::make_pair(opOut->getReg(), opIn->getReg()));
-//       // find definition of register comming from loop body
-//       MachineInstr *defMI = MRI->getVRegDef(opOut->getReg());
-//       // convert def to use
-//       // if(MI.getDesc().OpInfo[0].isOptionalDef())
-//         defMI->getOperand(0).setIsDef(false);
-//       // and substitute the register with the one comming from the header
-//       defMI->substituteRegister(opOut->getReg(), opIn->getReg(), 0, *TRI);
-//       // mark the phi to remove
-//       OldPhis.push_back(&MI);
-//     }
-//   }
+  //   LLVM_DEBUG(dbgs() << ">>>>> eliminate PHI\n");
+  //   const MachineOperand * opRes, * opIn, * opOut;
+  //   using MergeMap = std::map<Register, Register>;
+  //   MergeMap mm;
+  //   SmallVector<MachineInstr*, 2> OldPhis;
+  //   for (MachineInstr &MI : *Header) {
+  //     if(MI.isPHI()) {
+  //       if(MI.getOperand(2).getMBB() == Preheader &&
+  //       MI.getOperand(4).getMBB() == LatchBlock) {
+  //         opRes = &MI.getOperand(0);
+  //         opIn = &MI.getOperand(1);
+  //         opOut = &MI.getOperand(3);
+  //       }
+  //       else if(MI.getOperand(4).getMBB() == Preheader &&
+  //       MI.getOperand(2).getMBB() == LatchBlock) {
+  //         opRes = &MI.getOperand(0);
+  //         opIn = &MI.getOperand(3);
+  //         opOut = &MI.getOperand(1);
+  //       }
+  //       else
+  //         continue;
+  //       // insert the registers into the merge mapping
+  //       mm.insert(std::make_pair(opRes->getReg(), opIn->getReg()));
+  //       mm.insert(std::make_pair(opOut->getReg(), opIn->getReg()));
+  //       // find definition of register comming from loop body
+  //       MachineInstr *defMI = MRI->getVRegDef(opOut->getReg());
+  //       // convert def to use
+  //       // if(MI.getDesc().OpInfo[0].isOptionalDef())
+  //         defMI->getOperand(0).setIsDef(false);
+  //       // and substitute the register with the one comming from the header
+  //       defMI->substituteRegister(opOut->getReg(), opIn->getReg(), 0, *TRI);
+  //       // mark the phi to remove
+  //       OldPhis.push_back(&MI);
+  //     }
+  //   }
 
-// #ifndef NDEBUG
-//   LLVM_DEBUG(dbgs()<<"  merge map:\n");
-//   for(auto key : mm) {
-//     LLVM_DEBUG(dbgs()<<"    %"<<key.first.virtRegIndex()<<" |-> %"<<key.second.virtRegIndex()<<"\n");
-//   }
-// #endif
+  // #ifndef NDEBUG
+  //   LLVM_DEBUG(dbgs()<<"  merge map:\n");
+  //   for(auto key : mm) {
+  //     LLVM_DEBUG(dbgs()<<"    %"<<key.first.virtRegIndex()<<" |->
+  //     %"<<key.second.virtRegIndex()<<"\n");
+  //   }
+  // #endif
 
-//   using use_nodbg_iterator = MachineRegisterInfo::use_nodbg_iterator;
-//   use_nodbg_iterator nextJ;
-//   use_nodbg_iterator End = MRI->use_nodbg_end();
-//   // iterate over all uses of the defined reg
-//   for(auto key : mm) {
-//     for (use_nodbg_iterator J = MRI->use_nodbg_begin(key.first);
-//          J != End; J = nextJ) {
-//       nextJ = std::next(J);
-//       // don't touch phi
-//       if(J->getParent()->isPHI()) continue;
-//       // substitute the use with the register in the map
-//       J->substVirtReg(key.second, 0, *TRI);
-//     }
-//   }
-  
-//   // remove all PHIs that we just merged
-//   for(auto phi : OldPhis) {
-//     LLVM_DEBUG(dbgs()<<"removing\n"; phi->dump());
-//     phi->removeFromParent();
-//   }
+  //   using use_nodbg_iterator = MachineRegisterInfo::use_nodbg_iterator;
+  //   use_nodbg_iterator nextJ;
+  //   use_nodbg_iterator End = MRI->use_nodbg_end();
+  //   // iterate over all uses of the defined reg
+  //   for(auto key : mm) {
+  //     for (use_nodbg_iterator J = MRI->use_nodbg_begin(key.first);
+  //          J != End; J = nextJ) {
+  //       nextJ = std::next(J);
+  //       // don't touch phi
+  //       if(J->getParent()->isPHI()) continue;
+  //       // substitute the use with the register in the map
+  //       J->substVirtReg(key.second, 0, *TRI);
+  //     }
+  //   }
+
+  //   // remove all PHIs that we just merged
+  //   for(auto phi : OldPhis) {
+  //     LLVM_DEBUG(dbgs()<<"removing\n"; phi->dump());
+  //     phi->removeFromParent();
+  //   }
 
   // insert FPU barrier to synchronize float and integer pipelines after loop
   insertFPUBarrier(L, ExitBlock);
@@ -706,7 +729,8 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
 
 /// Return true if the loop contains an instruction that inhibits
 /// the use of the hardware loop instruction.
-unsigned SNITCHFrepLoops::containsInvalidInstruction(MachineLoop *L, Register *IV, Register *ICV,
+unsigned SNITCHFrepLoops::containsInvalidInstruction(
+    MachineLoop *L, Register *IV, Register *ICV,
     SmallVectorImpl<MachineInstr *> &FPPhis) const {
   MachineBasicBlock *Header = L->getHeader();
   MachineBasicBlock *Latch = L->getLoopLatch();
@@ -714,72 +738,78 @@ unsigned SNITCHFrepLoops::containsInvalidInstruction(MachineLoop *L, Register *I
   bool skip = false;
   unsigned Flops = 0;
   // TODO: do not check header block, it will be removed later anyway
-  
-  for (MachineBasicBlock *MBB : L->getBlocks()) {
-    for (MachineBasicBlock::iterator
-           MII = MBB->begin(), E = MBB->end(); MII != E; ++MII) {
-      MachineInstr *MI = &*MII;
-      LLVM_DEBUG(dbgs()<<"Checking"; MI->dump());
 
-      if(MI->getOpcode() ==  TargetOpcode::PHI) {
+  for (MachineBasicBlock *MBB : L->getBlocks()) {
+    for (MachineBasicBlock::iterator MII = MBB->begin(), E = MBB->end();
+         MII != E; ++MII) {
+      MachineInstr *MI = &*MII;
+      LLVM_DEBUG(dbgs() << "Checking"; MI->dump());
+
+      if (MI->getOpcode() == TargetOpcode::PHI) {
         LLVM_DEBUG(dbgs() << "  ignoring PHI node\n");
         // Add to list of FP PHIs that need fixing-up
-        if(MRI->getRegClass(MI->getOperand(0).getReg()) == &RISCV::FPR64RegClass || 
-           MRI->getRegClass(MI->getOperand(0).getReg()) == &RISCV::FPR32RegClass) {
+        if (MRI->getRegClass(MI->getOperand(0).getReg()) ==
+                &RISCV::FPR64RegClass ||
+            MRI->getRegClass(MI->getOperand(0).getReg()) ==
+                &RISCV::FPR32RegClass) {
           FPPhis.push_back(MI);
         }
         continue;
       }
 
-      if(MI->getOpcode() ==  TargetOpcode::COPY) {
+      if (MI->getOpcode() == TargetOpcode::COPY) {
         LLVM_DEBUG(dbgs() << "  ignoring COPY\n");
         continue;
       }
 
-      if(MI->isUnconditionalBranch()) {
-        if(MI->getOperand(0).getMBB() == Latch) {
+      if (MI->isUnconditionalBranch()) {
+        if (MI->getOperand(0).getMBB() == Latch) {
           LLVM_DEBUG(dbgs() << "  ignoring unconditional branch to latch\n");
           continue;
         }
-        if(MI->getOperand(0).getMBB() == Header) {
+        if (MI->getOperand(0).getMBB() == Header) {
           LLVM_DEBUG(dbgs() << "  ignoring unconditional branch to header\n");
           continue;
         }
-        if(MI->getOperand(0).getMBB() == ExitingBlock) {
+        if (MI->getOperand(0).getMBB() == ExitingBlock) {
           LLVM_DEBUG(dbgs() << "  ignoring unconditional branch to Exit\n");
           continue;
         }
-        if(MI->getOperand(0).getMBB() == L->getExitBlock()) {
-          LLVM_DEBUG(dbgs() << "  ignoring unconditional branch to Exit Block\n");
+        if (MI->getOperand(0).getMBB() == L->getExitBlock()) {
+          LLVM_DEBUG(dbgs()
+                     << "  ignoring unconditional branch to Exit Block\n");
           continue;
         }
       }
 
-      if(MI->isDebugValue()) {
+      if (MI->isDebugValue()) {
         LLVM_DEBUG(dbgs() << "  ignoring debug value\n");
         continue;
       }
 
       skip = false;
-      if(MI->isConditionalBranch()) {
-        for(auto MO : MI->operands())
-          if(MO.isReg() && (MO.getReg() == *IV || MO.getReg() == *ICV) ) {
-            LLVM_DEBUG(dbgs()<<"  ignoring conditional branch with inudction register usage\n");
+      if (MI->isConditionalBranch()) {
+        for (auto MO : MI->operands())
+          if (MO.isReg() && (MO.getReg() == *IV || MO.getReg() == *ICV)) {
+            LLVM_DEBUG(dbgs() << "  ignoring conditional branch with inudction "
+                                 "register usage\n");
             skip = true;
             break;
           }
       }
-      if(skip) continue;
+      if (skip)
+        continue;
 
       // skip if contains induction variable IV
       skip = false;
-      for(auto MO : MI->operands())
-        if(MO.isReg() && (MO.getReg() == *IV) ) {
-          LLVM_DEBUG(dbgs()<<"  skipped due to inudction register usage\n");
+      for (auto MO : MI->operands())
+        if (MO.isReg() && (MO.getReg() == *IV)) {
+          LLVM_DEBUG(dbgs() << "  skipped due to inudction register usage\n");
           skip = true;
           break;
         }
-      if(skip) continue;
+      if (skip)
+        continue;
 
       if (isInvalidLoopOperation(MI)) {
         LLVM_DEBUG(dbgs() << "Cannot convert to hw_loop due to:"; MI->dump());
@@ -793,17 +823,18 @@ unsigned SNITCHFrepLoops::containsInvalidInstruction(MachineLoop *L, Register *I
 
 /// Return true if the operation is invalid within hardware loop.
 bool SNITCHFrepLoops::isInvalidLoopOperation(const MachineInstr *MI) const {
-  // If all virtual register operands are FPR, this instruction is valid for frep
+  // If all virtual register operands are FPR, this instruction is valid for
+  // frep
   bool validInstr = true;
-  for(auto MO : MI->operands())
-    if(MO.isReg() && MO.getReg().isVirtual())
-      if(MRI->getRegClass(MO.getReg()) != &RISCV::FPR64RegClass || 
-        MRI->getRegClass(MO.getReg()) != &RISCV::FPR32RegClass)
+  for (auto MO : MI->operands())
+    if (MO.isReg() && MO.getReg().isVirtual())
+      if (MRI->getRegClass(MO.getReg()) != &RISCV::FPR64RegClass ||
+          MRI->getRegClass(MO.getReg()) != &RISCV::FPR32RegClass)
         validInstr = false;
   return validInstr;
 }
 
-const MachineInstr * SNITCHFrepLoops::findBranchInstruction(MachineLoop *L) {
+const MachineInstr *SNITCHFrepLoops::findBranchInstruction(MachineLoop *L) {
 
   using namespace RISCV;
   static const unsigned Bops[] = {BNE};
@@ -811,18 +842,19 @@ const MachineInstr * SNITCHFrepLoops::findBranchInstruction(MachineLoop *L) {
   const MachineInstr *BI = nullptr;
 
   for (MachineBasicBlock *MBB : L->getBlocks()) {
-    for (MachineBasicBlock::iterator
-           MII = MBB->begin(), E = MBB->end(); MII != E; ++MII) {
+    for (MachineBasicBlock::iterator MII = MBB->begin(), E = MBB->end();
+         MII != E; ++MII) {
       const MachineInstr *MI = &*MII;
-      for(unsigned i = 0; i < sizeof(Bops)/sizeof(Bops[0]); ++i)
-        if(MI->getOpcode() == Bops[i]) {
+      for (unsigned i = 0; i < sizeof(Bops) / sizeof(Bops[0]); ++i)
+        if (MI->getOpcode() == Bops[i]) {
           BI = MI;
           ++insInBops;
         }
     }
   }
-  if(insInBops != 1) {
-    LLVM_DEBUG(dbgs() << "Multiple or none ("<<insInBops<<") branch insns found\n");
+  if (insInBops != 1) {
+    LLVM_DEBUG(dbgs() << "Multiple or none (" << insInBops
+                      << ") branch insns found\n");
     return nullptr;
   }
   return BI;
@@ -835,10 +867,9 @@ const MachineInstr * SNITCHFrepLoops::findBranchInstruction(MachineLoop *L) {
 /// This function iterates over the phi nodes in the loop to check for
 /// induction variable patterns that are used in the calculation for
 /// the number of time the loop is executed.
-CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
-    SmallVectorImpl<MachineInstr *> &OldInsts,
-    Register *&InductionReg,
-    Register *&IncrementReg) {
+CountValue *SNITCHFrepLoops::getLoopTripCount(
+    MachineLoop *L, SmallVectorImpl<MachineInstr *> &OldInsts,
+    Register *&InductionReg, Register *&IncrementReg) {
 
   MachineBasicBlock *TopMBB = L->getTopBlock();
   MachineBasicBlock::pred_iterator PI = TopMBB->pred_begin();
@@ -849,7 +880,7 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
     return nullptr;
   }
   MachineBasicBlock *Incoming = *PI++;
-  if (PI != TopMBB->pred_end()) {  // multiple backedges?
+  if (PI != TopMBB->pred_end()) { // multiple backedges?
     return nullptr;
   }
 
@@ -864,8 +895,9 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
     return nullptr;
   }
 
-  LLVM_DEBUG(dbgs()<<"Contains Incoming: " << L->contains(Incoming)<<" Concains Backedge: " << L->contains(Backedge)<<"\n");
-  
+  LLVM_DEBUG(dbgs() << "Contains Incoming: " << L->contains(Incoming)
+                    << " Concains Backedge: " << L->contains(Backedge) << "\n");
+
   // Look for the cmp instruction to determine if we can get a useful trip
   // count.  The trip count can be either a register or an immediate.  The
   // location of the value depends upon the type (reg or imm).
@@ -874,7 +906,8 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
     return nullptr;
   }
 
-  LLVM_DEBUG(dbgs()<<"ExitingBlock (contains: "<<L->contains(ExitingBlock)<<")\n");
+  LLVM_DEBUG(dbgs() << "ExitingBlock (contains: " << L->contains(ExitingBlock)
+                    << ")\n");
 
   // Find the registers used to hold the induction variable.
   unsigned IndReg = 0, IncReg = 0;
@@ -889,14 +922,15 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
   OldInsts.push_back(BumpOp);
 
   // Find the InitialValue using the loop header PHI node
-  // the value comming from the BB that points to the Preheader is the initial value
+  // the value comming from the BB that points to the Preheader is the initial
+  // value
   MachineBasicBlock *Preheader = MLI->findLoopPreheader(L, SpecPreheader);
   MachineOperand *InitialValue = nullptr;
   MachineInstr *IV_Phi = MRI->getVRegDef(IndReg);
   MachineBasicBlock *Latch = L->getLoopLatch();
-  LLVM_DEBUG(dbgs()<<"IV_Phi: ";IV_Phi->dump());
+  LLVM_DEBUG(dbgs() << "IV_Phi: "; IV_Phi->dump());
   for (unsigned i = 1, n = IV_Phi->getNumOperands(); i < n; i += 2) {
-    MachineBasicBlock *MBB = IV_Phi->getOperand(i+1).getMBB();
+    MachineBasicBlock *MBB = IV_Phi->getOperand(i + 1).getMBB();
     if (MBB == Preheader)
       InitialValue = &IV_Phi->getOperand(i);
     // else if (MBB == Latch)
@@ -905,12 +939,12 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
   if (!InitialValue) {
     return nullptr;
   }
-  LLVM_DEBUG(dbgs()<<"initial value     : "; InitialValue->dump());
-  LLVM_DEBUG(dbgs()<<"IndReg def : "; MRI->getVRegDef(IndReg)->dump());
-  LLVM_DEBUG(dbgs()<<"IncReg def : "; MRI->getVRegDef(IncReg)->dump());
+  LLVM_DEBUG(dbgs() << "initial value     : "; InitialValue->dump());
+  LLVM_DEBUG(dbgs() << "IndReg def : "; MRI->getVRegDef(IndReg)->dump());
+  LLVM_DEBUG(dbgs() << "IncReg def : "; MRI->getVRegDef(IncReg)->dump());
 
   // Get loop branch condition to determine trip count later
-  SmallVector<MachineOperand,2> Cond;
+  SmallVector<MachineOperand, 2> Cond;
   MachineBasicBlock *TB = nullptr, *FB = nullptr;
   bool NotAnalyzed = TII->analyzeBranch(*ExitingBlock, TB, FB, Cond, false);
   if (NotAnalyzed) {
@@ -934,7 +968,8 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
   // the loop is exited
   bool isCondExit = true;
   MachineBasicBlock *Header = L->getHeader();
-  if((TB == Latch) || (TB == Header)) isCondExit = false;
+  if ((TB == Latch) || (TB == Header))
+    isCondExit = false;
 
   // search for the end value
   // Sadly, the following code gets information based on the position
@@ -949,16 +984,18 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
   const MachineOperand *EndValue = nullptr;
 
   isFirstOperandEndvalue = Op1.getReg() != IndReg && Op1.getReg() != IncReg;
-  EndValue  = (isFirstOperandEndvalue ? &Op1 : &Op2);
+  EndValue = (isFirstOperandEndvalue ? &Op1 : &Op2);
 
-  LLVM_DEBUG(dbgs() << "isFirstOperandEndvalue: " << isFirstOperandEndvalue << " isCondExit: " << isCondExit << "\n");
+  LLVM_DEBUG(dbgs() << "isFirstOperandEndvalue: " << isFirstOperandEndvalue
+                    << " isCondExit: " << isCondExit << "\n");
 
   // can remove definition of end value
-  OldInsts.push_back(MRI->getVRegDef(isFirstOperandEndvalue ? Op1.getReg() : Op2.getReg()));
+  OldInsts.push_back(
+      MRI->getVRegDef(isFirstOperandEndvalue ? Op1.getReg() : Op2.getReg()));
 
-  LLVM_DEBUG(dbgs()<<"Op1     : "; Op1.dump());
-  LLVM_DEBUG(dbgs()<<"Op2     : "; Op2.dump());
-  
+  LLVM_DEBUG(dbgs() << "Op1     : "; Op1.dump());
+  LLVM_DEBUG(dbgs() << "Op2     : "; Op2.dump());
+
   Comparison::Kind Cmp;
   unsigned CondOpc = Cond[0].getImm();
   Cmp = getComparisonKindFromCC(CondOpc, InitialValue, EndValue, IVBump);
@@ -974,12 +1011,13 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
   if (isCondExit)
     Cmp = Comparison::getNegatedComparison(Cmp);
 
-  LLVM_DEBUG(dbgs()<<"Condition: [induction] "
-      << (Cmp & Comparison::Kind::L  ? "L" : "")
-      << (Cmp & Comparison::Kind::G  ? "G" : "")
-      << (Cmp & Comparison::Kind::EQ ? "EQ" : "")
-      << (Cmp & Comparison::Kind::NE ? "NE" : "")
-      << (Cmp & Comparison::Kind::U  ? "U" : "") << " [end] -> continue\n");
+  LLVM_DEBUG(dbgs() << "Condition: [induction] "
+                    << (Cmp & Comparison::Kind::L ? "L" : "")
+                    << (Cmp & Comparison::Kind::G ? "G" : "")
+                    << (Cmp & Comparison::Kind::EQ ? "EQ" : "")
+                    << (Cmp & Comparison::Kind::NE ? "NE" : "")
+                    << (Cmp & Comparison::Kind::U ? "U" : "")
+                    << " [end] -> continue\n");
 
   // Check if we can fully qualify start and end value
   if (InitialValue->isReg()) {
@@ -988,7 +1026,7 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
     if (!MDT->properlyDominates(DefBB, Header)) {
       int64_t V;
       if (!checkForImmediate(*InitialValue, V)) {
-        LLVM_DEBUG(dbgs()<<"can't determine initial value\n");
+        LLVM_DEBUG(dbgs() << "can't determine initial value\n");
         return nullptr;
       }
     }
@@ -996,15 +1034,15 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
   }
   if (EndValue->isReg()) {
     llvm::Register R = EndValue->getReg();
-    if(R != RISCV::X0) {
-      MachineInstr* DefMI = MRI->getVRegDef(R);
+    if (R != RISCV::X0) {
+      MachineInstr *DefMI = MRI->getVRegDef(R);
       assert(DefMI);
       MachineBasicBlock *DefBB = DefMI->getParent();
       assert(DefBB);
       if (!MDT->properlyDominates(DefBB, Header)) {
         int64_t V;
         if (!checkForImmediate(*EndValue, V)) {
-          LLVM_DEBUG(dbgs()<<"can't determine end value\n");
+          LLVM_DEBUG(dbgs() << "can't determine end value\n");
           return nullptr;
         }
       }
@@ -1020,12 +1058,9 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
   return computeCount(L, InitialValue, EndValue, IndReg, IVBump, Cmp);
 }
 
-
-  bool SNITCHFrepLoops::findInductionRegister(MachineLoop *L,
-                                              unsigned &IndReg, 
-                                              unsigned &IncReg,
-                                              int64_t &IVBump, 
-                                              MachineInstr *&BumpOp) const {
+bool SNITCHFrepLoops::findInductionRegister(MachineLoop *L, unsigned &IndReg,
+                                            unsigned &IncReg, int64_t &IVBump,
+                                            MachineInstr *&BumpOp) const {
   MachineBasicBlock *Preheader = MLI->findLoopPreheader(L, SpecPreheader);
   MachineBasicBlock *Header = L->getHeader();
   MachineBasicBlock *Latch = L->getLoopLatch();
@@ -1034,10 +1069,12 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
   if (!Header || !Preheader || !Latch || !ExitingBlock) {
     return false;
   }
-  LLVM_DEBUG(dbgs()<<"Found Header ["<<Header->getName()<<"], Preheader ["<<Preheader->getName()<<"], Latch ["<<Latch->getName()<<"], ExitingBlock ["<<ExitingBlock->getName()<<"]\n");
+  LLVM_DEBUG(dbgs() << "Found Header [" << Header->getName() << "], Preheader ["
+                    << Preheader->getName() << "], Latch [" << Latch->getName()
+                    << "], ExitingBlock [" << ExitingBlock->getName() << "]\n");
 
   bool latchExitOneBlock = (Latch == ExitingBlock);
-  LLVM_DEBUG(dbgs() << "latchExitOneBlock = "<<latchExitOneBlock<<"\n");
+  LLVM_DEBUG(dbgs() << "latchExitOneBlock = " << latchExitOneBlock << "\n");
 
   // This pair represents an induction register together with an immediate
   // value that will be added to it in each loop iteration.
@@ -1061,7 +1098,7 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
     // latch block, and see if is a result of an addition of form "reg+imm",
     // where the "reg" is defined by the PHI node we are looking at.
     for (unsigned i = 1, n = Phi->getNumOperands(); i < n; i += 2) {
-      if (Phi->getOperand(i+1).getMBB() != Latch)
+      if (Phi->getOperand(i + 1).getMBB() != Latch)
         continue;
 
       // If the PHI is the register operand to an ADDI, it corresponds to the
@@ -1076,7 +1113,7 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
         if (MRI->getVRegDef(InducReg) == Phi && checkForImmediate(Opnd2, V)) {
           // we found the induction register and the bump value
           unsigned UpdReg = DI->getOperand(0).getReg();
-          if(latchExitOneBlock)
+          if (latchExitOneBlock)
             IndMap.insert(std::make_pair(UpdReg, std::make_pair(InducReg, V)));
           else
             IndMap.insert(std::make_pair(InducReg, std::make_pair(UpdReg, V)));
@@ -1087,13 +1124,13 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
 
   // If we couldn't find any registers used for the induction, we fail.
   if (IndMap.empty()) {
-    LLVM_DEBUG(dbgs()<<"Couldn't find any suitable PHI nodes\n");
+    LLVM_DEBUG(dbgs() << "Couldn't find any suitable PHI nodes\n");
     return false;
   }
 
 #ifndef NDEBUG
   LLVM_DEBUG(dbgs() << "IndMap:\n");
-  for(auto it = IndMap.begin(); it != IndMap.end(); ++it) {
+  for (auto it = IndMap.begin(); it != IndMap.end(); ++it) {
     LLVM_DEBUG(MRI->getVRegDef(it->first)->dump());
     LLVM_DEBUG(dbgs() << "   \\--> ");
     LLVM_DEBUG(MRI->getVRegDef(it->second.first)->dump());
@@ -1102,35 +1139,37 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
 #endif
 
   MachineBasicBlock *TB = nullptr, *FB = nullptr;
-  SmallVector<MachineOperand,2> Cond;
+  SmallVector<MachineOperand, 2> Cond;
   // Check that the exit branch can be analyzed.
   // AnalyzeBranch returns true if it fails to analyze branch.
   bool NotAnalyzed = TII->analyzeBranch(*ExitingBlock, TB, FB, Cond, false);
   if (NotAnalyzed || Cond.empty()) {
-    LLVM_DEBUG(dbgs()<<"Couldn't analyze block ("<<NotAnalyzed<<") or got no conditions\n");
+    LLVM_DEBUG(dbgs() << "Couldn't analyze block (" << NotAnalyzed
+                      << ") or got no conditions\n");
     return false;
   }
-  LLVM_DEBUG(dbgs()<<"True dst: ["<<TB->getName()<<"] False dst: ["<<FB->getName()<<"]\n");
+  LLVM_DEBUG(dbgs() << "True dst: [" << TB->getName() << "] False dst: ["
+                    << FB->getName() << "]\n");
 
   // We now know there are two terminators, one conditional and one
   // unconditional. If the order does not match what we expect, bail out.
   MachineInstr *condTerm = &(*ExitingBlock->getFirstTerminator());
   MachineInstr *uncondTerm = &(*std::next(ExitingBlock->getFirstTerminator()));
   if (!(condTerm->getDesc().isConditionalBranch() &&
-      uncondTerm->getDesc().isUnconditionalBranch())) {
+        uncondTerm->getDesc().isUnconditionalBranch())) {
     return false;
   }
-  LLVM_DEBUG(dbgs()<<"condTerm    :"; condTerm->dump());
-  LLVM_DEBUG(dbgs()<<"uncondTerm  :"; uncondTerm->dump());
-  LLVM_DEBUG(dbgs()<<"Cond[1]     : "; Cond[1].dump());
-  LLVM_DEBUG(dbgs()<<"Cond[2]     : "; Cond[2].dump());
+  LLVM_DEBUG(dbgs() << "condTerm    :"; condTerm->dump());
+  LLVM_DEBUG(dbgs() << "uncondTerm  :"; uncondTerm->dump());
+  LLVM_DEBUG(dbgs() << "Cond[1]     : "; Cond[1].dump());
+  LLVM_DEBUG(dbgs() << "Cond[2]     : "; Cond[2].dump());
 
   FL->condTerm = condTerm;
   FL->uncondTerm = uncondTerm;
 
   // Get the register numbers
-  unsigned CmpReg1 = Cond[1].isReg() ? (unsigned) Cond[1].getReg() : 0;
-  unsigned CmpReg2 = Cond[2].isReg() ? (unsigned) Cond[2].getReg() : 0;
+  unsigned CmpReg1 = Cond[1].isReg() ? (unsigned)Cond[1].getReg() : 0;
+  unsigned CmpReg2 = Cond[2].isReg() ? (unsigned)Cond[2].getReg() : 0;
 
   // Exactly one of the input registers to the comparison should be among
   // the induction registers.
@@ -1145,7 +1184,8 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
     InductionMap::iterator F2 = IndMap.find(CmpReg2);
     if (F2 != IndMapEnd) {
       if (F != IndMapEnd) {
-        LLVM_DEBUG(dbgs() << "both PHI registers found in conditional, abort\n");
+        LLVM_DEBUG(
+            dbgs() << "both PHI registers found in conditional, abort\n");
         return false;
       }
       F = F2;
@@ -1156,25 +1196,26 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
     return false;
   }
 
-  if(!latchExitOneBlock) {
+  if (!latchExitOneBlock) {
     IndReg = F->first;
     IncReg = F->second.first;
     IVBump = F->second.second;
     BumpOp = MRI->getVRegDef(F->second.first);
-  }
-  else {
+  } else {
     IndReg = F->second.first;
     IncReg = F->first;
     IVBump = F->second.second;
     BumpOp = MRI->getVRegDef(F->first);
   }
 
-  LLVM_DEBUG(dbgs()<< "Found induction! IndReg ["<<IndReg<<"] IncReg ["<<IncReg<<"] Bump ["<<IVBump<<"] BumpOp ["<<BumpOp<<"]\n");
+  LLVM_DEBUG(dbgs() << "Found induction! IndReg [" << IndReg << "] IncReg ["
+                    << IncReg << "] Bump [" << IVBump << "] BumpOp [" << BumpOp
+                    << "]\n");
   return true;
 }
 
 bool SNITCHFrepLoops::checkForImmediate(const MachineOperand &MO,
-                                             int64_t &Val) const {
+                                        int64_t &Val) const {
 
   if (MO.isImm()) {
     Val = MO.getImm();
@@ -1201,50 +1242,47 @@ bool SNITCHFrepLoops::checkForImmediate(const MachineOperand &MO,
   MachineInstr *DI = MRI->getVRegDef(R);
   unsigned DOpc = DI->getOpcode();
   switch (DOpc) {
-    case TargetOpcode::COPY:
-      // Call recursively to avoid an extra check whether operand(1) is
-      // indeed an immediate (it could be a global address, for example),
-      // plus we can handle COPY at the same time.
+  case TargetOpcode::COPY:
+    // Call recursively to avoid an extra check whether operand(1) is
+    // indeed an immediate (it could be a global address, for example),
+    // plus we can handle COPY at the same time.
+    if (!checkForImmediate(DI->getOperand(1), TV)) {
+      return false;
+    } else {
+      Val = TV;
+    }
+    break;
+  case RISCV::ADDI:
+    if (DI->getOperand(1).isReg() && DI->getOperand(1).getReg() == RISCV::X0) {
+      // Load an immediate into a register
+      if (!checkForImmediate(DI->getOperand(2), TV)) {
+        return false;
+      } else {
+        Val = TV;
+      }
+    } else if (DI->getOperand(2).isImm() && DI->getOperand(2).getImm() == 0) {
+      // Move a value from Op1 to Op0.
       if (!checkForImmediate(DI->getOperand(1), TV)) {
         return false;
       } else {
         Val = TV;
       }
-      break;
-    case RISCV::ADDI:
-      if (DI->getOperand(1).isReg() && 
-          DI->getOperand(1).getReg() == RISCV::X0) {
-        // Load an immediate into a register
-        if (!checkForImmediate(DI->getOperand(2), TV)) {
-          return false;
-        } else {
-          Val = TV;
-        }
-      } else if (DI->getOperand(2).isImm() && DI->getOperand(2).getImm() == 0) {
-        // Move a value from Op1 to Op0.
-        if (!checkForImmediate(DI->getOperand(1), TV)) {
-          return false;
-        } else {
-          Val = TV;
-        }
-      } else {
-        // This ADDI is not used to LOAD IMM or to MOVE a value.
-        return false;
-      }
-      break;
-    default:
+    } else {
+      // This ADDI is not used to LOAD IMM or to MOVE a value.
       return false;
+    }
+    break;
+  default:
+    return false;
   }
 
   return true;
 }
 
 // Return the comparison kind for the specified opcode.
-SNITCHFrepLoops::Comparison::Kind
-SNITCHFrepLoops::getComparisonKind(unsigned CondOpc,
-                                        MachineOperand *InitialValue,
-                                        const MachineOperand *EndValue,
-                                        int64_t IVBump) const {
+SNITCHFrepLoops::Comparison::Kind SNITCHFrepLoops::getComparisonKind(
+    unsigned CondOpc, MachineOperand *InitialValue,
+    const MachineOperand *EndValue, int64_t IVBump) const {
 
   Comparison::Kind Cmp = (Comparison::Kind)0;
   switch (CondOpc) {
@@ -1280,11 +1318,9 @@ SNITCHFrepLoops::getComparisonKind(unsigned CondOpc,
 
 // Return the internal (used internally by this pass) comparison kind for
 // the specified RISCV condition code.
-SNITCHFrepLoops::Comparison::Kind
-SNITCHFrepLoops::getComparisonKindFromCC(unsigned CC,
-                                        MachineOperand *InitialValue,
-                                        const MachineOperand *EndValue,
-                                        int64_t IVBump) const {
+SNITCHFrepLoops::Comparison::Kind SNITCHFrepLoops::getComparisonKindFromCC(
+    unsigned CC, MachineOperand *InitialValue, const MachineOperand *EndValue,
+    int64_t IVBump) const {
   Comparison::Kind Cmp = (Comparison::Kind)0;
   switch (CC) {
   default:
@@ -1314,15 +1350,14 @@ SNITCHFrepLoops::getComparisonKindFromCC(unsigned CC,
 /// represent the loop start value, loop end value, and induction value.
 /// Based upon these operands, the function attempts to compute the trip count.
 CountValue *SNITCHFrepLoops::computeCount(MachineLoop *Loop,
-                                               const MachineOperand *Start,
-                                               const MachineOperand *End,
-                                               unsigned IVReg,
-                                               int64_t IVBump,
-                                               Comparison::Kind Cmp) const {
-    
+                                          const MachineOperand *Start,
+                                          const MachineOperand *End,
+                                          unsigned IVReg, int64_t IVBump,
+                                          Comparison::Kind Cmp) const {
+
   // Get the preheader
   MachineBasicBlock *PH = MLI->findLoopPreheader(Loop, SpecPreheader);
-  assert (PH && "Should have a preheader by now");
+  assert(PH && "Should have a preheader by now");
   MachineBasicBlock::iterator InsertPos = PH->getFirstTerminator();
   DebugLoc DL;
   if (InsertPos != PH->end())
@@ -1334,7 +1369,7 @@ CountValue *SNITCHFrepLoops::computeCount(MachineLoop *Loop,
   startIsImm = checkForImmediate(*Start, immStart);
   endIsImm = checkForImmediate(*End, immEnd);
   if (endIsImm && !End->isImm()) {
-    if(immEnd == 0) {
+    if (immEnd == 0) {
       unsigned VGPR = MRI->createVirtualRegister(IntRC);
       MachineInstrBuilder ZeroInit =
           BuildMI(*PH, InsertPos, DL, TII->get(TargetOpcode::COPY), VGPR);
@@ -1343,10 +1378,10 @@ CountValue *SNITCHFrepLoops::computeCount(MachineLoop *Loop,
     }
   }
 
-  bool CmpLess =     Cmp & Comparison::L;
-  bool CmpGreater =  Cmp & Comparison::G;
+  bool CmpLess = Cmp & Comparison::L;
+  bool CmpGreater = Cmp & Comparison::G;
   bool CmpHasEqual = Cmp & Comparison::EQ;
-  
+
   // Sanity check
   if (!Start->isReg() && !startIsImm) {
     return nullptr;
@@ -1354,7 +1389,7 @@ CountValue *SNITCHFrepLoops::computeCount(MachineLoop *Loop,
   if (!End->isReg() && !endIsImm) {
     return nullptr;
   }
-  
+
   // Avoid certain wrap-arounds.  This doesn't detect all wrap-arounds.
   if (CmpLess && IVBump < 0) {
     // Loop going while iv is "less" with the iv value going down.  Must wrap.
@@ -1375,22 +1410,22 @@ CountValue *SNITCHFrepLoops::computeCount(MachineLoop *Loop,
     int64_t Dist = std::max(immStart, immEnd) - std::min(immStart, immEnd);
     bool Exact = (Dist % IVBump) == 0;
 
-    if (Dist == 0) 
+    if (Dist == 0)
       return nullptr;
     if (!Exact)
       return nullptr;
-    
+
     // Normalize distance to step
     uint64_t Count = Dist / std::abs(IVBump);
 
     if (Count > 0xFFFFFFFFULL)
       return nullptr;
 
-    if(CmpHasEqual) {
+    if (CmpHasEqual) {
       Count++;
     }
-    
-    LLVM_DEBUG(dbgs() << "Found trip count = "<<Count<<"\n");
+
+    LLVM_DEBUG(dbgs() << "Found trip count = " << Count << "\n");
     return new CountValue(CountValue::CV_Immediate, Count);
   }
   return nullptr;
@@ -1401,7 +1436,7 @@ CountValue *SNITCHFrepLoops::computeCount(MachineLoop *Loop,
 /// for inline asm, physical registers and instructions with side effects
 /// removed.
 bool SNITCHFrepLoops::isDead(const MachineInstr *MI,
-                              SmallVectorImpl<MachineInstr *> &DeadPhis) const {
+                             SmallVectorImpl<MachineInstr *> &DeadPhis) const {
   // Examine each operand.
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
     const MachineOperand &MO = MI->getOperand(i);
@@ -1423,7 +1458,7 @@ bool SNITCHFrepLoops::isDead(const MachineInstr *MI,
       LLVM_DEBUG(dbgs() << "  not dead because >2 uses\n");
       return false;
     }
-    if(!I->getParent()->isPHI()) {
+    if (!I->getParent()->isPHI()) {
       LLVM_DEBUG(dbgs() << "  not dead because use is not PHI\n");
       return false;
     }
@@ -1440,16 +1475,18 @@ bool SNITCHFrepLoops::isDead(const MachineInstr *MI,
       unsigned OPReg = OPO.getReg();
       use_nodbg_iterator nextJ;
       // iterate over all uses of the defined reg
-      for (use_nodbg_iterator J = MRI->use_nodbg_begin(OPReg);
-           J != End; J = nextJ) {
+      for (use_nodbg_iterator J = MRI->use_nodbg_begin(OPReg); J != End;
+           J = nextJ) {
         nextJ = std::next(J);
         MachineOperand &Use = *J;
         MachineInstr *UseMI = Use.getParent();
 
         // If the phi node has a user that is not MI, bail.
-        LLVM_DEBUG(dbgs()<<"  checking use:\n"; UseMI->dump());
+        LLVM_DEBUG(dbgs() << "  checking use:\n"; UseMI->dump());
         if (MI != UseMI) {
-          LLVM_DEBUG(dbgs() << "  not dead because the phi node has a user that is not MI\n");
+          LLVM_DEBUG(
+              dbgs()
+              << "  not dead because the phi node has a user that is not MI\n");
           return false;
         }
       }
@@ -1464,7 +1501,7 @@ bool SNITCHFrepLoops::isDead(const MachineInstr *MI,
 void SNITCHFrepLoops::removeIfDead(MachineInstr *MI) {
   // This procedure was essentially copied from DeadMachineInstructionElim.
 
-  SmallVector<MachineInstr*, 1> DeadPhis;
+  SmallVector<MachineInstr *, 1> DeadPhis;
   if (isDead(MI, DeadPhis)) {
     LLVM_DEBUG(dbgs() << "HW looping will remove: " << *MI);
 
@@ -1478,8 +1515,9 @@ void SNITCHFrepLoops::removeIfDead(MachineInstr *MI) {
       unsigned Reg = MO.getReg();
       MachineRegisterInfo::use_iterator nextI;
       for (MachineRegisterInfo::use_iterator I = MRI->use_begin(Reg),
-           E = MRI->use_end(); I != E; I = nextI) {
-        nextI = std::next(I);  // I is invalidated by the setReg
+                                             E = MRI->use_end();
+           I != E; I = nextI) {
+        nextI = std::next(I); // I is invalidated by the setReg
         MachineOperand &Use = *I;
         MachineInstr *UseMI = I->getParent();
         if (UseMI == MI)
@@ -1499,58 +1537,60 @@ void SNITCHFrepLoops::removeIfDead(MachineInstr *MI) {
 void SNITCHFrepLoops::insertFPUBarrier(MachineLoop *L, MachineBasicBlock *MBB) {
   MachineBasicBlock::iterator InsertPos = MBB->getFirstNonPHI();
   DebugLoc DL;
-  if(InsertPos == MBB->end()) {
-    // MBB does not contain any non-PHI instructions, place builder at start of block
+  if (InsertPos == MBB->end()) {
+    // MBB does not contain any non-PHI instructions, place builder at start of
+    // block
     InsertPos = MBB->begin();
-  }
-  else {
+  } else {
     DL = InsertPos->getDebugLoc();
   }
   LLVM_DEBUG(dbgs() << "inserting FPU barrier in "; MBB->dump());
   MachineFunction *MF = MBB->getParent();
-  
+
   auto DoneMBB = MF->CreateMachineBasicBlock(MBB->getBasicBlock());
 
   // %[tmp] = fmv.x.w fa0
   unsigned ScratchReg = MRI->createVirtualRegister(&RISCV::GPRRegClass);
   unsigned ScratchFPReg = MRI->createVirtualRegister(&RISCV::FPR64RegClass);
   BuildMI(*MBB, InsertPos, DL, TII->get(RISCV::FMV_X_W), ScratchReg)
-    .addReg(ScratchFPReg, RegState::Define);
+      .addReg(ScratchFPReg, RegState::Define);
   // blt %[tmp], %[tmp], 1f
   BuildMI(*MBB, InsertPos, DL, TII->get(RISCV::BLT))
-    .addReg(ScratchReg, 0).addReg(ScratchReg, RegState::Kill)
-    .addMBB(DoneMBB);
+      .addReg(ScratchReg, 0)
+      .addReg(ScratchReg, RegState::Kill)
+      .addMBB(DoneMBB);
 
   // Insert new MBBs.
   MF->insert(++MBB->getIterator(), DoneMBB);
   DoneMBB->splice(DoneMBB->end(), MBB, InsertPos, MBB->end());
   DoneMBB->transferSuccessorsAndUpdatePHIs(MBB);
-  if(!MBB->isSuccessor(DoneMBB)) MBB->addSuccessor(DoneMBB);
+  if (!MBB->isSuccessor(DoneMBB))
+    MBB->addSuccessor(DoneMBB);
 
   LivePhysRegs LiveRegs;
   computeAndAddLiveIns(LiveRegs, *DoneMBB);
 }
 
-void SNITCHFrepLoops::fixupPHIs(SmallVectorImpl<MachineInstr *> &FPPhis, MachineBasicBlock *FrepBlock) {
-  // A phi before an FREP loop should new be a COPY from the predecessor, not the
-  // MBB where the FREP loop is at and the use be erplaced with the "induction" variable for reductions
+void SNITCHFrepLoops::fixupPHIs(SmallVectorImpl<MachineInstr *> &FPPhis,
+                                MachineBasicBlock *FrepBlock) {
+  // A phi before an FREP loop should new be a COPY from the predecessor, not
+  // the MBB where the FREP loop is at and the use be erplaced with the
+  // "induction" variable for reductions
   Register SrcReg, DstReg, IndReg;
   // const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
-  for(auto phi : FPPhis) {
+  for (auto phi : FPPhis) {
     DstReg = phi->getOperand(0).getReg();
 
     // if one of the source MBB is the block where FREP is, chane it to a copy
     // from the value of the other source
-    if(phi->getOperand(2).getMBB() == FrepBlock){
+    if (phi->getOperand(2).getMBB() == FrepBlock) {
       SrcReg = phi->getOperand(3).getReg();
       IndReg = phi->getOperand(1).getReg();
-    }
-    else if (phi->getOperand(4).getMBB() == FrepBlock){
+    } else if (phi->getOperand(4).getMBB() == FrepBlock) {
       SrcReg = phi->getOperand(1).getReg();
       IndReg = phi->getOperand(3).getReg();
-    }
-    else {
-      LLVM_DEBUG(dbgs()<<"WARNING: Fixup PHI no solution found for\n");
+    } else {
+      LLVM_DEBUG(dbgs() << "WARNING: Fixup PHI no solution found for\n");
       LLVM_DEBUG(phi->dump(););
       continue;
     }
@@ -1565,11 +1605,11 @@ void SNITCHFrepLoops::fixupPHIs(SmallVectorImpl<MachineInstr *> &FPPhis, Machine
     MachineInstr *Use = I->getParent();
 
     Use->substituteRegister(DstReg, IndReg, 0, *TRI);
-    BuildMI(*FrepBlock, phi, phi->getDebugLoc(), TII->get(TargetOpcode::COPY), 
-      Use->getOperand(0).getReg()).addReg(SrcReg, 0);
+    BuildMI(*FrepBlock, phi, phi->getDebugLoc(), TII->get(TargetOpcode::COPY),
+            Use->getOperand(0).getReg())
+        .addReg(SrcReg, 0);
     phi->removeFromParent();
   }
-
 }
 
 bool SNITCHFrepLoops::isMarkedForInference(MachineLoop *L) {
@@ -1581,9 +1621,9 @@ bool SNITCHFrepLoops::isMarkedForInference(MachineLoop *L) {
 
   // search preheader for any "frep" meta
   for (MachineInstr &MI : *Preheader) {
-    if( MI.getOpcode() == RISCV::PseudoFrepInfer) {
+    if (MI.getOpcode() == RISCV::PseudoFrepInfer) {
       // found it!
-      LLVM_DEBUG(dbgs()<<"found frep infer pseudo\n");
+      LLVM_DEBUG(dbgs() << "found frep infer pseudo\n");
       MI.removeFromParent();
       return true;
     }
@@ -1594,14 +1634,13 @@ bool SNITCHFrepLoops::isMarkedForInference(MachineLoop *L) {
 
 } // end of anonymous namespace
 
-INITIALIZE_PASS_BEGIN(SNITCHFrepLoops, DEBUG_TYPE,
-                      SNITCH_FREP_LOOPS_NAME, false, false)
+INITIALIZE_PASS_BEGIN(SNITCHFrepLoops, DEBUG_TYPE, SNITCH_FREP_LOOPS_NAME,
+                      false, false)
 INITIALIZE_PASS_DEPENDENCY(MachineDominatorTree)
 INITIALIZE_PASS_DEPENDENCY(MachineLoopInfo)
-INITIALIZE_PASS_END(SNITCHFrepLoops, DEBUG_TYPE,
-                    SNITCH_FREP_LOOPS_NAME, false, false)
+INITIALIZE_PASS_END(SNITCHFrepLoops, DEBUG_TYPE, SNITCH_FREP_LOOPS_NAME, false,
+                    false)
 
 namespace llvm {
-  FunctionPass *createSNITCHFrepLoopsPass() { return new SNITCHFrepLoops(); }
+FunctionPass *createSNITCHFrepLoopsPass() { return new SNITCHFrepLoops(); }
 } // end of namespace llvm
-

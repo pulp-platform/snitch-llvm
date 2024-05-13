@@ -19,10 +19,6 @@
 #include "../RISCVInstrInfo.h"
 #include "../RISCVRegisterInfo.h"
 #include "../RISCVSubtarget.h"
-
-#include "llvm/ADT/ArrayRef.h"
-#include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/StringRef.h"
@@ -305,7 +301,18 @@ char SNITCHFrepLoops::ID = 0;
 
 
 bool SNITCHFrepLoops::runOnMachineFunction(MachineFunction &MF) {
-  LLVM_DEBUG(dbgs()<<"------------ Snitch Frep Loops ------------\n");
+  LLVM_DEBUG(dbgs() << "********* Snitch FREP Loops *********\n");
+
+  if (!MF.getSubtarget<RISCVSubtarget>().hasExtXfrep()) {
+    LLVM_DEBUG(dbgs() << "No Xfrep extension, skipping.\n");
+    return false;
+  }
+
+  if (skipFunction(MF.getFunction())) {
+    LLVM_DEBUG(
+        dbgs() << "Machine function marked to be skipped, bailing out.\n");
+    return false;
+  }
 
   bool Changed = false;
 
@@ -351,7 +358,7 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
   
   bool changed = false;
 
-  /// Convert all inner loops firts
+  /// Convert all inner loops first
   LLVM_DEBUG(L->dump(););
   for (MachineLoop::iterator I = L->begin(), E = L->end(); I != E; ++I) {
     changed |= convertToHardwareLoop(*I);
@@ -366,7 +373,7 @@ bool SNITCHFrepLoops::convertToHardwareLoop(MachineLoop *L) {
   LLVM_DEBUG(dbgs()<<"-------------------\n");
 
   // Check if marked for inference or global inference is enabled
-  if(!isMarkedForInference(L) && !EnableFrepInference)
+  if(!EnableFrepInference && !isMarkedForInference(L))
     return changed;
 
   SmallVector<MachineInstr*, 2> OldInsts, NewInsts;
@@ -936,6 +943,7 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
   // between the operands (e.g. is-less-than), rather than to find out
   // what relationship the operands are in (as on PPC).
   bool isFirstOperandEndvalue = false;
+  assert(Cond.size() >= 3);
   const MachineOperand &Op1 = Cond[1];
   const MachineOperand &Op2 = Cond[2];
   const MachineOperand *EndValue = nullptr;
@@ -951,7 +959,6 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
   LLVM_DEBUG(dbgs()<<"Op1     : "; Op1.dump());
   LLVM_DEBUG(dbgs()<<"Op2     : "; Op2.dump());
   
-  LLVM_DEBUG(dbgs()<<"EndValue reg def : "; MRI->getVRegDef(EndValue->getReg())->dump());
   Comparison::Kind Cmp;
   unsigned CondOpc = Cond[0].getImm();
   Cmp = getComparisonKindFromCC(CondOpc, InitialValue, EndValue, IVBump);
@@ -976,7 +983,7 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
 
   // Check if we can fully qualify start and end value
   if (InitialValue->isReg()) {
-    unsigned R = InitialValue->getReg();
+    llvm::Register R = InitialValue->getReg();
     MachineBasicBlock *DefBB = MRI->getVRegDef(R)->getParent();
     if (!MDT->properlyDominates(DefBB, Header)) {
       int64_t V;
@@ -988,16 +995,21 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
     OldInsts.push_back(MRI->getVRegDef(R));
   }
   if (EndValue->isReg()) {
-    unsigned R = EndValue->getReg();
-    MachineBasicBlock *DefBB = MRI->getVRegDef(R)->getParent();
-    if (!MDT->properlyDominates(DefBB, Header)) {
-      int64_t V;
-      if (!checkForImmediate(*EndValue, V)) {
-        LLVM_DEBUG(dbgs()<<"can't determine end value\n");
-        return nullptr;
+    llvm::Register R = EndValue->getReg();
+    if(R != RISCV::X0) {
+      MachineInstr* DefMI = MRI->getVRegDef(R);
+      assert(DefMI);
+      MachineBasicBlock *DefBB = DefMI->getParent();
+      assert(DefBB);
+      if (!MDT->properlyDominates(DefBB, Header)) {
+        int64_t V;
+        if (!checkForImmediate(*EndValue, V)) {
+          LLVM_DEBUG(dbgs()<<"can't determine end value\n");
+          return nullptr;
+        }
       }
+      OldInsts.push_back(MRI->getVRegDef(R));
     }
-    OldInsts.push_back(MRI->getVRegDef(R));
   }
 
   FL->isFirstOperandEndvalue = isFirstOperandEndvalue;
@@ -1045,8 +1057,6 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
        I != E && I->isPHI(); ++I) {
     MachineInstr *Phi = &*I;
 
-    LLVM_DEBUG(dbgs()<<"found PHI: "; Phi->dump());
-
     // Have a PHI instruction.  Get the operand that corresponds to the
     // latch block, and see if is a result of an addition of form "reg+imm",
     // where the "reg" is defined by the PHI node we are looking at.
@@ -1077,7 +1087,7 @@ CountValue *SNITCHFrepLoops::getLoopTripCount(MachineLoop *L,
 
   // If we couldn't find any registers used for the induction, we fail.
   if (IndMap.empty()) {
-    LLVM_DEBUG(dbgs()<<"Couldn't find any PHI nodes\n");
+    LLVM_DEBUG(dbgs()<<"Couldn't find any suitable PHI nodes\n");
     return false;
   }
 
@@ -1579,7 +1589,6 @@ bool SNITCHFrepLoops::isMarkedForInference(MachineLoop *L) {
     }
   }
 
-  LLVM_DEBUG(dbgs()<<"  inference disabled\n");
   return false;
 }
 

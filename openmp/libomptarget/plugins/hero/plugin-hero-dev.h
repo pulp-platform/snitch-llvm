@@ -56,7 +56,7 @@
 
 extern "C" {
 
-#include "libhero/herodev.h"
+#include "libhero/hero_api.h"
 
 #define HERO_DEV_DEFAULT_CLUSTER_ID (0x1U)
 #define HERO_DEV_DEFAULT_FREQ (HERO_DEV_DEFAULT_FREQ_MHZ)
@@ -126,19 +126,16 @@ static int init_hero_device() {
 
   // reserve virtual addresses overlapping with HERO Device's internal physical address
   // space
-  hero_dev_reserve_v_addr(hd);
   ret = hero_dev_mmap(hd);
   if (ret < 0) {
     TRACE("ERROR: cannot load device!");
     return ret;
   }
 
-  currFreq = hero_dev_clking_set_freq(hd, HERO_DEV_DEFAULT_FREQ);
-  if (currFreq > 0)
-    TRACE("HERO Device running @ %d MHz.", currFreq);
-  //  else
-  //    GOMP_PLUGIN_fatal("HERO device init failed!");
-  hero_dev_rab_free(hd, 0x0);
+  //currFreq = hero_dev_clking_set_freq(hd, HERO_DEV_DEFAULT_FREQ);
+  //if (currFreq > 0)
+  //  TRACE("HERO Device running @ %d MHz.", currFreq);
+
   hero_dev_reset(hd, 0x1);
 
   // initialization of HERO Device, static RAB rules (mbox, L2, ...)
@@ -156,7 +153,7 @@ static int init_hero_device() {
 }
 
 static int deinit_hero_device() {
-  hero_dev_munmap(hd);
+  //hero_dev_munmap(NULL);
 }
 
 extern "C" bool GOMP_OFFLOAD_init_device(int n __attribute__((unused))) {
@@ -174,14 +171,7 @@ extern "C" bool GOMP_OFFLOAD_fini_device(int n __attribute__((unused))) {
 
   TRACE("Waiting for EOC...");
   hero_dev_exe_wait(hd, HERO_DEV_DEFAULT_TIMEOUT);
-
   hero_dev_exe_stop(hd);
-
-  if (GOMP_OFFLOAD_get_caps() & GOMP_OFFLOAD_CAP_SHARED_MEM)
-    hero_dev_rab_soc_mh_disable(hd);
-
-  hero_dev_rab_free(hd, 0);
-  hero_dev_free_v_addr(hd);
   hero_dev_munmap(hd);
 
   return 1;

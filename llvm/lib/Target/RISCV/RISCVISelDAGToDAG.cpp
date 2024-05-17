@@ -15,7 +15,6 @@
 #include "MCTargetDesc/RISCVMCTargetDesc.h"
 #include "MCTargetDesc/RISCVMatInt.h"
 #include "RISCVISelLowering.h"
-#include "RISCVMachineFunctionInfo.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/IR/IntrinsicsRISCV.h"
 #include "llvm/Support/Alignment.h"
@@ -826,8 +825,6 @@ bool RISCVDAGToDAGISel::tryPulpIndexedLoad(SDNode *Node) {
     return false;
 
   SDLoc DL(Node);
-  MVT VT = Node->getSimpleValueType(0);
-
   SDValue Chain = Node->getOperand(0);
   SDValue Base = Node->getOperand(1);
   SDValue Offset = Node->getOperand(2);
@@ -835,7 +832,7 @@ bool RISCVDAGToDAGISel::tryPulpIndexedLoad(SDNode *Node) {
   bool simm12 = false;
   bool signExtend = Load->getExtensionType() == ISD::SEXTLOAD;
 
-  if(auto ConstantOffset = dyn_cast<ConstantSDNode>(Offset)) {
+  if(auto *ConstantOffset = dyn_cast<ConstantSDNode>(Offset)) {
     int ConstantVal = ConstantOffset->getSExtValue();
     simm12 = isInt<12>(ConstantVal);
     if (simm12)

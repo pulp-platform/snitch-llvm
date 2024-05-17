@@ -949,10 +949,11 @@ def insert : PatFrag<(ops node:$dest, node:$value, node:$mask, node:$shift),
     maskedVal = N->getOperand(0);
   }
 
-  uint32_t destMask = (uint32_t) maskedDest->getConstantOperandVal(1),
-           mask     = (uint32_t) maskedVal->getConstantOperandVal(1),
-           shift    = (uint32_t) maskedVal->getOperand(0)->getConstantOperandVal(1);
-  return (mask == ~destMask) && (countr_zero<uint32_t>(mask) == shift);
+  auto destMask = static_cast<uint32_t>(maskedDest->getConstantOperandVal(1));
+  auto mask     = static_cast<uint32_t>(maskedVal->getConstantOperandVal(1));
+  auto shift    = static_cast<uint32_t>(maskedVal->getOperand(0)->getConstantOperandVal(1));
+  auto ldzero   = static_cast<uint32_t>(countr_zero(mask));
+  return (mask == ~destMask) && (ldzero == shift);
 }]>;
 
 def maskFromRegs : PatFrag<(ops node:$widthMinus1, node:$shift),

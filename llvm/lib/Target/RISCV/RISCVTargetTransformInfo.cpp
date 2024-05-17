@@ -1511,7 +1511,7 @@ bool RISCVTTIImpl::isLSRCostLess(const TargetTransformInfo::LSRCost &C1,
 }
 
 bool RISCVTTIImpl::isLoweredToCall(const Function *F) {
-  if (F->getName().startswith("llvm.riscv.pulp"))
+  if (F->getName().starts_with("llvm.riscv.pulp"))
     return false;
 
   return BaseT::isLoweredToCall(F);

@@ -1211,13 +1211,23 @@ def : Pat<(or (i32 GPR:$rs1), (add (shl 2, (i32 GPR:$widthMinus1)), -1)),
 def : Pat<(or (maskFromRegs (i32 GPR:$widthMinus1), (i32 GPR:$shift)), (i32 GPR:$rs1)),
           (P_BSETR (i32 GPR:$rs1), (P_INSERT (i32 GPR:$shift), (i32 GPR:$widthMinus1), 4, 5))>;
 
-//TODO
-//def : Pat<(cttz (i32 GPR:$rs1)), (P_FF1 (i32 GPR:$rs1))>;
-//def : Pat<(ctlz_zero_undef (i32 GPR:$rs1)), (XORI (P_FL1 (i32 GPR:$rs1)), 31)>;
-//def : Pat<(xor (ctlz_zero_undef (i32 GPR:$rs1)), 31), (P_FL1 (i32 GPR:$rs1))>;
-//def : Pat<(ctlz_zero_undef (xor (i32 GPR:$rs1), (sra (i32 GPR:$rs1), (i32 31)))), (P_CLB (i32 GPR:$rs1))>;
-//def : Pat<(ctpop (i32 GPR:$rs1)), (P_CNT (i32 GPR:$rs1))>;
-//def : PatGprGpr<rotr, P_ROR>;
+// count the number of trailing 0's
+def : Pat<(i32 (cttz (i32 GPR:$rs1))), (P_FF1 (i32 GPR:$rs1))>;
+
+//  count the number of leading 0's
+def : Pat<(i32 (ctlz_zero_undef (i32 GPR:$rs1))), (XORI (P_FL1 (i32 GPR:$rs1)), 31)>;
+
+// count the number of leading 1's
+def : Pat<(xor (i32 (ctlz_zero_undef (i32 GPR:$rs1))), 31), (P_FL1 (i32 GPR:$rs1))>;
+
+// count the number of leading bits (0's or 1's)
+def : Pat<(i32 (ctlz_zero_undef (xor (i32 GPR:$rs1), (sra (i32 GPR:$rs1), (i32 31))))), (P_CLB (i32 GPR:$rs1))>;
+
+// count the number of 1's
+def : Pat<(i32 (ctpop (i32 GPR:$rs1))), (P_CNT (i32 GPR:$rs1))>;
+
+// rotate right
+def : PatGprGpr<rotr, P_ROR>;
 
 // Patterns for general ALU operations
 

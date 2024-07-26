@@ -2424,6 +2424,14 @@ ParseStatus RISCVAsmParser::parseMemOpBaseReg(OperandVector &Operands) {
   if (!parseRegister(Operands).isSuccess())
     return Error(getLoc(), "expected register");
 
+  // Post-increment addressing mode (PULPV2 ISA extension)
+  if (getSTI().hasFeature(RISCV::FeaturePULPExtV2)) {
+    if (getLexer().is(AsmToken::Exclaim)) {
+      getParser().Lex(); // Eat '!'
+      Operands.push_back(RISCVOperand::createToken("!", getLoc()));
+    }
+  }
+
   if (parseToken(AsmToken::RParen, "expected ')'"))
     return ParseStatus::Failure;
   Operands.push_back(RISCVOperand::createToken(")", getLoc()));
@@ -2647,8 +2655,15 @@ bool RISCVAsmParser::parseOperand(OperandVector &Operands, StringRef Mnemonic) {
     return true;
 
   // Attempt to parse token as a register.
-  if (parseRegister(Operands, true).isSuccess())
+  if (parseRegister(Operands, true).isSuccess()) {
+    // This pattern is valid for the PULPV2 ISA extension
+    if (getSTI().hasFeature(RISCV::FeaturePULPExtV2)) {
+      // Parse memory base register if present
+      if (getLexer().is(AsmToken::LParen))
+        return !parseMemOpBaseReg(Operands).isSuccess();
+    }
     return false;
+  }
 
   // Attempt to parse token as an immediate
   if (parseImmediate(Operands).isSuccess()) {

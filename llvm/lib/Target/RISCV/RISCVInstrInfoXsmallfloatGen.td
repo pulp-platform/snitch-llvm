@@ -1468,11 +1468,28 @@ let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
 def VFNDOTPEX_H_R_B : RVInstRVf<0b10, 0b11101, 0b1, VFMT_FP16, RISCVOpcode<0b0110011>,
              (outs FPR16:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfndotpex.h.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
 
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+def VFDOTPEXA_S_B : RVInstRVf<0b10, 0b11100, 0b0, VFMT_FP32, RISCVOpcode<0b0110011>,
+             (outs FPR32:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfdotpexa.s.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+def VFDOTPEXA_S_R_B : RVInstRVf<0b10, 0b11100, 0b1, VFMT_FP32, RISCVOpcode<0b0110011>,
+             (outs FPR32:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfdotpexa.s.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+def VFDOTPEXB_S_B : RVInstRVf<0b10, 0b11110, 0b0, VFMT_FP32, RISCVOpcode<0b0110011>,
+             (outs FPR32:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfdotpexb.s.b", "$rd, $rs1, $rs2">, Sched<[]>;
+let hasSideEffects = 0, mayLoad = 0, mayStore = 0 in
+def VFDOTPEXB_S_R_B : RVInstRVf<0b10, 0b11110, 0b1, VFMT_FP32, RISCVOpcode<0b0110011>,
+             (outs FPR32:$rd), (ins FPR16:$rs1, FPR16:$rs2), "vfdotpexb.s.r.b", "$rd, $rs1, $rs2">, Sched<[]>;
+
 // Pseudo instructions
 def : InstAlias<"vfsumex.ah.b $rd, $rs1",   (VFSUMEX_H_B FPR16:$rd, FPR16:$rs1), 0>;
 def : InstAlias<"vfnsumex.ah.b $rd, $rs1",   (VFNSUMEX_H_B FPR16:$rd, FPR16:$rs1), 0>;
 def : InstAlias<"vfdotpex.ah.b $rd, $rs1, $rs2",   (VFDOTPEX_H_B FPR16:$rd, FPR16:$rs1, FPR16:$rs2), 0>;
 def : InstAlias<"vfdotpex.ah.r.b $rd, $rs1, $rs2",   (VFDOTPEX_H_R_B FPR16:$rd, FPR16:$rs1, FPR16:$rs2), 0>;
+def : InstAlias<"vfdotpexa.s.ab $rd, $rs1, $rs2",   (VFDOTPEXA_S_B FPR32:$rd, FPR16:$rs1, FPR16:$rs2), 0>;
+def : InstAlias<"vfdotpexa.s.r.ab $rd, $rs1, $rs2",   (VFDOTPEXA_S_R_B FPR32:$rd, FPR16:$rs1, FPR16:$rs2), 0>;
+def : InstAlias<"vfdotpexb.s.ab $rd, $rs1, $rs2",   (VFDOTPEXB_S_B FPR32:$rd, FPR16:$rs1, FPR16:$rs2), 0>;
+def : InstAlias<"vfdotpexb.s.r.ab $rd, $rs1, $rs2",   (VFDOTPEXB_S_R_B FPR32:$rd, FPR16:$rs1, FPR16:$rs2), 0>;
 def : InstAlias<"vfndotpex.ah.b $rd, $rs1, $rs2",   (VFNDOTPEX_H_B FPR16:$rd, FPR16:$rs1, FPR16:$rs2), 0>;
 def : InstAlias<"vfndotpex.ah.r.b $rd, $rs1, $rs2",   (VFNDOTPEX_H_R_B FPR16:$rd, FPR16:$rs1, FPR16:$rs2), 0>;
 } // let Predicates = [HasExtXfexpauxvecquarter]

@@ -524,6 +524,8 @@ def JALR : RVInstI<0b000, OPC_JALR, (outs GPR:$rd),
 
 def BEQ  : BranchCC_rri<0b000, "beq">;
 def BNE  : BranchCC_rri<0b001, "bne">;
+def BEQOV : BranchCC_rri<0b010, "beqov">;
+def BNEOV : BranchCC_rri<0b011, "bneov">;
 def BLT  : BranchCC_rri<0b100, "blt">;
 def BGE  : BranchCC_rri<0b101, "bge">;
 def BLTU : BranchCC_rri<0b110, "bltu">;
@@ -757,6 +759,10 @@ def : InstAlias<"beqz $rs, $offset",
                 (BEQ GPR:$rs,      X0, simm13_lsb0:$offset)>;
 def : InstAlias<"bnez $rs, $offset",
                 (BNE GPR:$rs,      X0, simm13_lsb0:$offset)>;
+def : InstAlias<"beqzov $rs, $offset",
+                (BEQOV GPR:$rs,      X0, simm13_lsb0:$offset)>;
+def : InstAlias<"bnezov $rs, $offset",
+                (BNEOV GPR:$rs,      X0, simm13_lsb0:$offset)>;
 def : InstAlias<"blez $rs, $offset",
                 (BGE      X0, GPR:$rs, simm13_lsb0:$offset)>;
 def : InstAlias<"bgez $rs, $offset",

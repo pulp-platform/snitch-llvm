@@ -211,6 +211,10 @@ def OMPC_Priority : Clause<"priority"> {
   let clangClass = "OMPPriorityClause";
   let flangClass = "ScalarIntExpr";
 }
+def OMPC_STNowait : Clause<"st_nowait"> {
+  let clangClass = "OMPSTNowaitClause";
+  let flangClass = "ScalarIntExpr";
+}
 def OMPC_GrainSize : Clause<"grainsize"> {
   let clangClass = "OMPGrainsizeClause";
   let flangClass = "ScalarIntExpr";
@@ -562,6 +566,7 @@ def OMP_Target : Directive<"target"> {
   ];
   let allowedOnceClauses = [
     VersionedClause<OMPC_Device>,
+    VersionedClause<OMPC_STNowait>,
     VersionedClause<OMPC_DefaultMap>,
     VersionedClause<OMPC_NoWait>
   ];

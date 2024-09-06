@@ -6169,6 +6169,82 @@ public:
   }
 };
 
+/// This represents 'st_nowait' clause in the '#pragma omp ...'
+/// directive.
+///
+/// \code
+/// #pragma omp target st_nowait(n)
+/// \endcode
+/// In this example directive '#pragma omp teams' has clause 'st_nowait' with
+/// single expression 'n'.
+class OMPSTNowaitClause : public OMPClause, public OMPClauseWithPreInit {
+  friend class OMPClauseReader;
+
+  /// Location of '('.
+  SourceLocation LParenLoc;
+
+  /// Priority number.
+  Stmt *STNowait = nullptr;
+
+  /// Set the STNowait number.
+  ///
+  /// \param E STNowait number.
+  void setSTNowait(Expr *E) { STNowait = E; }
+
+public:
+  /// Build 'st_nowait' clause.
+  ///
+  /// \param STNowait Expression associated with this clause.
+  /// \param HelperSTNowait Helper priority for the construct.
+  /// \param CaptureRegion Innermost OpenMP region where expressions in this
+  /// clause must be captured.
+  /// \param StartLoc Starting location of the clause.
+  /// \param LParenLoc Location of '('.
+  /// \param EndLoc Ending location of the clause.
+  OMPSTNowaitClause(Expr *STNowait, Stmt *HelperSTNowait,
+                    OpenMPDirectiveKind CaptureRegion, SourceLocation StartLoc,
+                    SourceLocation LParenLoc, SourceLocation EndLoc)
+      : OMPClause(llvm::omp::OMPC_st_nowait, StartLoc, EndLoc),
+        OMPClauseWithPreInit(this), LParenLoc(LParenLoc), STNowait(STNowait) {
+    setPreInitStmt(HelperSTNowait, CaptureRegion);
+  }
+
+  /// Build an empty clause.
+  OMPSTNowaitClause()
+      : OMPClause(llvm::omp::OMPC_st_nowait, SourceLocation(), SourceLocation()),
+        OMPClauseWithPreInit(this) {}
+
+  /// Sets the location of '('.
+  void setLParenLoc(SourceLocation Loc) { LParenLoc = Loc; }
+
+  /// Returns the location of '('.
+  SourceLocation getLParenLoc() const { return LParenLoc; }
+
+  /// Return Priority number.
+  Expr *getSTNowait() { return cast<Expr>(STNowait); }
+
+  /// Return Priority number.
+  Expr *getSTNowait() const { return cast<Expr>(STNowait); }
+
+  child_range children() { return child_range(&STNowait, &STNowait + 1); }
+
+  const_child_range children() const {
+    return const_child_range(&STNowait, &STNowait + 1);
+  }
+
+  child_range used_children();
+  const_child_range used_children() const {
+    auto Children = const_cast<OMPSTNowaitClause *>(this)->used_children();
+    return const_child_range(Children.begin(), Children.end());
+  }
+
+
+  static bool classof(const OMPClause *T) {
+    return T->getClauseKind() == llvm::omp::OMPC_st_nowait;
+  }
+};
+
+
 /// This represents 'grainsize' clause in the '#pragma omp ...'
 /// directive.
 ///

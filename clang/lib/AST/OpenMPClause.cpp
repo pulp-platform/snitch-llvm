@@ -88,6 +88,8 @@ const OMPClauseWithPreInit *OMPClauseWithPreInit::get(const OMPClause *C) {
     return static_cast<const OMPThreadLimitClause *>(C);
   case OMPC_device:
     return static_cast<const OMPDeviceClause *>(C);
+  case OMPC_st_nowait:
+    return static_cast<const OMPSTNowaitClause *>(C);
   case OMPC_grainsize:
     return static_cast<const OMPGrainsizeClause *>(C);
   case OMPC_num_tasks:
@@ -232,6 +234,7 @@ const OMPClauseWithPostUpdate *OMPClauseWithPostUpdate::get(const OMPClause *C) 
   case OMPC_num_teams:
   case OMPC_thread_limit:
   case OMPC_priority:
+  case OMPC_st_nowait:
   case OMPC_grainsize:
   case OMPC_nogroup:
   case OMPC_num_tasks:
@@ -312,6 +315,12 @@ OMPClause::child_range OMPPriorityClause::used_children() {
   if (Stmt **C = getAddrOfExprAsWritten(getPreInitStmt()))
     return child_range(C, C + 1);
   return child_range(&Priority, &Priority + 1);
+}
+
+OMPClause::child_range OMPSTNowaitClause::used_children() {
+  if (Stmt **C = getAddrOfExprAsWritten(getPreInitStmt()))
+    return child_range(C, C + 1);
+  return child_range(&STNowait, &STNowait + 1);
 }
 
 OMPClause::child_range OMPNovariantsClause::used_children() {
@@ -1850,6 +1859,12 @@ void OMPClausePrinter::VisitOMPThreadLimitClause(OMPThreadLimitClause *Node) {
 void OMPClausePrinter::VisitOMPPriorityClause(OMPPriorityClause *Node) {
   OS << "priority(";
   Node->getPriority()->printPretty(OS, nullptr, Policy, 0);
+  OS << ")";
+}
+
+void OMPClausePrinter::VisitOMPSTNowaitClause(OMPSTNowaitClause *Node) {
+  OS << "st_nowait(";
+  Node->getSTNowait()->printPretty(OS, nullptr, Policy, 0);
   OS << ")";
 }
 

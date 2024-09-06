@@ -468,8 +468,11 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
     }
   }
 
+  // Unpack task st_nowait
+  uint32_t st_nowait = reinterpret_cast<uint32_t>(tgt_args[0]);
+
   host_arg_buf.clear();
-  for (int32_t i = 0; i < arg_num; i++) {
+  for (int32_t i = 1; i < arg_num; i++) {
     host_arg_buf.push_back((uint64_t)tgt_args[i]);
   }
 

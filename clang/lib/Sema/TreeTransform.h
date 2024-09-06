@@ -1987,6 +1987,18 @@ public:
                                                EndLoc);
   }
 
+  /// Build a new OpenMP 'st_nowait' clause.
+  ///
+  /// By default, performs semantic analysis to build the new statement.
+  /// Subclasses may override this routine to provide different behavior.
+  OMPClause *RebuildOMPSTNowaitClause(Expr *STNowait, SourceLocation StartLoc,
+                                      SourceLocation LParenLoc,
+                                      SourceLocation EndLoc) {
+    return getSema().ActOnOpenMPSTNowaitClause(STNowait, StartLoc, LParenLoc,
+                                               EndLoc);
+  }
+
+
   /// Build a new OpenMP 'grainsize' clause.
   ///
   /// By default, performs semantic analysis to build the new statement.
@@ -10125,6 +10137,16 @@ TreeTransform<Derived>::TransformOMPPriorityClause(OMPPriorityClause *C) {
   if (E.isInvalid())
     return nullptr;
   return getDerived().RebuildOMPPriorityClause(
+      E.get(), C->getBeginLoc(), C->getLParenLoc(), C->getEndLoc());
+}
+
+template <typename Derived>
+OMPClause *
+TreeTransform<Derived>::TransformOMPSTNowaitClause(OMPSTNowaitClause *C) {
+  ExprResult E = getDerived().TransformExpr(C->getSTNowait());
+  if (E.isInvalid())
+    return nullptr;
+  return getDerived().RebuildOMPSTNowaitClause(
       E.get(), C->getBeginLoc(), C->getLParenLoc(), C->getEndLoc());
 }
 

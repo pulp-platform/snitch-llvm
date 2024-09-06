@@ -343,6 +343,13 @@ protected:
   llvm::Value *emitUpdateLocation(CodeGenFunction &CGF, SourceLocation Loc,
                                   unsigned Flags = 0);
 
+  /// Emit the stnowait for a target directive.  Inspect the stnowait
+  /// clause associated with the target directive.
+  ///
+  /// Otherwise, return -1.
+  llvm::Value *emitSTNowaitForTargetDirective(CodeGenFunction &CGF, 
+                                              const OMPExecutableDirective &D);
+
   /// Emit the number of teams for a target directive.  Inspect the num_teams
   /// clause associated with a teams construct combined or closely nested
   /// with the target directive.

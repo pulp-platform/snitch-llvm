@@ -6369,6 +6369,7 @@ StmtResult Sema::ActOnOpenMPExecutableDirective(
       case OMPC_num_tasks:
       case OMPC_final:
       case OMPC_priority:
+      case OMPC_st_nowait:
       case OMPC_novariants:
       case OMPC_nocontext:
         // Do not analyze if no parent parallel directive.
@@ -14465,6 +14466,9 @@ OMPClause *Sema::ActOnOpenMPSingleExprClause(OpenMPClauseKind Kind, Expr *Expr,
   case OMPC_priority:
     Res = ActOnOpenMPPriorityClause(Expr, StartLoc, LParenLoc, EndLoc);
     break;
+  case OMPC_st_nowait:
+    Res = ActOnOpenMPSTNowaitClause(Expr, StartLoc, LParenLoc, EndLoc);
+    break;
   case OMPC_grainsize:
     Res = ActOnOpenMPGrainsizeClause(Expr, StartLoc, LParenLoc, EndLoc);
     break;
@@ -15257,7 +15261,6 @@ static OpenMPDirectiveKind getOpenMPCaptureRegionForClause(
     case OMPD_target_update:
     case OMPD_target_enter_data:
     case OMPD_target_exit_data:
-    case OMPD_target:
     case OMPD_target_simd:
     case OMPD_target_teams:
     case OMPD_target_parallel:
@@ -15322,6 +15325,15 @@ static OpenMPDirectiveKind getOpenMPCaptureRegionForClause(
     case OMPD_metadirective:
       llvm_unreachable("Unexpected OpenMP directive with grainsize-clause");
     case OMPD_unknown:
+    default:
+      llvm_unreachable("Unknown OpenMP directive");
+    }
+    break;
+  case OMPC_st_nowait:
+    switch (DKind) {
+    case OMPD_target:
+      CaptureRegion = OMPD_task;
+      break;
     default:
       llvm_unreachable("Unknown OpenMP directive");
     }
@@ -16161,6 +16173,7 @@ OMPClause *Sema::ActOnOpenMPSingleExprWithArgClause(
   case OMPC_num_teams:
   case OMPC_thread_limit:
   case OMPC_priority:
+  case OMPC_st_nowait:
   case OMPC_grainsize:
   case OMPC_nogroup:
   case OMPC_num_tasks:
@@ -16419,6 +16432,7 @@ OMPClause *Sema::ActOnOpenMPClause(OpenMPClauseKind Kind,
   case OMPC_num_teams:
   case OMPC_thread_limit:
   case OMPC_priority:
+  case OMPC_st_nowait:
   case OMPC_grainsize:
   case OMPC_num_tasks:
   case OMPC_hint:
@@ -16972,6 +16986,7 @@ OMPClause *Sema::ActOnOpenMPVarListClause(
   case OMPC_num_teams:
   case OMPC_thread_limit:
   case OMPC_priority:
+  case OMPC_st_nowait:
   case OMPC_grainsize:
   case OMPC_nogroup:
   case OMPC_num_tasks:
@@ -21558,6 +21573,25 @@ OMPClause *Sema::ActOnOpenMPPriorityClause(Expr *Priority,
   return new (Context) OMPPriorityClause(ValExpr, HelperValStmt, CaptureRegion,
                                          StartLoc, LParenLoc, EndLoc);
 }
+
+OMPClause *Sema::ActOnOpenMPSTNowaitClause(Expr *STNowait,
+                                           SourceLocation StartLoc,
+                                           SourceLocation LParenLoc,
+                                           SourceLocation EndLoc) {
+  Expr *ValExpr = STNowait;
+  Stmt *HelperValStmt = nullptr;
+  OpenMPDirectiveKind CaptureRegion = OMPD_unknown;
+  // OpenMP [2.9.1, task Constrcut]
+  // The st_nowait-value is a non-negative numerical scalar expression.
+  if (!isNonNegativeIntegerValue(
+          ValExpr, *this, OMPC_st_nowait,
+          /*StrictlyPositive=*/false, /*BuildCapture=*/true,
+          DSAStack->getCurrentDirective(), &CaptureRegion, &HelperValStmt))
+    return nullptr;
+  return new (Context) OMPSTNowaitClause(ValExpr, HelperValStmt, CaptureRegion,
+                                         StartLoc, LParenLoc, EndLoc);
+}
+
 
 OMPClause *Sema::ActOnOpenMPGrainsizeClause(Expr *Grainsize,
                                             SourceLocation StartLoc,

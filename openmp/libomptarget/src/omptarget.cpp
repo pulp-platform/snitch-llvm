@@ -197,7 +197,7 @@ static int InitLibrary(DeviceTy &Device) {
           void *ctor = entry;
           int rc =
               target(nullptr, Device, ctor, 0, nullptr, nullptr, nullptr,
-                     nullptr, nullptr, nullptr, 1, 1, true /*team*/, AsyncInfo);
+                     nullptr, nullptr, nullptr, 0, 1, 1, true /*team*/, AsyncInfo);
           if (rc != OFFLOAD_SUCCESS) {
             REPORT("Running ctor " DPxMOD " failed.\n", DPxPTR(ctor));
             return OFFLOAD_FAIL;
@@ -1449,7 +1449,7 @@ static int processDataAfter(ident_t *loc, int64_t DeviceId, void *HostPtr,
 /// integer different from zero otherwise.
 int target(ident_t *loc, DeviceTy &Device, void *HostPtr, int32_t ArgNum,
            void **ArgBases, void **Args, int64_t *ArgSizes, int64_t *ArgTypes,
-           map_var_info_t *ArgNames, void **ArgMappers, int32_t TeamNum,
+           map_var_info_t *ArgNames, void **ArgMappers, int32_t STNowait, int32_t TeamNum,
            int32_t ThreadLimit, int IsTeamConstruct, AsyncInfoTy &AsyncInfo) {
   int32_t DeviceId = Device.DeviceID;
 
@@ -1497,10 +1497,13 @@ int target(ident_t *loc, DeviceTy &Device, void *HostPtr, int32_t ArgNum,
     }
   }
 
+  TgtArgs.insert(TgtArgs.begin(), reinterpret_cast<void *>(STNowait));
+  TgtOffsets.insert(TgtOffsets.begin(), 0);
+
   // Launch device execution.
   void *TgtEntryPtr = TargetTable->EntriesBegin[TM->Index].addr;
-  DP("Launching target execution %s with pointer " DPxMOD " (index=%d).\n",
-     TargetTable->EntriesBegin[TM->Index].name, DPxPTR(TgtEntryPtr), TM->Index);
+  DP("Launching target execution %s with pointer " DPxMOD " (index=%d) and nowait = %i.\n",
+     TargetTable->EntriesBegin[TM->Index].name, DPxPTR(TgtEntryPtr), TM->Index, STNowait);
 
   {
     TIMESCOPE_WITH_NAME_AND_IDENT(

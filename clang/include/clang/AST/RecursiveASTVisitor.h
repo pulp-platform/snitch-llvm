@@ -48,6 +48,8 @@
 #include <cstddef>
 #include <type_traits>
 
+#include <stdio.h>
+
 namespace clang {
 
 // A helper macro to implement short-circuiting when recursing.  It
@@ -3626,6 +3628,14 @@ bool RecursiveASTVisitor<Derived>::VisitOMPPriorityClause(
     OMPPriorityClause *C) {
   TRY_TO(VisitOMPClauseWithPreInit(C));
   TRY_TO(TraverseStmt(C->getPriority()));
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitOMPSTNowaitClause(
+    OMPSTNowaitClause *C) {
+  TRY_TO(VisitOMPClauseWithPreInit(C));
+  TRY_TO(TraverseStmt(C->getSTNowait()));
   return true;
 }
 

@@ -11804,6 +11804,9 @@ OMPClause *OMPClauseReader::readClause() {
   case llvm::omp::OMPC_priority:
     C = new (Context) OMPPriorityClause();
     break;
+  case llvm::omp::OMPC_st_nowait:
+    C = new (Context) OMPSTNowaitClause();
+    break;
   case llvm::omp::OMPC_grainsize:
     C = new (Context) OMPGrainsizeClause();
     break;
@@ -12537,6 +12540,12 @@ void OMPClauseReader::VisitOMPThreadLimitClause(OMPThreadLimitClause *C) {
 void OMPClauseReader::VisitOMPPriorityClause(OMPPriorityClause *C) {
   VisitOMPClauseWithPreInit(C);
   C->setPriority(Record.readSubExpr());
+  C->setLParenLoc(Record.readSourceLocation());
+}
+
+void OMPClauseReader::VisitOMPSTNowaitClause(OMPSTNowaitClause *C) {
+  VisitOMPClauseWithPreInit(C);
+  C->setSTNowait(Record.readSubExpr());
   C->setLParenLoc(Record.readSourceLocation());
 }
 

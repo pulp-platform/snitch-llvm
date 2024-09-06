@@ -178,6 +178,7 @@ unsigned clang::getOpenMPSimpleClauseType(OpenMPClauseKind Kind, StringRef Str,
   case OMPC_num_teams:
   case OMPC_thread_limit:
   case OMPC_priority:
+  case OMPC_st_nowait:
   case OMPC_grainsize:
   case OMPC_nogroup:
   case OMPC_num_tasks:
@@ -444,6 +445,7 @@ const char *clang::getOpenMPSimpleClauseTypeName(OpenMPClauseKind Kind,
   case OMPC_num_teams:
   case OMPC_thread_limit:
   case OMPC_priority:
+  case OMPC_st_nowait:
   case OMPC_grainsize:
   case OMPC_nogroup:
   case OMPC_num_tasks:

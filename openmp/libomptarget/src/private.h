@@ -41,7 +41,7 @@ extern int targetDataUpdate(ident_t *loc, DeviceTy &Device, int32_t arg_num,
 extern int target(ident_t *loc, DeviceTy &Device, void *HostPtr, int32_t ArgNum,
                   void **ArgBases, void **Args, int64_t *ArgSizes,
                   int64_t *ArgTypes, map_var_info_t *arg_names,
-                  void **ArgMappers, int32_t TeamNum, int32_t ThreadLimit,
+                  void **ArgMappers, int32_t STNowait, int32_t TeamNum, int32_t ThreadLimit,
                   int IsTeamConstruct, AsyncInfoTy &AsyncInfo);
 
 extern void handleTargetOutcome(bool Success, ident_t *Loc);

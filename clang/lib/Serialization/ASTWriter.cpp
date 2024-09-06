@@ -6639,6 +6639,12 @@ void OMPClauseWriter::VisitOMPPriorityClause(OMPPriorityClause *C) {
   Record.AddSourceLocation(C->getLParenLoc());
 }
 
+void OMPClauseWriter::VisitOMPSTNowaitClause(OMPSTNowaitClause *C) {
+  VisitOMPClauseWithPreInit(C);
+  Record.AddStmt(C->getSTNowait());
+  Record.AddSourceLocation(C->getLParenLoc());
+}
+
 void OMPClauseWriter::VisitOMPGrainsizeClause(OMPGrainsizeClause *C) {
   VisitOMPClauseWithPreInit(C);
   Record.AddStmt(C->getGrainsize());

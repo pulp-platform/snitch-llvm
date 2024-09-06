@@ -260,7 +260,7 @@ EXTERN int __tgt_target(int64_t device_id, void *host_ptr, int32_t arg_num,
                         int64_t *arg_types) {
   TIMESCOPE();
   return __tgt_target_mapper(nullptr, device_id, host_ptr, arg_num, args_base,
-                             args, arg_sizes, arg_types, nullptr, nullptr);
+                             args, arg_sizes, arg_types, nullptr, nullptr, 0);
 }
 
 EXTERN int __tgt_target_nowait(int64_t device_id, void *host_ptr,
@@ -271,13 +271,13 @@ EXTERN int __tgt_target_nowait(int64_t device_id, void *host_ptr,
   TIMESCOPE();
 
   return __tgt_target_mapper(nullptr, device_id, host_ptr, arg_num, args_base,
-                             args, arg_sizes, arg_types, nullptr, nullptr);
+                             args, arg_sizes, arg_types, nullptr, nullptr, 0);
 }
 
 EXTERN int __tgt_target_mapper(ident_t *loc, int64_t device_id, void *host_ptr,
                                int32_t arg_num, void **args_base, void **args,
                                int64_t *arg_sizes, int64_t *arg_types,
-                               map_var_info_t *arg_names, void **arg_mappers) {
+                               map_var_info_t *arg_names, void **arg_mappers, int32_t st_nowait) {
   //TIMESCOPE_WITH_IDENT(loc);
   //DP("Entering target region with entry point " DPxMOD " and device Id %" PRId64
   //   "\n",
@@ -304,7 +304,7 @@ EXTERN int __tgt_target_mapper(ident_t *loc, int64_t device_id, void *host_ptr,
   DeviceTy &Device = *PM->Devices[device_id];
   AsyncInfoTy AsyncInfo(Device);
   int rc = target(loc, Device, host_ptr, arg_num, args_base, args, arg_sizes,
-                  arg_types, arg_names, arg_mappers, 0, 0, false /*team*/,
+                  arg_types, arg_names, arg_mappers, st_nowait, 0, 0, false /*team*/,
                   AsyncInfo);
   if (rc == OFFLOAD_SUCCESS)
     rc = AsyncInfo.synchronize();
@@ -316,22 +316,22 @@ EXTERN int __tgt_target_mapper(ident_t *loc, int64_t device_id, void *host_ptr,
 EXTERN int __tgt_target_nowait_mapper(
     ident_t *loc, int64_t device_id, void *host_ptr, int32_t arg_num,
     void **args_base, void **args, int64_t *arg_sizes, int64_t *arg_types,
-    map_var_info_t *arg_names, void **arg_mappers, int32_t depNum,
+    map_var_info_t *arg_names, void **arg_mappers, int32_t st_nowait, int32_t depNum,
     void *depList, int32_t noAliasDepNum, void *noAliasDepList) {
   TIMESCOPE_WITH_IDENT(loc);
 
   return __tgt_target_mapper(loc, device_id, host_ptr, arg_num, args_base, args,
-                             arg_sizes, arg_types, arg_names, arg_mappers);
+                             arg_sizes, arg_types, arg_names, arg_mappers, st_nowait);
 }
 
 EXTERN int __tgt_target_teams(int64_t device_id, void *host_ptr,
                               int32_t arg_num, void **args_base, void **args,
                               int64_t *arg_sizes, int64_t *arg_types,
-                              int32_t team_num, int32_t thread_limit) {
+                              int32_t team_num, int32_t thread_limit, int32_t st_nowait) {
   TIMESCOPE();
   return __tgt_target_teams_mapper(nullptr, device_id, host_ptr, arg_num,
                                    args_base, args, arg_sizes, arg_types,
-                                   nullptr, nullptr, team_num, thread_limit);
+                                   nullptr, nullptr, st_nowait, team_num, thread_limit);
 }
 
 EXTERN int __tgt_target_teams_nowait(int64_t device_id, void *host_ptr,
@@ -345,7 +345,7 @@ EXTERN int __tgt_target_teams_nowait(int64_t device_id, void *host_ptr,
 
   return __tgt_target_teams_mapper(nullptr, device_id, host_ptr, arg_num,
                                    args_base, args, arg_sizes, arg_types,
-                                   nullptr, nullptr, team_num, thread_limit);
+                                   nullptr, nullptr, 0, team_num, thread_limit);
 }
 
 EXTERN int __tgt_target_teams_mapper(ident_t *loc, int64_t device_id,
@@ -353,7 +353,7 @@ EXTERN int __tgt_target_teams_mapper(ident_t *loc, int64_t device_id,
                                      void **args_base, void **args,
                                      int64_t *arg_sizes, int64_t *arg_types,
                                      map_var_info_t *arg_names,
-                                     void **arg_mappers, int32_t team_num,
+                                     void **arg_mappers, int32_t st_nowait, int32_t team_num,
                                      int32_t thread_limit) {
   DP("Entering target region with entry point " DPxMOD " and device Id %" PRId64
      "\n",
@@ -378,7 +378,7 @@ EXTERN int __tgt_target_teams_mapper(ident_t *loc, int64_t device_id,
   DeviceTy &Device = *PM->Devices[device_id];
   AsyncInfoTy AsyncInfo(Device);
   int rc = target(loc, Device, host_ptr, arg_num, args_base, args, arg_sizes,
-                  arg_types, arg_names, arg_mappers, team_num, thread_limit,
+                  arg_types, arg_names, arg_mappers, st_nowait, team_num, thread_limit,
                   true /*team*/, AsyncInfo);
   if (rc == OFFLOAD_SUCCESS)
     rc = AsyncInfo.synchronize();
@@ -391,14 +391,14 @@ EXTERN int __tgt_target_teams_mapper(ident_t *loc, int64_t device_id,
 EXTERN int __tgt_target_teams_nowait_mapper(
     ident_t *loc, int64_t device_id, void *host_ptr, int32_t arg_num,
     void **args_base, void **args, int64_t *arg_sizes, int64_t *arg_types,
-    map_var_info_t *arg_names, void **arg_mappers, int32_t team_num,
+    map_var_info_t *arg_names, void **arg_mappers, int32_t st_nowait, int32_t team_num,
     int32_t thread_limit, int32_t depNum, void *depList, int32_t noAliasDepNum,
     void *noAliasDepList) {
   TIMESCOPE_WITH_IDENT(loc);
 
   return __tgt_target_teams_mapper(loc, device_id, host_ptr, arg_num, args_base,
                                    args, arg_sizes, arg_types, arg_names,
-                                   arg_mappers, team_num, thread_limit);
+                                   arg_mappers, st_nowait, team_num, thread_limit);
 }
 
 // Get the current number of components for a user-defined mapper.

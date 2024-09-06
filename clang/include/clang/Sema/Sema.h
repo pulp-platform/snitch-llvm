@@ -11480,6 +11480,10 @@ public:
   OMPClause *ActOnOpenMPPriorityClause(Expr *Priority, SourceLocation StartLoc,
                                        SourceLocation LParenLoc,
                                        SourceLocation EndLoc);
+  /// Called on well-formed 'st_nowait' clause.
+  OMPClause *ActOnOpenMPSTNowaitClause(Expr *STNowait, SourceLocation StartLoc,
+                                       SourceLocation LParenLoc,
+                                       SourceLocation EndLoc);
   /// Called on well-formed 'dist_schedule' clause.
   OMPClause *ActOnOpenMPDistScheduleClause(
       OpenMPDistScheduleClauseKind Kind, Expr *ChunkSize,

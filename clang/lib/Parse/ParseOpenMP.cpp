@@ -3099,7 +3099,7 @@ OMPClause *Parser::ParseOpenMPUsesAllocatorClause(OpenMPDirectiveKind DKind) {
 ///       mergeable-clause | flush-clause | read-clause | write-clause |
 ///       update-clause | capture-clause | seq_cst-clause | device-clause |
 ///       simdlen-clause | threads-clause | simd-clause | num_teams-clause |
-///       thread_limit-clause | priority-clause | grainsize-clause |
+///       thread_limit-clause | priority-clause | grainsize-clause | st_nowait-clause |
 ///       nogroup-clause | num_tasks-clause | hint-clause | to-clause |
 ///       from-clause | is_device_ptr-clause | task_reduction-clause |
 ///       in_reduction-clause | allocator-clause | allocate-clause |
@@ -3132,6 +3132,7 @@ OMPClause *Parser::ParseOpenMPClause(OpenMPDirectiveKind DKind,
   case OMPC_num_teams:
   case OMPC_thread_limit:
   case OMPC_priority:
+  case OMPC_st_nowait:
   case OMPC_grainsize:
   case OMPC_num_tasks:
   case OMPC_hint:
@@ -3365,7 +3366,7 @@ ExprResult Parser::ParseOpenMPParensExpr(StringRef ClauseName,
 
 /// Parsing of OpenMP clauses with single expressions like 'final',
 /// 'collapse', 'safelen', 'num_threads', 'simdlen', 'num_teams',
-/// 'thread_limit', 'simdlen', 'priority', 'grainsize', 'num_tasks', 'hint' or
+/// 'thread_limit', 'simdlen', 'priority', 'st_nowait', 'grainsize', 'num_tasks', 'hint' or
 /// 'detach'.
 ///
 ///    final-clause:
@@ -3385,6 +3386,9 @@ ExprResult Parser::ParseOpenMPParensExpr(StringRef ClauseName,
 ///
 ///    priority-clause:
 ///      'priority' '(' expression ')'
+///
+///    st_nowait-clause:
+///      'st_nowait' '(' expression ')'
 ///
 ///    grainsize-clause:
 ///      'grainsize' '(' expression ')'

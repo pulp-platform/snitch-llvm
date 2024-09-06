@@ -6666,6 +6666,19 @@ const Stmt *CGOpenMPRuntime::getSingleCompoundChild(ASTContext &Ctx,
   return Child;
 }
 
+llvm::Value *CGOpenMPRuntime::emitSTNowaitForTargetDirective(
+    CodeGenFunction &CGF, const OMPExecutableDirective &D) {
+  
+  if (D.hasClausesOfKind<OMPSTNowaitClause>()) {
+    const Expr *STNowaitExpr =
+              D.getSingleClause<OMPSTNowaitClause>()->getSTNowait();
+    llvm::Value *STNowait = CGF.EmitScalarExpr(STNowaitExpr);
+    return CGF.Builder.CreateIntCast(STNowait, CGF.Int32Ty, /*isSigned=*/true);
+  } else {
+    return CGF.Builder.getInt32(-1);
+  }
+}
+
 const Expr *CGOpenMPRuntime::getNumTeamsExprForTargetDirective(
     CodeGenFunction &CGF, const OMPExecutableDirective &D,
     int32_t &DefaultVal) {
@@ -10413,6 +10426,9 @@ void CGOpenMPRuntime::emitTargetCall(
 
     // Return value of the runtime offloading call.
     llvm::Value *Return;
+  
+    // Emit st_nowait value if any.
+    llvm::Value *STNowaitValue = emitSTNowaitForTargetDirective(CGF, D);
 
     llvm::Value *NumTeams = emitNumTeamsForTargetDirective(CGF, D);
     llvm::Value *NumThreads = emitNumThreadsForTargetDirective(CGF, D);
@@ -10497,7 +10513,8 @@ void CGOpenMPRuntime::emitTargetCall(
           InputInfo.SizesArray.getPointer(),
           MapTypesArray,
           MapNamesArray,
-          InputInfo.MappersArray.getPointer()};
+          InputInfo.MappersArray.getPointer(),
+          STNowaitValue};
       if (HasNowait) {
         // Add int32_t depNum = 0, void *depList = nullptr, int32_t
         // noAliasDepNum = 0, void *noAliasDepList = nullptr.

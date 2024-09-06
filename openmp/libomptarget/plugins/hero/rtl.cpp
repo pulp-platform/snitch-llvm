@@ -480,7 +480,7 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
   size_t size = sizeof(uint64_t) * host_arg_buf.size();
   __tgt_rtl_data_submit(device_id, dev_arg_buf, host_buf, size);
 
-  // hero_add_timestamp("offload_wait",__func__,0);
+  hero_add_timestamp("offload_wait",__func__,0);
 
   hero_dev_mbox_write(hd, MBOX_DEVICE_START);
   hero_dev_mbox_write(hd, (uint32_t)tgt_entry_ptr);
@@ -504,7 +504,7 @@ int32_t __tgt_rtl_run_target_team_region(int32_t device_id, void *tgt_entry_ptr,
   DP("Done offloading, cycles to execute kernel: %d!\n", (int)ret[1]);
   hero_device_cycles[hero_num_device_cycles++] = (uint32_t) ret[1];
 
-  // hero_add_timestamp("offload_return",__func__,0);
+  hero_add_timestamp("offload_return",__func__,0);
 
   return OFFLOAD_SUCCESS;
 }

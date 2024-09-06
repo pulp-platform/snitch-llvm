@@ -327,7 +327,7 @@ extern "C" void *GOMP_OFFLOAD_alloc(int n __attribute__((unused)),
   uintptr_t virt_ptr = (uintptr_t)NULL;
   DataDesc data_desc;
 
-  virt_ptr = (uintptr_t)hero_dev_l3_malloc(hd, size, (uintptr_t *)&phy_ptr);
+  virt_ptr = (uintptr_t)hero_dev_l2_malloc(hd, size, (uintptr_t *)&phy_ptr);
 
   data_desc.sh_mem_ctrl = HERO_DEV_DEFAULT_MEM_MODE;
   data_desc.cache_ctrl = HERO_DEV_DEFAULT_ACP_EN;
@@ -357,7 +357,7 @@ extern "C" bool GOMP_OFFLOAD_free(int n __attribute__((unused)),
   uintptr_t phy_ptr = (uintptr_t)tgt_ptr;
   address_map->erase(phy_ptr);
 
-  hero_dev_l3_free(hd, vir_ptr, phy_ptr);
+  hero_dev_l2_free(hd, vir_ptr, phy_ptr);
 
   return 1;
 }

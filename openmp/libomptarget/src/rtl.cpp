@@ -32,7 +32,8 @@ static const char *RTLNames[] = {
     /* Remote target        */ "libomptarget.rtl.rpc.so",
     /* HERO device target   */ "libomptarget.rtl.herodev_safety_island.so",
     /* HERO device target   */ "libomptarget.rtl.herodev_spatz_cluster.so",
-    /* HERO device target   */ "libomptarget.rtl.herodev_occamy.so"
+    /* HERO device target   */ "libomptarget.rtl.herodev_occamy.so",
+    /* HERO device target   */ "libomptarget.rtl.herodev_snitch_cluster.so"
 };
 
 PluginManager *PM;

@@ -30,10 +30,10 @@ static const char *RTLNames[] = {
     /* SX-Aurora VE target  */ "libomptarget.rtl.ve.so",
     /* AMDGPU target        */ "libomptarget.rtl.amdgpu.so",
     /* Remote target        */ "libomptarget.rtl.rpc.so",
-    /* HERO device target   */ "libomptarget.rtl.herodev_safety_island.so",
-    /* HERO device target   */ "libomptarget.rtl.herodev_spatz_cluster.so",
-    /* HERO device target   */ "libomptarget.rtl.herodev_occamy.so",
-    /* HERO device target   */ "libomptarget.rtl.herodev_snitch_cluster.so"
+    /* HERO device target   */ "libomptarget.rtl.herodev_carfield_safety_island.so",
+    /* HERO device target   */ "libomptarget.rtl.herodev_carfield_spatz_cluster.so",
+    /* HERO device target   */ "libomptarget.rtl.herodev_occamy_snitch_cluster.so",
+    /* HERO device target   */ "libomptarget.rtl.herodev_carfield_snitch_cluster.so"
 };
 
 PluginManager *PM;

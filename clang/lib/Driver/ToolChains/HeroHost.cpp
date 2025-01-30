@@ -141,6 +141,10 @@ void HeroHost::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   bool WantCRTs =
       !Args.hasArg(options::OPT_nostdlib, options::OPT_nostartfiles);
 
+  if(Args.hasArg(options::OPT_shared)) {
+    CmdArgs.push_back(Args.MakeArgString("-shared"));
+  }
+
   if (WantCRTs) {
     CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath("crt1.o")));
     CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath("crti.o")));
